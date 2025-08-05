@@ -10,6 +10,8 @@ import {
   template,
   question,
   surveyResponseSelectSchema,
+  user,
+  facility,
 } from "@/server/db/schema";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import { eq, and, sql, getTableColumns, SQL } from "drizzle-orm";
@@ -84,9 +86,17 @@ export const surveyRouter = createTRPCRouter({
         conditions.length > 0 ? and(...conditions) : undefined;
 
       return await ctx.db
-        .select()
+        .select({
+          ...getTableColumns(survey),
+          surveyor: getTableColumns(user),
+          facility: getTableColumns(facility),
+          template: getTableColumns(template),
+        })
         .from(survey)
         .where(whereClause)
+        .leftJoin(user, eq(survey.surveyorId, user.id))
+        .leftJoin(facility, eq(survey.facilityId, facility.id))
+        .leftJoin(template, eq(survey.templateId, template.id))
         .limit(input.pageSize)
         .offset(offset);
     }),
@@ -119,7 +129,7 @@ export const surveyRouter = createTRPCRouter({
       if (facilityId !== undefined)
         whereConditions.push(eq(survey.facilityId, facilityId));
 
-      const pendingPairs = ctx.db
+      const pending = ctx.db
         .select({
           surveyId: survey.id,
           residentId: surveyResident.residentId,
@@ -144,9 +154,17 @@ export const surveyRouter = createTRPCRouter({
         .as("pending");
 
       const rows = await ctx.db
-        .selectDistinctOn([survey.id], getTableColumns(survey))
+        .selectDistinctOn([survey.id], {
+          ...getTableColumns(survey),
+          surveyor: getTableColumns(user),
+          facility: getTableColumns(facility),
+          template: getTableColumns(template),
+        })
         .from(survey)
-        .innerJoin(pendingPairs, eq(pendingPairs.surveyId, survey.id))
+        .innerJoin(pending, eq(pending.surveyId, survey.id))
+        .leftJoin(user, eq(survey.surveyorId, user.id))
+        .leftJoin(facility, eq(survey.facilityId, facility.id))
+        .leftJoin(template, eq(survey.templateId, template.id))
         .limit(pageSize)
         .offset(offset);
 
