@@ -29,7 +29,7 @@ import { roles } from "@/lib/permissions";
 
 const sendInviteSchema = z.object({
   email: z.email(),
-  role: z.enum(["admin", "member"]),
+  role: z.enum(roles.map((e) => e.label)),
 });
 
 type SendInviteType = z.infer<typeof sendInviteSchema>;
