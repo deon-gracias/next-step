@@ -14,7 +14,7 @@ export const ac = createAccessControl({
   facility: ["create", "update", "delete", "read"] as const,
   resident: ["create", "update", "delete", "read"] as const,
   question: ["create", "update", "delete", "read"] as const,
-  survey: ["read"],
+  survey: ["create", "update", "delete", "read"],
 } as const);
 
 export const owner = ac.newRole({});
@@ -27,10 +27,11 @@ export const admin = ac.newRole({
   facility: ["create", "update", "delete", "read"],
   resident: ["create", "update", "delete", "read"],
   question: ["create", "update", "delete", "read"],
+  survey: ["create", "update", "delete", "read"],
 });
 
-export const viewer = ac.newRole({});
-
-export const surveyor = ac.newRole({
-  // audit: ["read"],
+export const viewer = ac.newRole({
+  member: [],
 });
+
+export const surveyor = ac.newRole({});
