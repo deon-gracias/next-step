@@ -8,19 +8,16 @@ import { useQuery } from "@tanstack/react-query";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import {
-  DropdownMenu,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select";
 import { roles } from "@/lib/permissions";
+import { XIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
-export default function () {
+export default function() {
   const session = authClient.useSession();
   const activeOrganization = authClient.useActiveOrganization();
   const organizationMembers = useQuery({
@@ -104,28 +101,45 @@ export default function () {
                   </p>
                 </div>
 
-                {manageMemberPermission &&
-                session.data &&
-                session.data.user.id !== member.userId ? (
-                  <Select
-                    defaultValue={member.role}
-                    onValueChange={async (e) => {
-                      await authClient.organization.updateMemberRole({
-                        role: e,
-                        memberId: member.id,
-                      });
-                      organizationMembers.refetch();
-                    }}
-                  >
-                    <SelectTrigger>{member.role}</SelectTrigger>
-                    <SelectContent align="end">
-                      {roles.map((e) => (
-                        <SelectItem key={e.label} value={e.label}>
-                          {e.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                {manageMemberPermission.data &&
+                  session.data &&
+                  session.data.user.id !== member.userId ? (
+                  <>
+                    <Select
+                      defaultValue={member.role}
+                      onValueChange={async (e) => {
+                        await authClient.organization.updateMemberRole({
+                          role: e,
+                          memberId: member.id,
+                        });
+                        organizationMembers.refetch();
+                      }}
+                    >
+                      <SelectTrigger>{member.role}</SelectTrigger>
+                      <SelectContent align="end">
+                        {roles.map((e) => (
+                          <SelectItem key={e.label} value={e.label}>
+                            {e.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    {activeOrganization.data && (
+                      <Button
+                        size="icon"
+                        variant={"ghost"}
+                        onClick={() => {
+                          authClient.organization.removeMember({
+                            memberIdOrEmail: member.user.email,
+                            organizationId: activeOrganization.data!.id,
+                          });
+                        }}
+                      >
+                        <XIcon />
+                      </Button>
+                    )}
+                  </>
                 ) : (
                   <Badge
                     variant={member.role === "admin" ? "default" : "secondary"}
