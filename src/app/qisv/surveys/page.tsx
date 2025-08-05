@@ -13,14 +13,26 @@ import {
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
-import { ExternalLinkIcon } from "lucide-react";
-import { auth } from "@/lib/auth";
+import { ExternalLinkIcon, PlusIcon } from "lucide-react";
 import { authClient } from "@/components/providers/auth-client";
+import { Badge } from "@/components/ui/badge";
+import { useSearchParams } from "next/navigation";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useQuery } from "@tanstack/react-query";
 
-export default function () {
+const PAGE_SIZES = [10, 50, 100];
+
+export default function() {
   const session = authClient.useSession();
+  const searchParams = useSearchParams();
 
-  const surveys = api.survey.list.useQuery({});
+  const page = Number(searchParams.get("page") ?? 1);
+  const pageSize = Number(searchParams.get("pageSize") ?? PAGE_SIZES[0]);
+
+  const surveys = api.survey.list.useQuery({
+    page,
+    pageSize,
+  });
   const surveysPending = api.survey.pendingSurveys.useQuery(
     {
       surveyorId: session.data?.user.id,
@@ -28,62 +40,195 @@ export default function () {
     { enabled: !!(session.data && session.data.user.id) },
   );
 
+  const hasViewSurveyPermission = useQuery({
+    queryKey: [],
+    queryFn: async () =>
+      (
+        await authClient.organization.hasPermission({
+          permissions: { survey: ["read"] },
+        })
+      ).data?.success ?? false,
+  });
+
+  const hasNewSurveyPermission = useQuery({
+    queryKey: [],
+    queryFn: async () =>
+      (
+        await authClient.organization.hasPermission({
+          permissions: { survey: ["create"] },
+        })
+      ).data?.success ?? false,
+  });
+
   return (
     <>
       <QISVHeader crumbs={[{ label: "Surveys" }]} />
 
-      <main className="prose px-4">
-        <Link href={`/qisv/surveys/new`} className={cn(buttonVariants())}>
-          Create Survey
-        </Link>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Surveyor</TableHead>
-              <TableHead>Facility</TableHead>
-              <TableHead>Template</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {surveys.data &&
-              surveys.data.map((e) => (
-                <TableRow key={e.id}>
-                  <TableCell>{e.surveyorId}</TableCell>
-                  <TableCell>{e.facilityId}</TableCell>
-                  <TableCell>{e.templateId}</TableCell>
-                </TableRow>
-              ))}
-          </TableBody>
-        </Table>
+      <main className="px-4 py-6">
+        {hasViewSurveyPermission.data && (
+          <>
+            <div className="mb-6 flex items-center justify-between">
+              <div>
+                <h1 className="text-2xl font-bold tracking-tight">Surveys</h1>
+                <p className="text-muted-foreground">Manage surveys</p>
+              </div>
 
-        <h3>Surveys Pending</h3>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>ID</TableHead>
-              <TableHead>Surveyor</TableHead>
-              <TableHead>Facility</TableHead>
-              <TableHead>Template</TableHead>
-              <TableHead></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {surveysPending.data &&
-              surveysPending.data.map((e) => (
-                <TableRow key={e.id}>
-                  <TableCell>{e.id}</TableCell>
-                  <TableCell>{e.surveyorId}</TableCell>
-                  <TableCell>{e.facilityId}</TableCell>
-                  <TableCell>{e.templateId}</TableCell>
-                  <TableCell>
-                    <Link href={`/qisv/surveys/${e.id}/`}>
-                      <ExternalLinkIcon />
-                    </Link>
-                  </TableCell>
-                </TableRow>
-              ))}
-          </TableBody>
-        </Table>
+              {hasNewSurveyPermission.data && (
+                <Link
+                  href={`/qisv/surveys/new`}
+                  className={cn(buttonVariants())}
+                >
+                  <PlusIcon /> Create Survey
+                </Link>
+              )}
+            </div>
+
+            <div className="mb-9 rounded-lg border">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-secondary text-secondary-foreground">
+                    <TableHead className="w-[80px] text-right">ID</TableHead>
+                    <TableHead>Surveyor</TableHead>
+                    <TableHead>Facility</TableHead>
+                    <TableHead>Template</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {surveys.isPending &&
+                    Array.from({ length: pageSize }).map((_, i) => (
+                      <TableRow key={i}>
+                        <TableCell className="text-right">
+                          <Skeleton className="ml-auto h-6" />
+                        </TableCell>
+                        {Array.from({ length: 3 }).map((_, i) => (
+                          <TableCell key={i}>
+                            <Skeleton className="h-6" />
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))}
+
+                  {!surveys.isPending &&
+                    surveys.data &&
+                    surveys.data.length === 0 && (
+                      <TableRow>
+                        <TableCell
+                          colSpan={5}
+                          className="text-muted-foreground py-8 text-center"
+                        >
+                          No surveys found. Add your first resident to get
+                          started.
+                        </TableCell>
+                      </TableRow>
+                    )}
+
+                  {surveys.data &&
+                    surveys.data.map((e) => (
+                      <TableRow key={e.id}>
+                        <TableCell className="text-right font-mono tabular-nums">
+                          {e.id}
+                        </TableCell>
+                        <TableCell className="flex items-center gap-2">
+                          {e.surveyor ? (
+                            <>
+                              <span>{e.surveyor.name}</span>{" "}
+                              <Badge variant="outline">
+                                {e.surveyor.email}
+                              </Badge>
+                            </>
+                          ) : (
+                            "-"
+                          )}
+                        </TableCell>
+                        <TableCell>{e.facility?.name ?? "-"}</TableCell>
+                        <TableCell>{e.template?.name ?? "-"}</TableCell>
+                      </TableRow>
+                    ))}
+                </TableBody>
+              </Table>
+            </div>
+          </>
+        )}
+
+        {surveysPending.data && surveysPending.data.length > 1 && (
+          <>
+            <div className="mb-6 grid">
+              <h1 className="text-2xl font-bold tracking-tight">
+                Surveys Pending
+              </h1>
+              <p className="text-muted-foreground">Surveys pending</p>
+            </div>
+
+            <div className="rounded-lg border">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-secondary text-secondary-foreground">
+                    <TableHead className="w-[80px] text-right">ID</TableHead>
+                    <TableHead>Surveyor</TableHead>
+                    <TableHead>Facility</TableHead>
+                    <TableHead>Template</TableHead>
+                    <TableHead></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {surveys.isPending &&
+                    Array.from({ length: pageSize }).map((_, i) => (
+                      <TableRow key={i}>
+                        <TableCell className="text-right">
+                          <Skeleton className="ml-auto h-6" />
+                        </TableCell>
+                        {Array.from({ length: 3 }).map((_, i) => (
+                          <TableCell key={i}>
+                            <Skeleton className="h-6" />
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))}
+
+                  {!surveys.isPending &&
+                    surveys.data &&
+                    surveys.data.length === 0 && (
+                      <TableRow>
+                        <TableCell
+                          colSpan={5}
+                          className="text-muted-foreground py-8 text-center"
+                        >
+                          No surveys found. Add your first resident to get
+                          started.
+                        </TableCell>
+                      </TableRow>
+                    )}
+
+                  {surveysPending.data &&
+                    surveysPending.data.map((e) => (
+                      <TableRow key={e.id}>
+                        <TableCell className="text-right">{e.id}</TableCell>
+                        <TableCell>
+                          {e.surveyor ? (
+                            <>
+                              <span>{e.surveyor.name}</span>{" "}
+                              <Badge variant="outline">
+                                {e.surveyor.email}
+                              </Badge>
+                            </>
+                          ) : (
+                            "-"
+                          )}
+                        </TableCell>
+                        <TableCell>{e.facility?.name ?? "-"}</TableCell>
+                        <TableCell>{e.template?.name ?? "-"}</TableCell>
+                        <TableCell>
+                          <Link href={`/qisv/surveys/${e.id}/`}>
+                            <ExternalLinkIcon />
+                          </Link>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                </TableBody>
+              </Table>
+            </div>
+          </>
+        )}
       </main>
     </>
   );
