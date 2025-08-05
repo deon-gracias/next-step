@@ -24,8 +24,7 @@ import {
 } from "@/components/ui/card";
 import { useQuery } from "@tanstack/react-query";
 import { authClient } from "@/components/providers/auth-client";
-import { AlertCircle, FileText, Plus } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { FileText } from "lucide-react";
 
 function QuestionFtags({ id }: { id: number }) {
   const { data: ftags, isLoading } = api.question.getFtagsByQuestionId.useQuery(
@@ -120,7 +119,10 @@ export default function AddQuestionsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <AddQuestionForm templateId={templateId} />
+              <AddQuestionForm
+                templateId={templateId}
+                currentTotalPoints={totalPoints}
+              />
             </CardContent>
           </Card>
         )}

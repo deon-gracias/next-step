@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -23,7 +24,14 @@ import {
 import React from "react";
 import { FtagMultiSelectComboBox } from "./ftag-dropdown";
 
-export function AddQuestionForm({ templateId }: { templateId: number }) {
+export function AddQuestionForm({
+  templateId,
+  currentTotalPoints,
+}: {
+  templateId: number;
+  currentTotalPoints?: number;
+}) {
+  const apiUtils = api.useUtils();
   const mutation = api.question.create.useMutation();
   const form = useForm<QuestionCreateInputType>({
     resolver: zodResolver(questionCreateInputSchema),
@@ -42,7 +50,10 @@ export function AddQuestionForm({ templateId }: { templateId: number }) {
           ...data,
           templateId,
         })
-        .then(() => form.reset()),
+        .then(() => {
+          apiUtils.question.invalidate();
+          form.reset();
+        }),
       {
         loading: "Adding question...",
         success: "Question added",
@@ -79,6 +90,11 @@ export function AddQuestionForm({ templateId }: { templateId: number }) {
                 onChange={(e) => field.onChange(Number(e.target.value))}
               />
               <FormMessage />
+              {field.value !== 0 && currentTotalPoints && (
+                <FormDescription>
+                  New Total: {field.value + currentTotalPoints}
+                </FormDescription>
+              )}
             </FormItem>
           )}
         />
