@@ -5,7 +5,7 @@ import { facilityRouter } from "./routers/facility";
 import { ftagRouter } from "./routers/ftag";
 import { questionRouter } from "./routers/question";
 import { templateRouter } from "./routers/template";
-import { surveyRouter } from "./routers/surveyRouter";
+import { surveyRouter } from "./routers/survey";
 import { userRouter } from "./routers/user";
 
 /**
