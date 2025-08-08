@@ -7,6 +7,7 @@ import {
   primaryKey,
   unique,
   pgEnum,
+  date,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -167,6 +168,7 @@ export const survey = pgTable("survey", {
   templateId: integer("template_id")
     .references(() => template.id)
     .notNull(),
+  surveyDate: date("survey_date").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

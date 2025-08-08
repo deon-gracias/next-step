@@ -44,15 +44,23 @@ import {
   type SurveyResponseInsertType,
   type SurveySelectType,
 } from "@/server/db/schema";
-import { PlusIcon, Trash2Icon, XIcon } from "lucide-react";
+import { CalendarIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react";
 import { FacilityHoverCard } from "../../_components/facility-card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 
 import { z } from "zod";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { format } from "date-fns";
 
 export const newMultiSurveyCreateInputSchema = z.object({
+  surveyDate: z.date(),
   facilityId: z.number().min(0, "Facility ID must be 0 or greater"),
   surveyors: z
     .array(
@@ -83,6 +91,7 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
   const form = useForm<NewMultiSurveyCreateInputType>({
     resolver: zodResolver(newMultiSurveyCreateInputSchema),
     defaultValues: {
+      surveyDate: new Date(),
       facilityId: -1,
       surveyors: [],
     },
@@ -99,6 +108,7 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
     for (const surveyor of values.surveyors) {
       for (const template of surveyor.templates) {
         createSurveyRequest.push({
+          surveyDate: values.surveyDate.toUTCString(),
           surveyorId: surveyor.surveyorId,
           facilityId: values.facilityId,
           templateId: template.templateId,
@@ -130,6 +140,48 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
     <div className={cn("grid gap-4")}>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4">
+          <FormField
+            control={form.control}
+            name="surveyDate"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Survey Date</FormLabel>
+                <FormControl>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <FormControl>
+                        <Button
+                          variant={"outline"}
+                          className={cn(
+                            "w-[240px] pl-3 text-left font-normal",
+                            !field.value && "text-muted-foreground",
+                          )}
+                        >
+                          {field.value ? (
+                            format(field.value, "PPP")
+                          ) : (
+                            <span>Pick a date</span>
+                          )}
+                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                        </Button>
+                      </FormControl>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={field.value}
+                        onSelect={field.onChange}
+                        disabled={(date) => date < new Date()}
+                        captionLayout="dropdown"
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
           {/* Facility */}
           <FormField
             control={form.control}
