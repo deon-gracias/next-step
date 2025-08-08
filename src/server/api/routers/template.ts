@@ -6,7 +6,7 @@ import {
   templateSelectSchema,
 } from "@/server/db/schema";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
-import { eq, ilike, and, sql, getTableColumns, count } from "drizzle-orm";
+import { eq, ilike, and, sql, getTableColumns, count, sum } from "drizzle-orm";
 import { paginationInputSchema } from "@/server/utils/schema";
 
 export const templateRouter = createTRPCRouter({
@@ -39,6 +39,7 @@ export const templateRouter = createTRPCRouter({
       z.object({
         ...templateSelectSchema.partial().shape,
         ...paginationInputSchema.shape,
+        withPoints: z.boolean().default(false),
       }),
     )
     .query(async ({ ctx, input }) => {
@@ -64,6 +65,7 @@ export const templateRouter = createTRPCRouter({
           .select({
             ...getTableColumns(template),
             questionCount: count(question.id),
+            totalPoints: sum(question.points),
           })
           .from(template)
           .where(whereClause)

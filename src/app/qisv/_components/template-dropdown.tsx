@@ -22,6 +22,7 @@ import {
 import { ALIGN_OPTIONS } from "@radix-ui/react-popper";
 import { api } from "@/trpc/react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 
 type ComboboxProps = {
   selectedItem?: number;
@@ -111,13 +112,16 @@ export function TemplateComboBox({
                         setOpen(false);
                       }}
                     >
-                      {item.name}
                       <Check
                         className={cn(
-                          "ml-auto h-4 w-4",
+                          "size-4",
                           isSelected ? "opacity-100" : "opacity-0",
                         )}
                       />
+                      {item.name}
+                      <Badge variant={"outline"}>
+                        Points: {item.totalPoints}
+                      </Badge>
                     </CommandItem>
                   );
                 })}
