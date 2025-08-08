@@ -24,7 +24,20 @@ import {
 } from "@/components/ui/card";
 import { useQuery } from "@tanstack/react-query";
 import { authClient } from "@/components/providers/auth-client";
-import { FileText } from "lucide-react";
+import { FileText, PencilIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import type {
+  QuestionInsertType,
+  QuestionSelectType,
+} from "@/server/db/schema";
+import { EditQuestionForm } from "../_components/edit-question-form";
 
 function QuestionFtags({ id }: { id: number }) {
   const { data: ftags, isLoading } = api.question.getFtagsByQuestionId.useQuery(
@@ -161,6 +174,13 @@ export default function AddQuestionsPage() {
                         <TableCell>
                           <QuestionFtags id={question.id} />
                         </TableCell>
+                        <TableCell>
+                          <EditQuestionDialog question={question}>
+                            <Button size="icon" variant={"outline"}>
+                              <PencilIcon />
+                            </Button>
+                          </EditQuestionDialog>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -171,6 +191,7 @@ export default function AddQuestionsPage() {
                         {totalPoints}
                       </TableCell>
                       <TableCell></TableCell>
+                      <TableCell></TableCell>
                     </TableRow>
                   </TableFooter>
                 </Table>
@@ -179,5 +200,26 @@ export default function AddQuestionsPage() {
         </Card>
       </main>
     </>
+  );
+}
+
+function EditQuestionDialog({
+  question,
+  children,
+}: {
+  question: QuestionSelectType;
+  children: React.ReactNode;
+}) {
+  return (
+    <Dialog>
+      <DialogTrigger asChild>{children}</DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Edit Question</DialogTitle>
+        </DialogHeader>
+
+        <EditQuestionForm question={question} />
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -38,6 +38,39 @@ export const questionRouter = createTRPCRouter({
       }
     }),
 
+  edit: protectedProcedure
+    .input(
+      z.object({
+        ...questionCreateInputSchema.shape,
+        id: z.number(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { ftagIds, id, ...questionData } = input;
+
+      const [updated] = await ctx.db
+        .update(question)
+        .set(questionData)
+        .where(eq(question.id, id))
+        .returning({ id: question.id });
+
+      if (!updated) {
+        throw new Error(`Failed to update question with id ${id}`);
+      }
+
+      // Update ftag relations: clear existing and reinsert
+      await ctx.db.delete(questionFtag).where(eq(questionFtag.questionId, id));
+
+      if (ftagIds && ftagIds.length > 0) {
+        await ctx.db.insert(questionFtag).values(
+          ftagIds.map((ftagId) => ({
+            questionId: id,
+            ftagId,
+          })),
+        );
+      }
+    }),
+
   delete: protectedProcedure
     .input(z.object({ id: questionSelectSchema.shape.id }))
     .mutation(async ({ ctx, input }) => {
