@@ -81,10 +81,17 @@ export default function ResidentSurveyPage() {
   });
 
   const onSubmit = (vals: FormValues) => {
-    upsert.mutateAsync({
-      surveyId,
-      responses: vals.responses.map((r) => ({ ...r, residentId, surveyId })),
-    });
+    toast.promise(
+      upsert.mutateAsync({
+        surveyId,
+        responses: vals.responses.map((r) => ({ ...r, residentId, surveyId })),
+      }),
+      {
+        loading: "Saving Response",
+        success: (e) => "Saved response",
+        error: (e) => "Failed to save response",
+      },
+    );
   };
 
   useEffect(() => {
