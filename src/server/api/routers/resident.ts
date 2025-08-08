@@ -2,18 +2,33 @@ import { z } from "zod";
 
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import {
+  facility,
   resident,
   residentInsertSchema,
   residentSelectSchema,
 } from "@/server/db/schema";
-import { and, count, eq, ilike, like, sql } from "drizzle-orm";
-import { paginationInputSchema } from "@/server/utils/schema";
+import {
+  and,
+  count,
+  eq,
+  getTableColumns,
+  ilike,
+  like,
+  or,
+  sql,
+} from "drizzle-orm";
+import {
+  matchTypeOption,
+  matchTypeOptions,
+  matchTypeToDrizzleCondition,
+  paginationInputSchema,
+} from "@/server/utils/schema";
 
 export const residentRouter = createTRPCRouter({
   create: protectedProcedure
     .input(residentInsertSchema)
     .mutation(async ({ ctx, input }) => {
-      await ctx.db.insert(resident).values(input);
+      return await ctx.db.insert(resident).values(input).returning();
     }),
 
   delete: protectedProcedure
@@ -26,11 +41,30 @@ export const residentRouter = createTRPCRouter({
       await ctx.db.delete(resident).where(eq(resident.id, input.id));
     }),
 
+  byId: protectedProcedure
+    .input(z.object({ id: residentSelectSchema.shape.id }))
+    .query(async ({ ctx, input }) => {
+      return (
+        (
+          await ctx.db
+            .select({
+              ...getTableColumns(resident),
+              facility: getTableColumns(facility),
+            })
+            .from(resident)
+            .innerJoin(facility, eq(facility.id, resident.facilityId))
+            .where(eq(resident.id, input.id))
+            .limit(1)
+        )[0] ?? null
+      );
+    }),
+
   list: protectedProcedure
     .input(
       z.object({
         ...residentSelectSchema.partial().shape,
         ...paginationInputSchema.shape,
+        matchType: matchTypeOption.optional(),
       }),
     )
     .query(async ({ ctx, input }) => {
@@ -38,12 +72,21 @@ export const residentRouter = createTRPCRouter({
 
       const conditions = [];
       if (input.id !== undefined) conditions.push(eq(resident.id, input.id));
-      if (input.name) conditions.push(ilike(resident.name, `%${input.name}%`));
+      if (input.name !== undefined && input.pcciId !== undefined)
+        conditions.push(ilike(resident.name, `%${input.name}%`));
+      if (input.name !== undefined)
+        conditions.push(ilike(resident.name, `%${input.name}%`));
+      if (input.pcciId !== undefined)
+        conditions.push(ilike(resident.pcciId, `%${input.pcciId}%`));
       if (input.facilityId)
         conditions.push(eq(resident.facilityId, input.facilityId));
 
+      const matchTypeCondition = input.matchType
+        ? (matchTypeToDrizzleCondition(input.matchType) ?? and)
+        : and;
+
       const whereClause =
-        conditions.length > 0 ? and(...conditions) : undefined;
+        conditions.length > 0 ? matchTypeCondition(...conditions) : undefined;
 
       const [totalResult] = await ctx.db
         .select({ count: count() })
