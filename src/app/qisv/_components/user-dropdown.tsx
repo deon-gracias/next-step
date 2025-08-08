@@ -143,3 +143,169 @@ export function UserComboBox({
     </Popover>
   );
 }
+
+type MultiSelectProps = {
+  selectedItems: string[];
+  onChange: (items: string[]) => void;
+  role?: (typeof roles)[number]["label"];
+  searchPlaceholder?: string;
+  className?: string;
+  disabled?: boolean;
+};
+
+export function UserMultiComboBox({
+  selectedItems,
+  onChange,
+  role,
+  searchPlaceholder = "Search...",
+  className,
+  disabled = false,
+}: MultiSelectProps) {
+  const [open, setOpenState] = React.useState(false);
+  const [input, setInput] = React.useState("");
+  const [selectedMap, setSelectedMap] = React.useState<Record<string, string>>(
+    {},
+  );
+
+  const debouncedInput = useDebounce(input, 300);
+  const activeOrganization = authClient.useActiveOrganization();
+
+  const items = api.user.listInOrg.useQuery(
+    {
+      organizationId: activeOrganization.data?.id ?? "",
+      search: debouncedInput,
+      role: role,
+    },
+    { enabled: !!activeOrganization.data },
+  );
+
+  const handleSelect = (id: string, email: string) => {
+    const exists = selectedItems.includes(id);
+    if (exists) {
+      onChange(selectedItems.filter((item) => item !== id));
+      setSelectedMap((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    } else {
+      onChange([...selectedItems, id]);
+      setSelectedMap((prev) => ({
+        ...prev,
+        [id]: email,
+      }));
+    }
+  };
+
+  React.useEffect(() => {
+    if (items.data) {
+      const newlyVisible = items.data.filter(
+        (item) => selectedItems.includes(item.id) && !selectedMap[item.id],
+      );
+      if (newlyVisible.length > 0) {
+        setSelectedMap((prev) => {
+          const next = { ...prev };
+          newlyVisible.forEach((item) => {
+            next[item.id] = item.email;
+          });
+          return next;
+        });
+      }
+    }
+  }, [items.data, selectedItems, selectedMap]);
+
+  function setOpen(isOpen: boolean) {
+    if (isOpen) setInput("");
+    setOpenState(isOpen);
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen} modal={true}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className={cn("min-h-10 w-full justify-between", className)}
+          disabled={disabled}
+        >
+          <div className="flex max-w-[80%] flex-wrap items-center gap-1 truncate">
+            {selectedItems.length === 0 && (
+              <span className="text-muted-foreground">Select Users</span>
+            )}
+            {selectedItems.map((id) => (
+              <Badge key={id} variant="outline">
+                {selectedMap[id] ?? id}
+                <X
+                  className="ml-1 h-3 w-3 cursor-pointer"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleSelect(id, selectedMap[id] || "");
+                  }}
+                />
+              </Badge>
+            ))}
+          </div>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="p-0"
+        style={{ width: "var(--radix-popover-trigger-width)" }}
+      >
+        <Command shouldFilter={false}>
+          <CommandInput
+            placeholder={searchPlaceholder}
+            onValueChange={setInput}
+          />
+          <CommandList>
+            <CommandEmpty>No users found</CommandEmpty>
+
+            <CommandGroup>
+              {items.isPending &&
+                Array.from({ length: 4 }).map((_, i) => (
+                  <CommandItem key={i} className="p-0">
+                    <Skeleton className="mb-1 h-8 w-full rounded" />
+                  </CommandItem>
+                ))}
+
+              {!items.isPending &&
+                items.data &&
+                items.data.map((item) => {
+                  if (!item.email) {
+                    return null;
+                  }
+                  const isSelected = selectedItems.includes(item.id);
+                  return (
+                    <CommandItem
+                      key={item.id}
+                      value={item.email}
+                      keywords={[item.email, item.name || ""]}
+                      onSelect={() => {
+                        handleSelect(item.id, item.email);
+                      }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{item.email}</span>
+                        {item.name && (
+                          <span className="text-muted-foreground text-sm">
+                            {item.name}
+                          </span>
+                        )}
+                      </div>
+                      <Check
+                        className={cn(
+                          "ml-auto h-4 w-4",
+                          isSelected ? "opacity-100" : "opacity-0",
+                        )}
+                      />
+                    </CommandItem>
+                  );
+                })}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
