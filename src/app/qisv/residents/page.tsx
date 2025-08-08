@@ -46,6 +46,7 @@ import {
 } from "@/components/ui/select";
 import { useQuery } from "@tanstack/react-query";
 import { authClient } from "@/components/providers/auth-client";
+import { FacilityHoverCard } from "../_components/facility-card";
 
 function FacilityValue({ id }: { id: number }) {
   const facility = api.facility.byId.useQuery({ id: id });
@@ -55,27 +56,7 @@ function FacilityValue({ id }: { id: number }) {
   if (!facility.data)
     return <span className="text-muted-foreground text-sm">No facility</span>;
 
-  return (
-    <HoverCard>
-      <HoverCardTrigger>
-        <Badge
-          variant="outline"
-          className="hover:bg-muted cursor-pointer text-xs"
-        >
-          {facility.data.name}
-        </Badge>
-      </HoverCardTrigger>
-      <HoverCardContent className="w-80">
-        <div className="space-y-2">
-          <h5 className="text-sm font-semibold">{facility.data.name}</h5>
-          <p className="text-muted-foreground flex items-center gap-1 text-xs">
-            <MapPinIcon className="size-3" />
-            <span>{facility.data.address}</span>
-          </p>
-        </div>
-      </HoverCardContent>
-    </HoverCard>
-  );
+  return facility.data && <FacilityHoverCard facility={facility.data} />;
 }
 
 const PAGE_SIZES = [10, 50, 100];
@@ -108,6 +89,7 @@ export default function () {
     newSearchParams.set("pageSize", String(pageSize));
     router.replace(`?${newSearchParams.toString()}`);
   }
+
   function handlePage(page: number) {
     const newSearchParams = new URLSearchParams(searchParams.toString());
     newSearchParams.set("page", String(page));
