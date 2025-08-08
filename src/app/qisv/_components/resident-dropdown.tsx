@@ -33,6 +33,7 @@ type ComboboxProps = {
   className?: string;
   disabled?: boolean;
   align?: (typeof ALIGN_OPTIONS)[number];
+  searchDebounce?: number;
 };
 
 export function ResidentComboBox({
@@ -42,15 +43,19 @@ export function ResidentComboBox({
   className,
   disabled = false,
   align,
+  searchDebounce = 300,
 }: ComboboxProps) {
   const [open, setOpenState] = React.useState(false);
   const [input, setInput] = React.useState<string>("");
 
-  const debouncedInput = useDebounce(input, 300);
+  const debouncedInput = useDebounce(input, searchDebounce);
   const handleOnSearchChange = (e: string) => setInput(e);
-  // (e === "" && fetchItems(e)) || debouncedFetchItems(e);
 
-  const items = api.resident.list.useQuery({ name: debouncedInput });
+  const items = api.resident.list.useQuery({
+    name: debouncedInput,
+    pcciId: debouncedInput,
+    matchType: "or",
+  });
 
   function setOpen(isOpen: boolean) {
     if (isOpen) {
@@ -111,12 +116,13 @@ export function ResidentComboBox({
                     <CommandItem
                       key={item.id}
                       value={item.name}
-                      keywords={[item.name]}
+                      keywords={[item.name, item.pcciId]}
                       onSelect={() => {
                         onSelect(item.id);
                         setOpen(false);
                       }}
                     >
+                      <Badge variant={"outline"}>{item.pcciId}</Badge>{" "}
                       {item.name}
                       <Check
                         className={cn(
@@ -158,6 +164,7 @@ export function ResidentMultiSelectComboBox({
   const debouncedInput = useDebounce(input, 300);
   const items = api.resident.list.useQuery({
     name: debouncedInput,
+    pcciId: debouncedInput,
     ...filterParams,
   });
 
@@ -220,7 +227,7 @@ export function ResidentMultiSelectComboBox({
               <span className="text-muted-foreground">Select Residents</span>
             )}
             {selectedItems.map((id) => (
-              <Badge key={id} variant="secondary">
+              <Badge key={id} variant="outline">
                 {selectedMap[id] ?? `#${id}`}
               </Badge>
             ))}
@@ -259,9 +266,10 @@ export function ResidentMultiSelectComboBox({
                     <CommandItem
                       key={item.id}
                       value={item.name}
-                      keywords={[item.name]}
-                      onSelect={() => handleSelect(item.id, item.name)}
+                      keywords={[item.name, item.pcciId]}
+                      onSelect={() => handleSelect(item.id, item.pcciId)}
                     >
+                      <Badge variant={"outline"}>{item.pcciId}</Badge>{" "}
                       {item.name}
                       <Check
                         className={cn(
