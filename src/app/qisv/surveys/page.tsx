@@ -150,7 +150,7 @@ export default function() {
           </>
         )}
 
-        {surveysPending.data && surveysPending.data.length > 1 && (
+        {surveysPending.data && surveysPending.data.length > 0 && (
           <>
             <div className="mb-6 grid">
               <h1 className="text-2xl font-bold tracking-tight">
