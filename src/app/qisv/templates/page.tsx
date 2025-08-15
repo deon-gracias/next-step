@@ -43,6 +43,7 @@ import {
 } from "@/components/ui/select";
 import { useQuery } from "@tanstack/react-query";
 import { authClient } from "@/components/providers/auth-client";
+import { Badge } from "@/components/ui/badge";
 
 const PAGE_SIZES = [10, 50, 100];
 
@@ -115,6 +116,7 @@ export default function TemplatePage() {
                 <TableHead className="w-[80px] text-right">ID</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Type</TableHead>
+                <TableHead className="text-right">Question Count</TableHead>
                 <TableHead className="max-w-fit"></TableHead>
               </TableRow>
             </TableHeader>
@@ -124,6 +126,9 @@ export default function TemplatePage() {
                   <TableRow key={i}>
                     <TableCell className="flex justify-end">
                       <Skeleton className="ml-auto h-6 w-full" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-6 w-full" />
                     </TableCell>
                     <TableCell>
                       <Skeleton className="h-6 w-full" />
@@ -157,6 +162,9 @@ export default function TemplatePage() {
                     </TableCell>
                     <TableCell className="font-medium">
                       {template.name}
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      <Badge variant={"secondary"}>{template.type}</Badge>
                     </TableCell>
                     <TableCell className="text-right font-mono tabular-nums">
                       {template.questionCount}

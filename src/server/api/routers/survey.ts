@@ -1,14 +1,11 @@
 import { z } from "zod";
 import {
   survey,
-  surveyInsertSchema,
   surveySelectSchema,
   surveyResponse,
   surveyResponseInsertSchema,
   surveyResident,
-  type SurveySelectType,
   template,
-  question,
   surveyResponseSelectSchema,
   user,
   facility,
@@ -161,6 +158,7 @@ export const surveyRouter = createTRPCRouter({
           template: getTableColumns(template),
         })
         .from(survey)
+        .where(and(...whereConditions))
         .leftJoin(user, eq(survey.surveyorId, user.id))
         .leftJoin(facility, eq(survey.facilityId, facility.id))
         .leftJoin(template, eq(survey.templateId, template.id))

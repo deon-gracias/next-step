@@ -227,7 +227,13 @@ export default function () {
                         <TableCell>{e.facility?.name ?? "-"}</TableCell>
                         <TableCell>{e.template?.name ?? "-"}</TableCell>
                         <TableCell>
-                          <Link href={`/qisv/surveys/${e.id}/`}>
+                          <Link
+                            href={`/qisv/surveys/${e.id}/`}
+                            className={buttonVariants({
+                              variant: "outline",
+                              size: "icon",
+                            })}
+                          >
                             <ExternalLinkIcon />
                           </Link>
                         </TableCell>

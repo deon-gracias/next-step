@@ -24,6 +24,7 @@ import {
 import { NavUser } from "@/components/nav-user";
 import { useQuery } from "@tanstack/react-query";
 import { authClient } from "@/components/providers/auth-client";
+import Link from "next/link";
 
 const navItems = [
   {
@@ -97,10 +98,10 @@ export function QISVSidebar(props: React.ComponentProps<typeof Sidebar>) {
                   .map((item) => (
                     <SidebarMenuItem key={item.href}>
                       <SidebarMenuButton tooltip={item.name} asChild>
-                        <a href={item.href}>
+                        <Link href={item.href}>
                           <item.icon className="!size-5" />
                           <span>{item.name}</span>
-                        </a>
+                        </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   ))}
