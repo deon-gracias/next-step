@@ -32,7 +32,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useDebounce } from "@uidotdev/usehooks";
 import {
   residentInsertSchema,
@@ -67,7 +67,9 @@ export const newMultiSurveyCreateInputSchema = z.object({
           .array(
             z.object({
               template: templateSelectSchema.optional(),
-              caseIds: z.array(z.number().min(1, "Case ID must be at least 1")),
+              caseCodes: z.array(
+                z.string().min(1, "Case code cannot be empty"),
+              ),
               residentIds: z.array(
                 z.number().min(1, "Resident ID must be at least 1"),
               ),
@@ -122,7 +124,7 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
           surveyorId: surveyor.surveyorId,
           facilityId: values.facilityId,
           templateId: template.template?.id,
-          caseIds: template.caseIds,
+          caseCodes: template.caseCodes,
           residentIds: template.residentIds,
         } as SurveyCreateInputType);
       }
@@ -349,19 +351,42 @@ function SurveyorField({
                   <Form {...form}>
                     <FormField
                       control={form.control}
-                      name={`surveyors.${sIndex}.templates.${tIndex}.caseIds`}
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Cases</FormLabel>
-                          <FormControl>
-                            <CasesMultiSelectComboBox
-                              selectedItems={field.value}
-                              onChange={field.onChange}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
+                      name={`surveyors.${sIndex}.templates.${tIndex}.caseCodes`}
+                      render={({ field }) => {
+                        const ref = useRef<HTMLInputElement>(null);
+
+                        return (
+                          <FormItem>
+                            <FormLabel>Cases</FormLabel>
+                            <div className="flex items-center gap-2">
+                              <FormControl>
+                                <Input ref={ref} />
+                              </FormControl>
+                              <Button
+                                size="icon"
+                                variant={"secondary"}
+                                onClick={() =>
+                                  ref.current?.value &&
+                                  field.onChange([
+                                    ...field.value,
+                                    ref.current?.value,
+                                  ])
+                                }
+                              >
+                                <PlusIcon />
+                              </Button>
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              {field.value.map((e, i) => (
+                                <Badge variant={"secondary"} key={i}>
+                                  {e}
+                                </Badge>
+                              ))}
+                            </div>
+                            <FormMessage />
+                          </FormItem>
+                        );
+                      }}
                     />
                   </Form>
                 )}
@@ -453,7 +478,7 @@ function SurveyorField({
           className="bg-background"
           onClick={() =>
             templatesField.append({
-              caseIds: [],
+              caseCodes: [],
               residentIds: [],
             })
           }

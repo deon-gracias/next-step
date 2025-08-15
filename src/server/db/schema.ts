@@ -212,20 +212,14 @@ export const surveyResident = pgTable(
   (table) => [unique().on(table.residentId, table.surveyId)],
 );
 
-export const surveyCases = pgTable(
-  "survey_case",
-  {
-    id: integer().primaryKey().generatedAlwaysAsIdentity(),
-    surveyId: integer("survey_id")
-      .references(() => survey.id)
-      .notNull(),
-    caseId: integer("case_id")
-      .references(() => cases.id)
-      .notNull(),
-    createdAt: timestamp("created_at").defaultNow(),
-  },
-  (table) => [unique().on(table.caseId, table.surveyId)],
-);
+export const surveyCases = pgTable("survey_case", {
+  id: integer().primaryKey().generatedAlwaysAsIdentity(),
+  surveyId: integer("survey_id")
+    .references(() => survey.id)
+    .notNull(),
+  caseCode: text("case_code").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
 
 export const metStatusEnum = pgEnum("met_status_enum", [
   "met",

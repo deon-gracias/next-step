@@ -71,7 +71,7 @@ export default function SurveyDetailPage() {
                 <TableCell>{r.residentId}</TableCell>
                 <TableCell className="text-right">
                   <Link
-                    href={`/qisv/surveys/${surveyId}/${r.residentId}`}
+                    href={`/qisv/surveys/${surveyId}/resident/${r.residentId}`}
                     className={buttonVariants({ variant: "outline" })}
                   >
                     Open

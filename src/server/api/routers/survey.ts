@@ -25,7 +25,7 @@ export const surveyRouter = createTRPCRouter({
   create: protectedProcedure
     .input(surveyCreateInputSchema)
     .mutation(async ({ input, ctx }) => {
-      const { residentIds: residents, caseIds: cases, ...surveyData } = input;
+      const { residentIds: residents, caseCodes: cases, ...surveyData } = input;
 
       // Create survey
       const [newSurvey] = await ctx.db
@@ -47,9 +47,9 @@ export const surveyRouter = createTRPCRouter({
       // Insert into survey_case
       if (cases.length > 0)
         await ctx.db.insert(surveyCases).values(
-          cases.map((caseId) => ({
+          cases.map((caseCode) => ({
             surveyId: newSurvey.id,
-            caseId,
+            caseCode,
           })),
         );
 

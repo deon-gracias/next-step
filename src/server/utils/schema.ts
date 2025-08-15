@@ -16,7 +16,7 @@ export type QuestionCreateInputType = z.infer<typeof questionCreateInputSchema>;
 
 export const surveyCreateInputSchema = surveyInsertSchema.extend({
   residentIds: z.array(z.number()),
-  caseIds: z.array(z.number()),
+  caseCodes: z.array(z.string()),
 });
 export type SurveyCreateInputType = z.infer<typeof surveyCreateInputSchema>;
 
