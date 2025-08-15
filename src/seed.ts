@@ -4,6 +4,7 @@ import postgres from "postgres";
 import * as schema from "@/server/db/schema";
 import { sql } from "drizzle-orm";
 import { reset, seed } from "drizzle-seed";
+import crypto from "crypto";
 
 const DATABASE_URL = "postgresql://admin:admin123@localhost:5435/next-step";
 const conn = postgres(DATABASE_URL, { max: 1 });
