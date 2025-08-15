@@ -22,7 +22,7 @@ import { useQuery } from "@tanstack/react-query";
 
 const PAGE_SIZES = [10, 50, 100];
 
-export default function() {
+export default function () {
   const session = authClient.useSession();
   const searchParams = useSearchParams();
 
@@ -33,6 +33,7 @@ export default function() {
     page,
     pageSize,
   });
+
   const surveysPending = api.survey.pendingSurveys.useQuery(
     {
       surveyorId: session.data?.user.id,
@@ -88,6 +89,7 @@ export default function() {
                 <TableHeader>
                   <TableRow className="bg-secondary text-secondary-foreground">
                     <TableHead className="w-[80px] text-right">ID</TableHead>
+                    <TableHead>Date</TableHead>
                     <TableHead>Surveyor</TableHead>
                     <TableHead>Facility</TableHead>
                     <TableHead>Template</TableHead>
@@ -100,7 +102,7 @@ export default function() {
                         <TableCell className="text-right">
                           <Skeleton className="ml-auto h-6" />
                         </TableCell>
-                        {Array.from({ length: 3 }).map((_, i) => (
+                        {Array.from({ length: 4 }).map((_, i) => (
                           <TableCell key={i}>
                             <Skeleton className="h-6" />
                           </TableCell>
@@ -116,7 +118,7 @@ export default function() {
                           colSpan={5}
                           className="text-muted-foreground py-8 text-center"
                         >
-                          No surveys found. Add your first resident to get
+                          No surveys found. Add your first survey to get
                           started.
                         </TableCell>
                       </TableRow>
@@ -127,6 +129,9 @@ export default function() {
                       <TableRow key={e.id}>
                         <TableCell className="text-right font-mono tabular-nums">
                           {e.id}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={"secondary"}>{e.surveyDate}</Badge>
                         </TableCell>
                         <TableCell className="flex items-center gap-2">
                           {e.surveyor ? (
@@ -164,6 +169,7 @@ export default function() {
                 <TableHeader>
                   <TableRow className="bg-secondary text-secondary-foreground">
                     <TableHead className="w-[80px] text-right">ID</TableHead>
+                    <TableHead>Date</TableHead>
                     <TableHead>Surveyor</TableHead>
                     <TableHead>Facility</TableHead>
                     <TableHead>Template</TableHead>
@@ -177,7 +183,7 @@ export default function() {
                         <TableCell className="text-right">
                           <Skeleton className="ml-auto h-6" />
                         </TableCell>
-                        {Array.from({ length: 3 }).map((_, i) => (
+                        {Array.from({ length: 4 }).map((_, i) => (
                           <TableCell key={i}>
                             <Skeleton className="h-6" />
                           </TableCell>
@@ -203,6 +209,9 @@ export default function() {
                     surveysPending.data.map((e) => (
                       <TableRow key={e.id}>
                         <TableCell className="text-right">{e.id}</TableCell>
+                        <TableCell>
+                          <Badge variant={"secondary"}>{e.surveyDate}</Badge>
+                        </TableCell>
                         <TableCell>
                           {e.surveyor ? (
                             <>

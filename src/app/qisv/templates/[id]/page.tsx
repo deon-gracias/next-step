@@ -33,10 +33,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import type {
-  QuestionInsertType,
-  QuestionSelectType,
-} from "@/server/db/schema";
+import type { QuestionSelectType } from "@/server/db/schema";
 import { EditQuestionForm } from "../_components/edit-question-form";
 
 function QuestionFtags({ id }: { id: number }) {
@@ -123,7 +120,7 @@ export default function AddQuestionsPage() {
           </p>
         </div>
 
-        {hasNewQuestionPermission.data && (
+        {hasNewQuestionPermission.data && template.data && (
           <Card>
             <CardHeader>
               <CardTitle>New Question</CardTitle>
@@ -133,7 +130,7 @@ export default function AddQuestionsPage() {
             </CardHeader>
             <CardContent>
               <AddQuestionForm
-                templateId={templateId}
+                template={template.data}
                 currentTotalPoints={totalPoints}
               />
             </CardContent>

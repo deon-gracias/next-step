@@ -12,9 +12,10 @@ import {
   surveyResponseSelectSchema,
   user,
   facility,
+  surveyCases,
 } from "@/server/db/schema";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
-import { eq, and, sql, getTableColumns, SQL } from "drizzle-orm";
+import { eq, and, sql, getTableColumns, SQL, asc, desc } from "drizzle-orm";
 import {
   paginationInputSchema,
   surveyCreateInputSchema,
@@ -24,7 +25,7 @@ export const surveyRouter = createTRPCRouter({
   create: protectedProcedure
     .input(surveyCreateInputSchema)
     .mutation(async ({ input, ctx }) => {
-      const { residentIds: residents, ...surveyData } = input;
+      const { residentIds: residents, caseIds: cases, ...surveyData } = input;
 
       // Create survey
       const [newSurvey] = await ctx.db
@@ -35,12 +36,22 @@ export const surveyRouter = createTRPCRouter({
       if (!newSurvey) throw Error("Failed to create survey");
 
       // Insert into survey_resident table
-      await ctx.db.insert(surveyResident).values(
-        residents.map((residentId) => ({
-          surveyId: newSurvey.id,
-          residentId,
-        })),
-      );
+      if (residents.length > 0)
+        await ctx.db.insert(surveyResident).values(
+          residents.map((residentId) => ({
+            surveyId: newSurvey.id,
+            residentId,
+          })),
+        );
+
+      // Insert into survey_case
+      if (cases.length > 0)
+        await ctx.db.insert(surveyCases).values(
+          cases.map((caseId) => ({
+            surveyId: newSurvey.id,
+            caseId,
+          })),
+        );
 
       return newSurvey;
     }),
@@ -129,42 +140,18 @@ export const surveyRouter = createTRPCRouter({
       if (facilityId !== undefined)
         whereConditions.push(eq(survey.facilityId, facilityId));
 
-      const pending = ctx.db
-        .select({
-          surveyId: survey.id,
-          residentId: surveyResident.residentId,
-        })
-        .from(survey)
-        .innerJoin(surveyResident, eq(surveyResident.surveyId, survey.id))
-        .innerJoin(template, eq(survey.templateId, template.id))
-        .leftJoin(question, eq(question.templateId, template.id))
-        .leftJoin(
-          surveyResponse,
-          and(
-            eq(surveyResponse.surveyId, survey.id),
-            eq(surveyResponse.residentId, surveyResident.residentId),
-            eq(surveyResponse.questionId, question.id),
-          ),
-        )
-        .groupBy(survey.id, surveyResident.residentId)
-        .having(
-          sql`count(distinct ${surveyResponse.id}) < count(distinct ${question.id})`,
-        )
-        .where(whereConditions.length ? and(...whereConditions) : undefined)
-        .as("pending");
-
       const rows = await ctx.db
-        .selectDistinctOn([survey.id], {
+        .select({
           ...getTableColumns(survey),
           surveyor: getTableColumns(user),
           facility: getTableColumns(facility),
           template: getTableColumns(template),
         })
         .from(survey)
-        .innerJoin(pending, eq(pending.surveyId, survey.id))
         .leftJoin(user, eq(survey.surveyorId, user.id))
         .leftJoin(facility, eq(survey.facilityId, facility.id))
         .leftJoin(template, eq(survey.templateId, template.id))
+        .orderBy(desc(survey.surveyDate), asc(survey.id))
         .limit(pageSize)
         .offset(offset);
 

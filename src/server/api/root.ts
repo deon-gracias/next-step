@@ -7,6 +7,8 @@ import { questionRouter } from "./routers/question";
 import { templateRouter } from "./routers/template";
 import { surveyRouter } from "./routers/survey";
 import { userRouter } from "./routers/user";
+import { dietarySurveyRouter } from "./routers/dietary-survey";
+import { casesRouter } from "./routers/case";
 
 /**
  * This is the primary router for your server.
@@ -18,10 +20,12 @@ export const appRouter = createTRPCRouter({
   facility: facilityRouter,
   assessment: assessmentRouter,
   ftag: ftagRouter,
+  cases: casesRouter,
   question: questionRouter,
   template: templateRouter,
   survey: surveyRouter,
   user: userRouter,
+  dietarySurvey: dietarySurveyRouter,
 });
 
 // export type definition of API

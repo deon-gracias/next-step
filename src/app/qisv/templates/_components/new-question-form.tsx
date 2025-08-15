@@ -23,12 +23,19 @@ import {
 } from "@/server/utils/schema";
 import React from "react";
 import { FtagMultiSelectComboBox } from "./ftag-dropdown";
+import { CasesComboBox } from "./case-dropdown";
+import {
+  caseQuestionInsertSchema,
+  type CaseInsertType,
+  type CaseQuestionInsertType,
+  type TemplateSelectType,
+} from "@/server/db/schema";
 
 export function AddQuestionForm({
-  templateId,
+  template,
   currentTotalPoints,
 }: {
-  templateId: number;
+  template: TemplateSelectType;
   currentTotalPoints?: number;
 }) {
   const apiUtils = api.useUtils();
@@ -36,7 +43,7 @@ export function AddQuestionForm({
   const form = useForm<QuestionCreateInputType>({
     resolver: zodResolver(questionCreateInputSchema),
     defaultValues: {
-      templateId: templateId,
+      templateId: template.id,
       points: 0,
       text: "",
       ftagIds: [],
@@ -48,7 +55,7 @@ export function AddQuestionForm({
       mutation
         .mutateAsync({
           ...data,
-          templateId,
+          templateId: template.id,
         })
         .then(() => {
           apiUtils.question.invalidate();
@@ -90,7 +97,7 @@ export function AddQuestionForm({
                 onChange={(e) => field.onChange(Number(e.target.value))}
               />
               <FormMessage />
-              {field.value !== 0 && currentTotalPoints && (
+              {field.value !== 0 && (
                 <FormDescription>
                   New Total: {field.value + currentTotalPoints}
                 </FormDescription>

@@ -4,7 +4,9 @@ import { defaultStatements } from "better-auth/plugins/organization/access";
 export const roles = [
   { label: "admin" },
   { label: "viewer" },
+  { label: "lead_surveyor" },
   { label: "surveyor" },
+  { label: "facility_coordinator" },
 ] as const;
 
 /* 1️⃣  Extend the default resources  */
@@ -31,10 +33,21 @@ export const admin = ac.newRole({
 });
 
 export const viewer = ac.newRole({
-  member: [],
+  template: ["read"],
+  facility: ["read"],
+  resident: ["read"],
+  question: ["read"],
+  survey: ["read"],
 });
 
 export const surveyor = ac.newRole({
-  member: [],
+  survey: ["read", "update"],
+});
+
+export const lead_surveyor = ac.newRole({
   survey: ["create", "update", "delete", "read"],
+});
+
+export const facility_coordinator = ac.newRole({
+  survey: ["read"],
 });

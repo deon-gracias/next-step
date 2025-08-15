@@ -17,7 +17,7 @@ import { roles } from "@/lib/permissions";
 import { XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-export default function() {
+export default function () {
   const session = authClient.useSession();
   const activeOrganization = authClient.useActiveOrganization();
   const organizationMembers = useQuery({
@@ -40,9 +40,11 @@ export default function() {
     queryFn: async () =>
       (
         await authClient.organization.hasPermission({
-          permissions: { invitation: ["create"], member: ["update"] },
+          organizationId: activeOrganization.data!.id,
+          permissions: { member: ["update"] },
         })
-      ).data?.success ?? false,
+      ).data?.success,
+    enabled: !!activeOrganization.data,
   });
 
   return (
@@ -102,8 +104,8 @@ export default function() {
                 </div>
 
                 {manageMemberPermission.data &&
-                  session.data &&
-                  session.data.user.id !== member.userId ? (
+                session.data &&
+                session.data.user.id !== member.userId ? (
                   <>
                     <Select
                       defaultValue={member.role}

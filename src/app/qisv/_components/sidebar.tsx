@@ -22,38 +22,66 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { NavUser } from "@/components/nav-user";
+import { useQuery } from "@tanstack/react-query";
+import { authClient } from "@/components/providers/auth-client";
 
 const navItems = [
   {
     name: "Dashboard",
     href: "/qisv/dashboard",
     icon: LayoutDashboardIcon,
+    resource: null, // no permission needed
   },
   {
     name: "Residents",
     href: "/qisv/residents",
     icon: UsersIcon,
+    resource: "resident",
   },
   {
     name: "Facilities",
     href: "/qisv/facilities",
     icon: BuildingIcon,
+    resource: "facility",
   },
   {
     name: "Templates",
     href: "/qisv/templates",
     icon: LayoutListIcon,
+    resource: "template",
   },
   {
     name: "Surveys",
     href: "/qisv/surveys",
     icon: FileSearchIcon,
+    resource: "survey",
   },
 ];
 
-export function QISVSidebar({
-  ...props
-}: React.ComponentProps<typeof Sidebar>) {
+export function QISVSidebar(props: React.ComponentProps<typeof Sidebar>) {
+  const activeOrg = authClient.useActiveOrganization();
+
+  const { data: allowedResources, isLoading } = useQuery({
+    queryKey: ["user-permissions"],
+    queryFn: async () => {
+      const results: Record<string, boolean> = {};
+      for (const item of navItems) {
+        if (!item.resource) {
+          results[item.name] = true;
+        } else {
+          results[item.name] = !!(
+            await authClient.organization.hasPermission({
+              // organizationId: activeOrg.data!.id,
+              permission: { [item.resource]: ["read"] },
+            })
+          ).data?.success;
+        }
+      }
+      return results;
+    },
+    enabled: !!activeOrg.data,
+  });
+
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
@@ -63,16 +91,19 @@ export function QISVSidebar({
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navItems.map((e) => (
-                <SidebarMenuItem key={e.href}>
-                  <SidebarMenuButton tooltip={e.name} asChild>
-                    <a href={e.href}>
-                      <e.icon className="!size-5" />
-                      <span>{e.name}</span>
-                    </a>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+              {!isLoading &&
+                navItems
+                  .filter((item) => allowedResources?.[item.name])
+                  .map((item) => (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton tooltip={item.name} asChild>
+                        <a href={item.href}>
+                          <item.icon className="!size-5" />
+                          <span>{item.name}</span>
+                        </a>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

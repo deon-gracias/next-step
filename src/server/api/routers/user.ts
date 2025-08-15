@@ -2,9 +2,51 @@ import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import { z } from "zod";
 import { eq, ilike, and, ne } from "drizzle-orm";
 import { paginationInputSchema } from "@/server/utils/schema";
-import { user, member } from "@/server/db/schema";
+import { user, member, resident } from "@/server/db/schema";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
+import { ac } from "@/lib/permissions";
+
+import { inArray } from "drizzle-orm";
+import { facility, memberFacility } from "@/server/db/schema";
+import { authClient } from "@/components/providers/auth-client";
+
+// TODO: Add appropriate types
+export async function getAllowedFacilities(ctx) {
+  const userId = ctx.session.user.id;
+
+  const [memberRecord] = await ctx.db
+    .select()
+    .from(member)
+    .where(eq(member.userId, userId))
+    .limit(1);
+
+  if (!memberRecord) throw new Error("Not a member");
+
+  const assignedFacilities = await ctx.db
+    .select()
+    .from(memberFacility)
+    .where(eq(memberFacility.userId, memberRecord.userId));
+
+  console.log(
+    "Assigned Facilities",
+    assignedFacilities,
+    memberRecord,
+    `userId = ${userId}`,
+  );
+
+  if (!assignedFacilities.length) return [];
+
+  return ctx.db
+    .select()
+    .from(facility)
+    .where(
+      inArray(
+        facility.id,
+        assignedFacilities.map((f) => f.facilityId),
+      ),
+    );
+}
 
 export const userRouter = createTRPCRouter({
   listInOrg: protectedProcedure
@@ -30,7 +72,7 @@ export const userRouter = createTRPCRouter({
       const offset = (page - 1) * pageSize;
 
       const conditions = [
-        ne(user.id, session.user.id),
+        // ne(user.id, session.user.id),
         eq(member.organizationId, organizationId),
       ];
 
@@ -53,5 +95,92 @@ export const userRouter = createTRPCRouter({
         .offset(offset);
 
       return results;
+    }),
+
+  assignToFacility: protectedProcedure
+    .input(
+      z.object({
+        email: z.email(),
+        organizationId: z.string(),
+        facilityId: z.number(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const [userFromEmail] = await ctx.db
+        .select()
+        .from(user)
+        .where(eq(user.email, input.email))
+        .limit(1);
+
+      if (!userFromEmail) {
+        throw new Error("Couldn't find email");
+      }
+
+      // Check if requestion member exists in the database
+      const [requestingMember] = await ctx.db
+        .select()
+        .from(member)
+        .where(
+          and(
+            eq(member.userId, ctx.session.user.id),
+            eq(member.organizationId, input.organizationId),
+          ),
+        )
+        .limit(1);
+
+      if (!requestingMember) {
+        throw new Error("Requesting user is not a member of this organization");
+      }
+
+      // Check if user can assign
+      const canAssign = await auth.api.hasPermission({
+        headers: await headers(),
+        body: {
+          permission: { member: ["create", "update"] },
+        },
+      });
+
+      if (!canAssign) {
+        throw new Error(
+          "You do not have permission to assign users to facilities",
+        );
+      }
+
+      // Check if facility exists
+      const [facilityExists] = await ctx.db
+        .select()
+        .from(facility)
+        .where(eq(facility.id, input.facilityId))
+        .limit(1);
+
+      if (!facilityExists) {
+        throw new Error("Facility not found");
+      }
+
+      // 6. Insert the assignment
+      await ctx.db.insert(memberFacility).values({
+        userId: userFromEmail.id,
+        facilityId: input.facilityId,
+      });
+
+      return { success: true };
+    }),
+
+  getForOrg: protectedProcedure
+    .input(z.object({}))
+    .query(async ({ ctx, input }) => {
+      const facilities = await getAllowedFacilities(ctx);
+
+      if (!facilities.length) return [];
+
+      return ctx.db
+        .select()
+        .from(resident)
+        .where(
+          inArray(
+            resident.facilityId,
+            facilities.map((f) => f.facilityId), // TODO: Add appropriate types or fix type inference
+          ),
+        );
     }),
 });

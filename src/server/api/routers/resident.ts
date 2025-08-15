@@ -23,6 +23,7 @@ import {
   matchTypeToDrizzleCondition,
   paginationInputSchema,
 } from "@/server/utils/schema";
+import { getAllowedFacilities } from "./user";
 
 export const residentRouter = createTRPCRouter({
   create: protectedProcedure
@@ -69,6 +70,7 @@ export const residentRouter = createTRPCRouter({
     )
     .query(async ({ ctx, input }) => {
       const offset = (input.page - 1) * input.pageSize;
+      const facilities = await getAllowedFacilities(ctx);
 
       const conditions = [];
       if (input.id !== undefined) conditions.push(eq(resident.id, input.id));
@@ -85,8 +87,18 @@ export const residentRouter = createTRPCRouter({
         ? (matchTypeToDrizzleCondition(input.matchType) ?? and)
         : and;
 
+      const facilityConditions = [];
+      for (const f of facilities) {
+        console.log("Facility", f.id);
+        facilityConditions.push(eq(resident.facilityId, f.id));
+      }
+
       const whereClause =
-        conditions.length > 0 ? matchTypeCondition(...conditions) : undefined;
+        conditions.length > 0
+          ? and(matchTypeCondition(...conditions), or(...facilityConditions))
+          : or(...facilityConditions);
+
+      console.log("Facilities", facilities);
 
       const [totalResult] = await ctx.db
         .select({ count: count() })

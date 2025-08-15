@@ -61,7 +61,7 @@ function FacilityValue({ id }: { id: number }) {
 
 const PAGE_SIZES = [10, 50, 100];
 
-export default function () {
+export default function() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -69,6 +69,9 @@ export default function () {
   const pageSize = Number(searchParams.get("pageSize") ?? PAGE_SIZES[0]);
 
   const [dialogOpen, setDialogOpen] = useState(false);
+
+  const activeOrganization = authClient.useActiveOrganization();
+
   const residents = api.resident.list.useQuery({
     page,
     pageSize,

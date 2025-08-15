@@ -108,6 +108,17 @@ export const invitation = pgTable("invitation", {
     .references(() => user.id, { onDelete: "cascade" }),
 });
 
+export const memberFacility = pgTable("member_facility", {
+  id: integer().primaryKey().generatedAlwaysAsIdentity(),
+
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  facilityId: integer("facility_id")
+    .notNull()
+    .references(() => facility.id, { onDelete: "cascade" }),
+});
+
 export const resident = pgTable("resident", {
   id: integer().primaryKey().generatedAlwaysAsIdentity(),
   name: text("name").notNull(),
@@ -124,9 +135,22 @@ export const facility = pgTable("facility", {
   address: text("address").notNull(),
 });
 
+export const templateTypeEnum = pgEnum("template_type", [
+  "resident",
+  "general",
+  "case",
+]);
+
 export const template = pgTable("template", {
   id: integer().primaryKey().generatedAlwaysAsIdentity(),
   name: text("name").notNull(),
+  type: templateTypeEnum("type").notNull(),
+});
+
+export const ftag = pgTable("ftag", {
+  id: integer().primaryKey().generatedAlwaysAsIdentity(),
+  code: text("code").notNull().unique(),
+  description: text("description"),
 });
 
 export const question = pgTable("question", {
@@ -138,7 +162,7 @@ export const question = pgTable("question", {
     .notNull(),
 });
 
-export const ftag = pgTable("ftag", {
+export const cases = pgTable("case", {
   id: integer().primaryKey().generatedAlwaysAsIdentity(),
   code: text("code").notNull().unique(),
   description: text("description"),
@@ -168,6 +192,7 @@ export const survey = pgTable("survey", {
   templateId: integer("template_id")
     .references(() => template.id)
     .notNull(),
+  isLocked: boolean("is_locked").default(false).notNull(),
   surveyDate: date("survey_date").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -187,6 +212,21 @@ export const surveyResident = pgTable(
   (table) => [unique().on(table.residentId, table.surveyId)],
 );
 
+export const surveyCases = pgTable(
+  "survey_case",
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    surveyId: integer("survey_id")
+      .references(() => survey.id)
+      .notNull(),
+    caseId: integer("case_id")
+      .references(() => cases.id)
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [unique().on(table.caseId, table.surveyId)],
+);
+
 export const metStatusEnum = pgEnum("met_status_enum", [
   "met",
   "unmet",
@@ -200,9 +240,8 @@ export const surveyResponse = pgTable(
     surveyId: integer("survey_id")
       .references(() => survey.id)
       .notNull(),
-    residentId: integer("resident_id")
-      .references(() => resident.id)
-      .notNull(),
+    caseId: integer("case_id").references(() => cases.id),
+    residentId: integer("resident_id").references(() => resident.id),
     questionId: integer("question_id")
       .references(() => question.id)
       .notNull(),
@@ -213,6 +252,44 @@ export const surveyResponse = pgTable(
   },
   (table) => [unique().on(table.surveyId, table.residentId, table.questionId)],
 );
+
+export const dietarySurveys = pgTable("dietary_surveys", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const dietaryQuestions = pgTable("dietary_questions", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  question: text("question").notNull(),
+  category: text("category"),
+});
+
+export const dietarySurveyQuestions = pgTable("dietary_survey_questions", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  surveyId: integer("survey_id")
+    .notNull()
+    .references(() => dietarySurveys.id, { onDelete: "cascade" }),
+  questionId: integer("question_id")
+    .notNull()
+    .references(() => dietaryQuestions.id, { onDelete: "cascade" }),
+  order: integer("order").default(0),
+});
+
+export const dietaryAnswerStatusEnum = pgEnum("dietary_answer_status", [
+  "met",
+  "unmet",
+  "n/a",
+]);
+
+export const dietaryAnswers = pgTable("dietary_answers", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  questionId: integer("question_id")
+    .notNull()
+    .references(() => dietaryQuestions.id, { onDelete: "cascade" }),
+  status: dietaryAnswerStatusEnum("status").notNull(),
+  comments_or_actions: text("comments"),
+  validation_or_completion: text("validation"),
+});
 
 // Resident
 export const residentInsertSchema = createInsertSchema(resident);
@@ -250,6 +327,12 @@ export type QuestionFtagInsertType = z.infer<typeof questionFtagInsertSchema>;
 export const questionFtagSelectSchema = createSelectSchema(questionFtag);
 export type QuestionFtagSelectType = z.infer<typeof questionFtagSelectSchema>;
 
+// Cases
+export const caseInsertSchema = createInsertSchema(cases);
+export type CaseInsertType = z.infer<typeof caseInsertSchema>;
+export const caseSelectSchema = createSelectSchema(cases);
+export type CaseSelectType = z.infer<typeof caseSelectSchema>;
+
 // Survey
 export const surveyInsertSchema = createInsertSchema(survey);
 export type SurveyInsertType = z.infer<typeof surveyInsertSchema>;
@@ -266,7 +349,13 @@ export type surveyResidentSelectType = z.infer<
   typeof surveyResidentSelectSchema
 >;
 
-// SurveyResponse
+// Survey Case
+export const surveyCasesInsertSchema = createInsertSchema(surveyCases);
+export type surveyCasesInsertType = z.infer<typeof surveyCasesInsertSchema>;
+export const surveyCasesSelectSchema = createSelectSchema(surveyCases);
+export type surveyCasesSelectType = z.infer<typeof surveyCasesSelectSchema>;
+
+// Survey Response
 export const surveyResponseInsertSchema = createInsertSchema(surveyResponse);
 export type SurveyResponseInsertType = z.infer<
   typeof surveyResponseInsertSchema
@@ -275,3 +364,43 @@ export const surveyResponseSelectSchema = createSelectSchema(surveyResponse);
 export type SurveyResponseSelectType = z.infer<
   typeof surveyResponseSelectSchema
 >;
+
+// Dietary Survey
+export const dietarySurveysInsertSchema = createInsertSchema(dietarySurveys);
+export type DietarySurveysInsertType = z.infer<
+  typeof dietarySurveysInsertSchema
+>;
+export const dietarySurveysSelectSchema = createSelectSchema(dietarySurveys);
+export type DietarySurveysSelectType = z.infer<
+  typeof dietarySurveysSelectSchema
+>;
+
+// Dietary Question
+export const dietaryQuestionInsertSchema = createInsertSchema(dietaryQuestions);
+export type DietaryQuestionInsertType = z.infer<
+  typeof dietaryQuestionInsertSchema
+>;
+export const dietaryQuestionSelectSchema = createSelectSchema(dietaryQuestions);
+export type DietaryQuestionSelectType = z.infer<
+  typeof dietaryQuestionSelectSchema
+>;
+
+// Dietary Survey Questions
+export const dietarySurveyQuestionInsertSchema = createInsertSchema(
+  dietarySurveyQuestions,
+);
+export type DietarySurveyQuestionInsertType = z.infer<
+  typeof dietarySurveyQuestionInsertSchema
+>;
+export const dietarySurveyQuestionSelectSchema = createSelectSchema(
+  dietarySurveyQuestions,
+);
+export type DietarySurveyQuestionSelectType = z.infer<
+  typeof dietarySurveyQuestionSelectSchema
+>;
+
+// Dietary Survey Answers
+export const dietaryAnswerInsertSchema = createInsertSchema(dietaryAnswers);
+export type DietaryAnswerInsertType = z.infer<typeof dietaryAnswerInsertSchema>;
+export const dietaryAnswerSelectSchema = createSelectSchema(dietaryAnswers);
+export type DietaryAnswerSelectType = z.infer<typeof dietaryAnswerSelectSchema>;

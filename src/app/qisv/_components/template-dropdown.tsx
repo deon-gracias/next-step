@@ -23,15 +23,25 @@ import { ALIGN_OPTIONS } from "@radix-ui/react-popper";
 import { api } from "@/trpc/react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import type { TemplateSelectType } from "@/server/db/schema";
 
-type ComboboxProps = {
-  selectedItem?: number;
-  onSelect: (item: number) => void;
+interface ComboboxPropsBase {
   searchPlaceholder?: string;
   className?: string;
   disabled?: boolean;
   align?: (typeof ALIGN_OPTIONS)[number];
-};
+}
+interface ComboboxIdMode extends ComboboxPropsBase {
+  withValue?: false;
+  onSelect: (id: number) => void;
+  selectedItem?: number;
+}
+interface ComboboxFullMode extends ComboboxPropsBase {
+  withValue: true;
+  onSelect: (item: TemplateSelectType) => void;
+  selectedItem?: TemplateSelectType;
+}
+type ComboboxProps = ComboboxIdMode | ComboboxFullMode;
 
 export function TemplateComboBox({
   selectedItem,
@@ -39,6 +49,7 @@ export function TemplateComboBox({
   searchPlaceholder = "Search...",
   className,
   disabled = false,
+  withValue,
   align,
 }: ComboboxProps) {
   const [open, setOpenState] = React.useState(false);
@@ -68,8 +79,14 @@ export function TemplateComboBox({
           disabled={disabled}
         >
           <span className="flex items-center truncate">
-            {(items.data && items.data.data.find((e) => e.id === selectedItem))
-              ?.name || "Select an item"}
+            {(
+              items.data &&
+              items.data.data.find((e) =>
+                withValue && selectedItem
+                  ? e.id === selectedItem.id
+                  : e.id === selectedItem,
+              )
+            )?.name || "Select an item"}
           </span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
@@ -108,7 +125,9 @@ export function TemplateComboBox({
                       value={item.name}
                       keywords={[item.name]}
                       onSelect={() => {
-                        onSelect(item.id);
+                        if (withValue) onSelect(item);
+                        else onSelect(item.id);
+
                         setOpen(false);
                       }}
                     >
@@ -118,6 +137,7 @@ export function TemplateComboBox({
                           isSelected ? "opacity-100" : "opacity-0",
                         )}
                       />
+                      <Badge className="capitalize">{item.type}</Badge>
                       {item.name}
                       <Badge variant={"outline"}>
                         Points: {item.totalPoints}

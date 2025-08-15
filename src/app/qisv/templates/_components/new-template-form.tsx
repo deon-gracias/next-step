@@ -19,8 +19,16 @@ import { cn } from "@/lib/utils";
 import { redirect } from "next/navigation";
 import {
   templateInsertSchema,
+  templateTypeEnum,
   type TemplateInsertType,
 } from "@/server/db/schema";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export function NewTemplateForm({ ...props }: React.ComponentProps<"form">) {
   const utils = api.useUtils();
@@ -29,7 +37,7 @@ export function NewTemplateForm({ ...props }: React.ComponentProps<"form">) {
 
   const form = useForm<TemplateInsertType>({
     resolver: zodResolver(templateInsertSchema),
-    defaultValues: { name: "" },
+    defaultValues: { name: "", type: "resident" },
   });
 
   const onSubmit = async (data: TemplateInsertType) => {
@@ -62,6 +70,30 @@ export function NewTemplateForm({ ...props }: React.ComponentProps<"form">) {
               <FormControl>
                 <Input {...field} placeholder="e.g., Safety Audit" />
               </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          name="type"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Template Type</FormLabel>
+              <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <FormControl>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select a template type" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {templateTypeEnum.enumValues.map((e) => (
+                    <SelectItem key={e} value={e}>
+                      {e}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <FormMessage />
             </FormItem>
           )}

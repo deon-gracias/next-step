@@ -140,9 +140,9 @@ async function main() {
 
   // 5. Templates --------------------------------------------------------------
   const templates = [
-    { name: "Basic Safety" },
-    { name: "Infection Control" },
-    { name: "Nutrition & Hydration" },
+    { name: "Basic Safety", type: "resident" },
+    { name: "Infection Control", type: "resident" },
+    { name: "Nutrition & Hydration", type: "resident" },
   ];
   await db.insert(schema.template).values(templates).onConflictDoNothing();
 
@@ -163,6 +163,14 @@ async function main() {
     { code: "F550", description: "Quality of care" },
   ];
   await db.insert(schema.ftag).values(ftags).onConflictDoNothing();
+
+  // 7.1 Cases ------------------------------------------------------------------
+  const cases = [
+    { code: "C441", description: "Infection control" },
+    { code: "C812", description: "Nutrition requirements" },
+    { code: "C550", description: "Quality of care" },
+  ];
+  await db.insert(schema.cases).values(cases).onConflictDoNothing();
 
   // 8. Question-FTag links ----------------------------------------------------
   await db

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Check, ChevronsUpDown, Loader2Icon, X } from "lucide-react";
+import { Check, ChevronsUpDown, Loader2Icon } from "lucide-react";
 import { useDebounce } from "@uidotdev/usehooks";
 
 import { cn } from "@/lib/utils";
@@ -21,28 +21,24 @@ import {
 } from "@/components/ui/popover";
 import { ALIGN_OPTIONS } from "@radix-ui/react-popper";
 import { api } from "@/trpc/react";
+import { CommandLoading } from "cmdk";
 import { Skeleton } from "@/components/ui/skeleton";
-import { authClient } from "@/components/providers/auth-client";
-import { useQuery } from "@tanstack/react-query";
-import type { roles } from "@/lib/permissions";
 import { Badge } from "@/components/ui/badge";
 
 type ComboboxProps = {
-  selectedItem?: string;
-  onSelect: (item: string) => void;
-  role?: (typeof roles)[number]["label"];
+  selectedItem?: number;
+  onSelect: (item: number) => void;
   searchPlaceholder?: string;
   className?: string;
   disabled?: boolean;
   align?: (typeof ALIGN_OPTIONS)[number];
 };
 
-export function UserComboBox({
+export function CasesComboBox({
   selectedItem,
   onSelect,
   searchPlaceholder = "Search...",
   className,
-  role,
   disabled = false,
   align,
 }: ComboboxProps) {
@@ -53,15 +49,7 @@ export function UserComboBox({
   const handleOnSearchChange = (e: string) => setInput(e);
   // (e === "" && fetchItems(e)) || debouncedFetchItems(e);
 
-  const activeOrganization = authClient.useActiveOrganization();
-  const items = api.user.listInOrg.useQuery(
-    {
-      organizationId: activeOrganization.data?.id ?? "",
-      search: debouncedInput,
-      role: role,
-    },
-    { enabled: !!activeOrganization.data },
-  );
+  const items = api.cases.list.useQuery({ code: debouncedInput });
 
   function setOpen(isOpen: boolean) {
     if (isOpen) {
@@ -81,10 +69,8 @@ export function UserComboBox({
           disabled={disabled}
         >
           <span className="flex items-center truncate">
-            <span className="flex items-center truncate">
-              {items.data?.find((e) => e.id === selectedItem)?.email ||
-                "Select an item"}
-            </span>
+            {(items.data && items.data?.find((e) => e.id === selectedItem))
+              ?.code || "Select an item"}
           </span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
@@ -100,34 +86,37 @@ export function UserComboBox({
             onValueChange={handleOnSearchChange}
           />
           <CommandList>
-            <CommandEmpty>No user found</CommandEmpty>
+            <CommandEmpty>No cases found</CommandEmpty>
 
-            {items.isPending &&
-              Array.from({ length: 5 }).map((_, i) => (
-                <CommandItem key={i} className="p-0">
-                  <Skeleton className="mb-1 h-8 w-full rounded" />
-                </CommandItem>
-              ))}
+            {items.isPending && (
+              <CommandGroup>
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <CommandItem key={i} className="p-0">
+                    <Skeleton className="mb-1 h-8 w-full rounded" />
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
 
             <CommandGroup>
               {!items.isPending &&
                 items.data &&
                 items.data.map((item) => {
-                  if (!item.email) {
+                  if (!item.code) {
                     return null;
                   }
                   const isSelected = selectedItem === item.id;
                   return (
                     <CommandItem
                       key={item.id}
-                      value={item.email}
-                      keywords={[item.email]}
+                      value={item.code}
+                      keywords={[item.code]}
                       onSelect={() => {
                         onSelect(item.id);
                         setOpen(false);
                       }}
                     >
-                      {item.email}
+                      {item.code}
                       <Check
                         className={cn(
                           "ml-auto h-4 w-4",
@@ -146,41 +135,31 @@ export function UserComboBox({
 }
 
 type MultiSelectProps = {
-  selectedItems: string[];
-  onChange: (items: string[]) => void;
-  role?: (typeof roles)[number]["label"];
+  selectedItems: number[];
+  onChange: (items: number[]) => void;
   searchPlaceholder?: string;
   className?: string;
   disabled?: boolean;
 };
 
-export function UserMultiComboBox({
+export function CasesMultiSelectComboBox({
   selectedItems,
   onChange,
-  role,
   searchPlaceholder = "Search...",
   className,
   disabled = false,
 }: MultiSelectProps) {
   const [open, setOpenState] = React.useState(false);
   const [input, setInput] = React.useState("");
-  const [selectedMap, setSelectedMap] = React.useState<Record<string, string>>(
+
+  const debouncedInput = useDebounce(input, 300);
+  const items = api.cases.list.useQuery({ code: debouncedInput });
+
+  const [selectedMap, setSelectedMap] = React.useState<Record<number, string>>(
     {},
   );
 
-  const debouncedInput = useDebounce(input, 300);
-  const activeOrganization = authClient.useActiveOrganization();
-
-  const items = api.user.listInOrg.useQuery(
-    {
-      organizationId: activeOrganization.data?.id ?? "",
-      search: debouncedInput,
-      role: role,
-    },
-    { enabled: !!activeOrganization.data },
-  );
-
-  const handleSelect = (id: string, email: string) => {
+  const handleSelect = (id: number, code: string) => {
     const exists = selectedItems.includes(id);
     if (exists) {
       onChange(selectedItems.filter((item) => item !== id));
@@ -193,7 +172,7 @@ export function UserMultiComboBox({
       onChange([...selectedItems, id]);
       setSelectedMap((prev) => ({
         ...prev,
-        [id]: email,
+        [id]: code,
       }));
     }
   };
@@ -207,7 +186,7 @@ export function UserMultiComboBox({
         setSelectedMap((prev) => {
           const next = { ...prev };
           newlyVisible.forEach((item) => {
-            next[item.id] = item.email;
+            next[item.id] = item.code;
           });
           return next;
         });
@@ -227,23 +206,16 @@ export function UserMultiComboBox({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className={cn("min-h-10 w-full justify-between", className)}
+          className={cn("min-h-10 justify-between", className)}
           disabled={disabled}
         >
           <div className="flex max-w-[80%] flex-wrap items-center gap-1 truncate">
             {selectedItems.length === 0 && (
-              <span className="text-muted-foreground">Select Users</span>
+              <span className="text-muted-foreground">Select cases</span>
             )}
             {selectedItems.map((id) => (
-              <Badge key={id} variant="outline">
-                {selectedMap[id] ?? id}
-                <X
-                  className="ml-1 h-3 w-3 cursor-pointer"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleSelect(id, selectedMap[id] || "");
-                  }}
-                />
+              <Badge key={id} variant="secondary">
+                {selectedMap[id] ?? `#${id}`}
               </Badge>
             ))}
           </div>
@@ -260,49 +232,38 @@ export function UserMultiComboBox({
             onValueChange={setInput}
           />
           <CommandList>
-            <CommandEmpty>No users found</CommandEmpty>
+            <CommandEmpty>No cases found</CommandEmpty>
 
-            <CommandGroup>
-              {items.isPending &&
-                Array.from({ length: 4 }).map((_, i) => (
+            {items.isPending && (
+              <CommandGroup>
+                {Array.from({ length: 4 }).map((_, i) => (
                   <CommandItem key={i} className="p-0">
                     <Skeleton className="mb-1 h-8 w-full rounded" />
                   </CommandItem>
                 ))}
+              </CommandGroup>
+            )}
 
-              {!items.isPending &&
-                items.data &&
-                items.data.map((item) => {
-                  if (!item.email) {
-                    return null;
-                  }
-                  const isSelected = selectedItems.includes(item.id);
-                  return (
-                    <CommandItem
-                      key={item.id}
-                      value={item.email}
-                      keywords={[item.email, item.name || ""]}
-                      onSelect={() => {
-                        handleSelect(item.id, item.email);
-                      }}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">{item.email}</span>
-                        {item.name && (
-                          <span className="text-muted-foreground text-sm">
-                            {item.name}
-                          </span>
-                        )}
-                      </div>
-                      <Check
-                        className={cn(
-                          "ml-auto h-4 w-4",
-                          isSelected ? "opacity-100" : "opacity-0",
-                        )}
-                      />
-                    </CommandItem>
-                  );
-                })}
+            <CommandGroup>
+              {items.data?.map((item) => {
+                const isSelected = selectedItems.includes(item.id);
+                return (
+                  <CommandItem
+                    key={item.id}
+                    value={item.code}
+                    keywords={[item.code]}
+                    onSelect={() => handleSelect(item.id, item.code)}
+                  >
+                    <Check
+                      className={cn(
+                        "h-4 w-4",
+                        isSelected ? "opacity-100" : "opacity-0",
+                      )}
+                    />
+                    {item.code}
+                  </CommandItem>
+                );
+              })}
             </CommandGroup>
           </CommandList>
         </Command>

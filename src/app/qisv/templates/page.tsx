@@ -114,7 +114,7 @@ export default function TemplatePage() {
               <TableRow className="bg-secondary text-secondary-foreground">
                 <TableHead className="w-[80px] text-right">ID</TableHead>
                 <TableHead>Name</TableHead>
-                <TableHead className="text-right">Questions</TableHead>
+                <TableHead>Type</TableHead>
                 <TableHead className="max-w-fit"></TableHead>
               </TableRow>
             </TableHeader>

@@ -22,10 +22,7 @@ import { toast } from "sonner";
 import { FacilityComboBox } from "../../_components/facility-dropdown";
 import { TemplateComboBox } from "../../_components/template-dropdown";
 import { UserComboBox } from "../../_components/user-dropdown";
-import {
-  surveyCreateInputSchema,
-  type SurveyCreateInputType,
-} from "@/server/utils/schema";
+import { type SurveyCreateInputType } from "@/server/utils/schema";
 import {
   Table,
   TableBody,
@@ -35,14 +32,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useDebounce } from "@uidotdev/usehooks";
 import {
   residentInsertSchema,
-  surveyResponseInsertSchema,
+  templateSelectSchema,
   type ResidentInsertType,
-  type SurveyResponseInsertType,
-  type SurveySelectType,
 } from "@/server/db/schema";
 import { CalendarIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react";
 import { FacilityHoverCard } from "../../_components/facility-card";
@@ -58,6 +53,8 @@ import {
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
+import { authClient } from "@/components/providers/auth-client";
+import { CasesMultiSelectComboBox } from "../../templates/_components/case-dropdown";
 
 export const newMultiSurveyCreateInputSchema = z.object({
   surveyDate: z.date(),
@@ -69,10 +66,11 @@ export const newMultiSurveyCreateInputSchema = z.object({
         templates: z
           .array(
             z.object({
-              templateId: z.number().min(0, "Template ID must be 0 or greater"),
-              residentIds: z
-                .array(z.number().min(1, "Resident ID must be at least 1"))
-                .min(1, "At least one resident is required"),
+              template: templateSelectSchema.optional(),
+              caseIds: z.array(z.number().min(1, "Case ID must be at least 1")),
+              residentIds: z.array(
+                z.number().min(1, "Resident ID must be at least 1"),
+              ),
             }),
           )
           .min(1, "At least one template is required"),
@@ -86,6 +84,8 @@ export type NewMultiSurveyCreateInputType = z.infer<
 >;
 
 export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
+  const user = authClient.useSession();
+
   const createSurvey = api.survey.create.useMutation();
 
   const form = useForm<NewMultiSurveyCreateInputType>({
@@ -102,6 +102,16 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
     name: "surveyors",
   });
 
+  useEffect(() => {
+    if (form.watch("surveyors").length > 0) return;
+    if (!(user.data && user.data.user)) return;
+
+    surveyorsField.append({
+      surveyorId: user.data.user.id,
+      templates: [],
+    });
+  }, [user.data]);
+
   const onSubmit = (values: NewMultiSurveyCreateInputType) => {
     const createSurveyRequest: SurveyCreateInputType[] = [];
 
@@ -111,7 +121,8 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
           surveyDate: values.surveyDate.toUTCString(),
           surveyorId: surveyor.surveyorId,
           facilityId: values.facilityId,
-          templateId: template.templateId,
+          templateId: template.template?.id,
+          caseIds: template.caseIds,
           residentIds: template.residentIds,
         } as SurveyCreateInputType);
       }
@@ -260,7 +271,7 @@ function SurveyorField({
   });
 
   return (
-    <Card key={surveyor.id}>
+    <Card key={surveyor.id} className="bg-secondary text-secondary-foreground">
       <CardHeader className="flex items-center justify-between">
         <h2 className="font-semibold">Surveyor {sIndex + 1}</h2>
         <Button
@@ -273,7 +284,7 @@ function SurveyorField({
         </Button>
       </CardHeader>
 
-      <CardContent className="grid gap-4">
+      <CardContent className="grid gap-2">
         {/* Surveyor select */}
         <Form {...form}>
           <FormField
@@ -314,12 +325,13 @@ function SurveyorField({
               <Form {...form}>
                 <FormField
                   control={form.control}
-                  name={`surveyors.${sIndex}.templates.${tIndex}.templateId`}
+                  name={`surveyors.${sIndex}.templates.${tIndex}.template`}
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Template</FormLabel>
                       <FormControl>
                         <TemplateComboBox
+                          withValue
                           selectedItem={field.value}
                           onSelect={(item) => field.onChange(item)}
                         />
@@ -330,240 +342,126 @@ function SurveyorField({
                 />
               </Form>
 
+              {/* Add cases for this template */}
+              {form.watch("facilityId") > -1 &&
+                form.watch(`surveyors.${sIndex}.templates.${tIndex}.template`)
+                  ?.type === "case" && (
+                  <Form {...form}>
+                    <FormField
+                      control={form.control}
+                      name={`surveyors.${sIndex}.templates.${tIndex}.caseIds`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Cases</FormLabel>
+                          <FormControl>
+                            <CasesMultiSelectComboBox
+                              selectedItems={field.value}
+                              onChange={field.onChange}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </Form>
+                )}
+
               {/* Add residents for this template */}
-              {form.watch("facilityId") > -1 && (
-                <AddResidentInput
-                  facilityId={form.getValues("facilityId")}
-                  value={form.getValues(
-                    `surveyors.${sIndex}.templates.${tIndex}.residentIds`,
-                  )}
-                  onChange={(value) =>
-                    form.setValue(
+              {form.watch("facilityId") > -1 &&
+                form.watch(`surveyors.${sIndex}.templates.${tIndex}.template`)
+                  ?.type === "resident" && (
+                  <AddResidentInput
+                    facilityId={form.getValues("facilityId")}
+                    value={form.getValues(
                       `surveyors.${sIndex}.templates.${tIndex}.residentIds`,
-                      Array.from(new Set(value)),
-                    )
-                  }
-                />
-              )}
+                    )}
+                    onChange={(value) =>
+                      form.setValue(
+                        `surveyors.${sIndex}.templates.${tIndex}.residentIds`,
+                        Array.from(new Set(value)),
+                      )
+                    }
+                  />
+                )}
 
               {/* Residents table */}
-              {form.watch("facilityId") > -1 && (
-                <div className="rounded-lg border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-secondary text-secondary-foreground">
-                        <TableHead className="w-[80px] text-right">
-                          ID
-                        </TableHead>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Facility</TableHead>
-                        <TableHead>Room</TableHead>
-                        <TableHead>PCCI ID</TableHead>
-                        <TableHead></TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {form.watch(
-                        `surveyors.${sIndex}.templates.${tIndex}.residentIds`,
-                      ).length < 1 && (
-                        <TableRow>
-                          <TableCell
-                            colSpan={5}
-                            className="text-muted-foreground py-8 text-center"
-                          >
-                            No residents selected. Add your first resident to
-                            get started.
-                          </TableCell>
+              {form.watch("facilityId") > -1 &&
+                form.watch(`surveyors.${sIndex}.templates.${tIndex}.template`)
+                  ?.type === "resident" && (
+                  <div className="rounded-lg border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-secondary text-secondary-foreground">
+                          <TableHead className="w-[80px] text-right">
+                            ID
+                          </TableHead>
+                          <TableHead>Name</TableHead>
+                          <TableHead>Facility</TableHead>
+                          <TableHead>Room</TableHead>
+                          <TableHead>PCCI ID</TableHead>
+                          <TableHead></TableHead>
                         </TableRow>
-                      )}
-
-                      {form
-                        .watch(
+                      </TableHeader>
+                      <TableBody>
+                        {form.watch(
                           `surveyors.${sIndex}.templates.${tIndex}.residentIds`,
-                        )
-                        .sort((curr, next) => (curr > next ? 1 : 0))
-                        .map((id) => (
-                          <ResidentRowById
-                            key={id}
-                            id={id}
-                            handleRemove={() => {
-                              form.setValue(
-                                `surveyors.${sIndex}.templates.${tIndex}.residentIds`,
-                                form
-                                  .getValues(
-                                    `surveyors.${sIndex}.templates.${tIndex}.residentIds`,
-                                  )
-                                  .filter((i) => i !== id),
-                              );
-                            }}
-                          />
-                        ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
+                        ).length < 1 && (
+                          <TableRow>
+                            <TableCell
+                              colSpan={5}
+                              className="text-muted-foreground py-8 text-center"
+                            >
+                              No residents selected. Add your first resident to
+                              get started.
+                            </TableCell>
+                          </TableRow>
+                        )}
+
+                        {form
+                          .watch(
+                            `surveyors.${sIndex}.templates.${tIndex}.residentIds`,
+                          )
+                          .sort((curr, next) => (curr > next ? 1 : 0))
+                          .map((id) => (
+                            <ResidentRowById
+                              key={id}
+                              id={id}
+                              handleRemove={() => {
+                                form.setValue(
+                                  `surveyors.${sIndex}.templates.${tIndex}.residentIds`,
+                                  form
+                                    .getValues(
+                                      `surveyors.${sIndex}.templates.${tIndex}.residentIds`,
+                                    )
+                                    .filter((i) => i !== id),
+                                );
+                              }}
+                            />
+                          ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
             </CardContent>
           </Card>
         ))}
 
         {/* Add template button */}
         <Button
+          variant="outline"
           type="button"
-          variant="secondary"
+          className="bg-background"
           onClick={() =>
-            templatesField.append({ templateId: -1, residentIds: [] })
+            templatesField.append({
+              caseIds: [],
+              residentIds: [],
+            })
           }
         >
           <PlusIcon className="mr-1 h-4 w-4" /> Add Template
         </Button>
       </CardContent>
     </Card>
-  );
-}
-
-export function OldNewSurveyForm({ ...props }: React.ComponentProps<"form">) {
-  const createSurvey = api.survey.create.useMutation();
-
-  const form = useForm<SurveyCreateInputType>({
-    resolver: zodResolver(surveyCreateInputSchema),
-    defaultValues: {
-      surveyorId: "",
-      facilityId: -1,
-      templateId: -1,
-      residentIds: [],
-    },
-  });
-
-  useEffect(() => {
-    form.reset({ ...form.getValues(), residentIds: [] });
-  }, [form.watch("facilityId")]);
-
-  function onSubmit(values: SurveyCreateInputType) {
-    toast.promise(createSurvey.mutateAsync(values), {
-      loading: "Creating survey...",
-      success: () => {
-        form.reset({ ...form.getValues(), residentIds: [] });
-        return `Successfully created survey`;
-      },
-      error: (e) => `Failed to create survey.`,
-    });
-  }
-
-  return (
-    <div className={cn("grid gap-2", props.className)}>
-      <Form {...form}>
-        <form className="grid gap-2" onSubmit={form.handleSubmit(onSubmit)}>
-          <FormField
-            name="surveyorId"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>User</FormLabel>
-                <FormControl />
-                <UserComboBox
-                  selectedItem={field.value}
-                  onSelect={(item) => field.onChange(item)}
-                />
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            name="templateId"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Template</FormLabel>
-                <FormControl />
-                <TemplateComboBox
-                  selectedItem={field.value}
-                  onSelect={(item) => field.onChange(item)}
-                />
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            name="facilityId"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Facility</FormLabel>
-                <FormControl />
-                <FacilityComboBox
-                  selectedItem={field.value}
-                  onSelect={(item) => field.onChange(item)}
-                />
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </form>
-      </Form>
-
-      {form.watch("facilityId") > -1 && (
-        <>
-          <AddResidentInput
-            facilityId={form.getValues("facilityId")}
-            value={form.getValues("residentIds")}
-            onChange={(value: number[]) =>
-              form.setValue("residentIds", Array.from(new Set(value)))
-            }
-          />
-        </>
-      )}
-
-      {form.watch("facilityId") > -1 && (
-        <div className="rounded-lg border">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-secondary text-secondary-foreground">
-                <TableHead className="w-[80px] text-right">ID</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Facility</TableHead>
-                <TableHead>Room</TableHead>
-                <TableHead>PCCI ID</TableHead>
-                <TableHead></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {form.watch("residentIds").length < 1 && (
-                <TableRow>
-                  <TableCell
-                    colSpan={5}
-                    className="text-muted-foreground py-8 text-center"
-                  >
-                    No residents selected. Add your first resident to get
-                    started.
-                  </TableCell>
-                </TableRow>
-              )}
-
-              {form
-                .watch("residentIds")
-                .sort((curr, next) => (curr > next ? 1 : 0))
-                .map((id) => (
-                  <ResidentRowById
-                    key={id}
-                    id={id}
-                    handleRemove={() => {
-                      form.setValue(
-                        "residentIds",
-                        form.getValues("residentIds").filter((i) => i !== id) ||
-                          [],
-                      );
-                    }}
-                  />
-                ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
-
-      {/* Due to nested form's issue had to split into different forms */}
-      <form onSubmit={form.handleSubmit(onSubmit)}>
-        <Button type="submit">Add</Button>
-      </form>
-    </div>
   );
 }
 
@@ -632,6 +530,38 @@ function ResidentRowById({
         >
           <Trash2Icon />
         </Button>
+        <Button size="icon" variant="outline" onClick={handleRemove}>
+          <XIcon />
+        </Button>
+      </TableCell>
+    </TableRow>
+  );
+}
+
+function CaseRowsById({
+  id,
+  handleRemove,
+}: {
+  id: number;
+  handleRemove: () => void;
+}) {
+  const cases = api.cases.byId.useQuery({ id });
+
+  return (
+    <TableRow>
+      <TableCell className="text-right font-mono tabular-nums">{id}</TableCell>
+      <TableCell className="tabular-nums">
+        {!cases.data ? <Skeleton className="h-6" /> : cases.data.id}
+      </TableCell>
+      <TableCell className="font-medium">
+        {!cases.data ? <Skeleton className="h-6" /> : cases.data.code}
+      </TableCell>
+      <TableCell>
+        <Badge variant="secondary" className="text-xs">
+          {!cases.data ? <Skeleton className="h-6" /> : cases.data.description}
+        </Badge>
+      </TableCell>
+      <TableCell className="flex items-center gap-2">
         <Button size="icon" variant="outline" onClick={handleRemove}>
           <XIcon />
         </Button>

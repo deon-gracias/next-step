@@ -16,6 +16,7 @@ export type QuestionCreateInputType = z.infer<typeof questionCreateInputSchema>;
 
 export const surveyCreateInputSchema = surveyInsertSchema.extend({
   residentIds: z.array(z.number()),
+  caseIds: z.array(z.number()),
 });
 export type SurveyCreateInputType = z.infer<typeof surveyCreateInputSchema>;
 
@@ -30,6 +31,6 @@ export function matchTypeToDrizzleCondition(matchType: MatchType) {
     case "OR":
       return or;
     default:
-      return and; 
+      return and;
   }
 }
