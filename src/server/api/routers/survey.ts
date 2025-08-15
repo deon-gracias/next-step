@@ -67,9 +67,13 @@ export const surveyRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       return (
         await ctx.db
-          .select()
+          .select({
+            ...getTableColumns(survey),
+            template: getTableColumns(template),
+          })
           .from(survey)
           .where(eq(survey.id, input.id))
+          .leftJoin(template, eq(survey.templateId, template.id))
           .limit(1)
       )[0];
     }),
@@ -119,6 +123,15 @@ export const surveyRouter = createTRPCRouter({
         .select()
         .from(surveyResident)
         .where(eq(surveyResident.surveyId, input.surveyId));
+    }),
+
+  listCases: protectedProcedure
+    .input(z.object({ surveyId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      return ctx.db
+        .select()
+        .from(surveyCases)
+        .where(eq(surveyCases.surveyId, input.surveyId));
     }),
 
   pendingSurveys: protectedProcedure
@@ -178,6 +191,7 @@ export const surveyRouter = createTRPCRouter({
           target: [
             surveyResponse.surveyId,
             surveyResponse.residentId,
+            surveyResponse.surveyCaseId,
             surveyResponse.questionId,
           ],
           set: {
@@ -196,6 +210,7 @@ export const surveyRouter = createTRPCRouter({
         .pick({
           surveyId: true,
           residentId: true,
+          surveyCaseId: true,
           questionId: true,
         })
         .partial(),
@@ -205,8 +220,12 @@ export const surveyRouter = createTRPCRouter({
 
       if (input.surveyId !== undefined)
         whereConditions.push(eq(surveyResponse.surveyId, input.surveyId));
-      if (input.residentId !== undefined)
+      if (input.residentId)
         whereConditions.push(eq(surveyResponse.residentId, input.residentId));
+      if (input.surveyCaseId)
+        whereConditions.push(
+          eq(surveyResponse.surveyCaseId, input.surveyCaseId),
+        );
       if (input.questionId !== undefined)
         whereConditions.push(eq(surveyResponse.questionId, input.questionId));
 

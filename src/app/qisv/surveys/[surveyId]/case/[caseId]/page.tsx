@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { metStatusEnum } from "@/server/db/schema";
+import { cases, metStatusEnum } from "@/server/db/schema";
 import { surveyResponseInsertSchema } from "@/server/db/schema";
 import React, { useEffect } from "react";
 import { QISVHeader } from "@/app/qisv/_components/header";
@@ -37,7 +37,7 @@ export default function ResidentSurveyPage() {
   const params = useParams();
 
   const surveyId = Number(params.surveyId);
-  const residentId = Number(params.residentId);
+  const caseId = Number(params.caseId);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -59,12 +59,12 @@ export default function ResidentSurveyPage() {
   const existingResponse = api.survey.listResponses.useQuery(
     {
       surveyId: surveyId,
-      residentId: residentId,
+      surveyCaseId: caseId,
     },
     {
       select: (responses) =>
         responses.filter(
-          (e) => e.surveyId === surveyId && e.residentId === residentId,
+          (e) => e.surveyId === surveyId && e.surveyCaseId === caseId,
         ),
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,
@@ -75,7 +75,7 @@ export default function ResidentSurveyPage() {
   const upsert = api.survey.createResponse.useMutation({
     onSuccess: () => {
       utils.survey.byId.invalidate({ id: surveyId });
-      utils.survey.listResponses.invalidate({ surveyId, residentId });
+      utils.survey.listResponses.invalidate({ surveyId });
     },
     onError: (e) => toast.error(e.message),
   });
@@ -84,7 +84,11 @@ export default function ResidentSurveyPage() {
     toast.promise(
       upsert.mutateAsync({
         surveyId,
-        responses: vals.responses.map((r) => ({ ...r, residentId, surveyId })),
+        responses: vals.responses.map((r) => ({
+          ...r,
+          surveyCaseId: caseId,
+          surveyId,
+        })),
       }),
       {
         loading: "Saving Response",
@@ -118,7 +122,7 @@ export default function ResidentSurveyPage() {
         crumbs={[
           { label: "Surveys", href: "/qisv/surveys" },
           { label: `Survey #${surveyId}`, href: `/qisv/surveys/${surveyId}` },
-          { label: `Resident ${residentId}` },
+          { label: `Case ${caseId}` },
         ]}
       />
 

@@ -234,7 +234,7 @@ export const surveyResponse = pgTable(
     surveyId: integer("survey_id")
       .references(() => survey.id)
       .notNull(),
-    caseId: integer("case_id").references(() => cases.id),
+    surveyCaseId: integer("survey_case_id").references(() => surveyCases.id),
     residentId: integer("resident_id").references(() => resident.id),
     questionId: integer("question_id")
       .references(() => question.id)
@@ -244,7 +244,14 @@ export const surveyResponse = pgTable(
     ),
     findings: text("findings"),
   },
-  (table) => [unique().on(table.surveyId, table.residentId, table.questionId)],
+  (table) => [
+    unique().on(
+      table.surveyId,
+      table.residentId,
+      table.surveyCaseId,
+      table.questionId,
+    ),
+  ],
 );
 
 export const dietarySurveys = pgTable("dietary_surveys", {

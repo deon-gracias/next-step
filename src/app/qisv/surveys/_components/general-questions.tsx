@@ -32,12 +32,8 @@ const formSchema = z.object({
 });
 type FormValues = z.infer<typeof formSchema>;
 
-export default function ResidentSurveyPage() {
+export default function GeneralQuestions({ surveyId }: { surveyId: number }) {
   const utils = api.useUtils();
-  const params = useParams();
-
-  const surveyId = Number(params.surveyId);
-  const residentId = Number(params.residentId);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -59,13 +55,8 @@ export default function ResidentSurveyPage() {
   const existingResponse = api.survey.listResponses.useQuery(
     {
       surveyId: surveyId,
-      residentId: residentId,
     },
     {
-      select: (responses) =>
-        responses.filter(
-          (e) => e.surveyId === surveyId && e.residentId === residentId,
-        ),
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,
       refetchInterval: false,
@@ -75,7 +66,7 @@ export default function ResidentSurveyPage() {
   const upsert = api.survey.createResponse.useMutation({
     onSuccess: () => {
       utils.survey.byId.invalidate({ id: surveyId });
-      utils.survey.listResponses.invalidate({ surveyId, residentId });
+      utils.survey.listResponses.invalidate({ surveyId });
     },
     onError: (e) => toast.error(e.message),
   });
@@ -84,7 +75,7 @@ export default function ResidentSurveyPage() {
     toast.promise(
       upsert.mutateAsync({
         surveyId,
-        responses: vals.responses.map((r) => ({ ...r, residentId, surveyId })),
+        responses: vals.responses.map((r) => ({ ...r, surveyId })),
       }),
       {
         loading: "Saving Response",
@@ -114,69 +105,59 @@ export default function ResidentSurveyPage() {
 
   return (
     <>
-      <QISVHeader
-        crumbs={[
-          { label: "Surveys", href: "/qisv/surveys" },
-          { label: `Survey #${surveyId}`, href: `/qisv/surveys/${surveyId}` },
-          { label: `Resident ${residentId}` },
-        ]}
-      />
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        {JSON.stringify(form.formState.errors)}
+        {responsesFieldArray.fields.map((field, idx) => (
+          <div key={field.id} className="rounded border p-3">
+            <p className="mb-2 font-semibold">
+              {questions.data?.find((q) => q.id === field.questionId)?.text ??
+                `Question ID: ${field.questionId}`}
+            </p>
 
-      <main className="p-4">
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-          {JSON.stringify(form.formState.errors)}
-          {responsesFieldArray.fields.map((field, idx) => (
-            <div key={field.id} className="rounded border p-3">
-              <p className="mb-2 font-semibold">
-                {questions.data?.find((q) => q.id === field.questionId)?.text ??
-                  `Question ID: ${field.questionId}`}
-              </p>
+            <FormField
+              control={form.control}
+              name={`responses.${idx}.requirementsMetOrUnmet`}
+              render={({ field }) => (
+                <Select
+                  value={(field.value && field.value.toString()) ?? undefined}
+                  onValueChange={field.onChange}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {metStatusEnum.enumValues.map((e) => (
+                      <SelectItem key={e} value={e}>
+                        {e
+                          .split("_")
+                          .map((s) => s[0]?.toUpperCase() + s.slice(1))
+                          .join(" ")}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            />
 
+            {form.watch(`responses.${idx}.requirementsMetOrUnmet`) ===
+              "unmet" && (
               <FormField
                 control={form.control}
-                name={`responses.${idx}.requirementsMetOrUnmet`}
+                name={`responses.${idx}.findings`}
                 render={({ field }) => (
-                  <Select
-                    value={(field.value && field.value.toString()) ?? undefined}
-                    onValueChange={field.onChange}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {metStatusEnum.enumValues.map((e) => (
-                        <SelectItem key={e} value={e}>
-                          {e
-                            .split("_")
-                            .map((s) => s[0]?.toUpperCase() + s.slice(1))
-                            .join(" ")}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Input
+                    placeholder="Findings / notes"
+                    {...field}
+                    value={field.value ?? ""}
+                  />
                 )}
               />
+            )}
+          </div>
+        ))}
 
-              {form.watch(`responses.${idx}.requirementsMetOrUnmet`) ===
-                "unmet" && (
-                <FormField
-                  control={form.control}
-                  name={`responses.${idx}.findings`}
-                  render={({ field }) => (
-                    <Input
-                      placeholder="Findings / notes"
-                      {...field}
-                      value={field.value ?? ""}
-                    />
-                  )}
-                />
-              )}
-            </div>
-          ))}
-
-          <Button type="submit">Save</Button>
-        </form>
-      </main>
+        <Button type="submit">Save</Button>
+      </form>
     </>
   );
 }
