@@ -19,13 +19,12 @@ import { Badge } from "@/components/ui/badge";
 import { useSearchParams } from "next/navigation";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect } from "react";
 import { FacilityHoverCard } from "../_components/facility-card";
 import { TemplateHoverCard } from "../_components/template-card";
 
 const PAGE_SIZES = [10, 50, 100];
 
-export default function() {
+export default function () {
   const session = authClient.useSession();
   const searchParams = useSearchParams();
 
@@ -53,10 +52,6 @@ export default function() {
       enabled: !!(session.data && session.data.user.id),
     },
   );
-
-  useEffect(() => {
-    console.log(assignedFacility.data);
-  }, [assignedFacility.data]);
 
   const hasViewSurveyPermission = useQuery({
     queryKey: ["permissions", "read-survey", session.data?.user.id],
@@ -262,10 +257,13 @@ export default function() {
                         <TableCell>
                           <Link
                             href={`/qisv/surveys/${e.id}/`}
-                            className={buttonVariants({
-                              variant: "outline",
-                              size: "icon",
-                            })}
+                            className={cn(
+                              buttonVariants({
+                                variant: "outline",
+                                size: "icon",
+                              }),
+                              "size-6",
+                            )}
                           >
                             <ExternalLinkIcon />
                           </Link>
