@@ -58,20 +58,20 @@ export function InviteMemberDialog({
 
   function onSubmit(values: SendInviteType) {
     async function addMember() {
-      const member = await authClient.organization.inviteMember({
-        email: values.email,
-        role: values.role,
-        organizationId,
-      });
-
-      if (values.facilityId > -1 && member.data) {
-        console.log(member.data);
+      if (values.role === "facility_coordinator" && values.facilityId > -1) {
         addMemberToFacility.mutate({
           facilityId: values.facilityId,
           email: values.email,
           organizationId,
         });
       }
+
+      const member = await authClient.organization.inviteMember({
+        email: values.email,
+        role: values.role,
+        organizationId,
+      });
+
       return member;
     }
 
@@ -149,19 +149,21 @@ export function InviteMemberDialog({
               />
             </div>
 
-            <FormField
-              name="facilityId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Faciltiy</FormLabel>
-                  <FacilityComboBox
-                    selectedItem={field.value}
-                    onSelect={field.onChange}
-                  />
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {form.watch("role") === "facility_coordinator" && (
+              <FormField
+                name="facilityId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Facility</FormLabel>
+                    <FacilityComboBox
+                      selectedItem={field.value}
+                      onSelect={field.onChange}
+                    />
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
             <Button className="col-span-full">Send</Button>
           </form>

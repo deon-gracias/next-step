@@ -173,14 +173,6 @@ export const userRouter = createTRPCRouter({
 
       if (!facilities.length) return [];
 
-      return ctx.db
-        .select()
-        .from(resident)
-        .where(
-          inArray(
-            resident.facilityId,
-            facilities.map((f) => f.facilityId), // TODO: Add appropriate types or fix type inference
-          ),
-        );
+      return facilities[0];
     }),
 });

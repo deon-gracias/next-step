@@ -49,5 +49,5 @@ export const lead_surveyor = ac.newRole({
 });
 
 export const facility_coordinator = ac.newRole({
-  survey: ["read"],
+  survey: ["read", "update"],
 });

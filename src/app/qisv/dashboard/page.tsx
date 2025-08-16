@@ -36,7 +36,7 @@ export default function () {
   });
 
   const manageMemberPermission = useQuery({
-    queryKey: [],
+    queryKey: ["permissions", "update-member", session.data?.user],
     queryFn: async () =>
       (
         await authClient.organization.hasPermission({

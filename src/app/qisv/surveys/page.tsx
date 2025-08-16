@@ -19,30 +19,47 @@ import { Badge } from "@/components/ui/badge";
 import { useSearchParams } from "next/navigation";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
+import { FacilityHoverCard } from "../_components/facility-card";
+import { TemplateHoverCard } from "../_components/template-card";
 
 const PAGE_SIZES = [10, 50, 100];
 
-export default function () {
+export default function() {
   const session = authClient.useSession();
   const searchParams = useSearchParams();
+
+  const assignedFacility = api.user.getForOrg.useQuery({});
 
   const page = Number(searchParams.get("page") ?? 1);
   const pageSize = Number(searchParams.get("pageSize") ?? PAGE_SIZES[0]);
 
-  const surveys = api.survey.list.useQuery({
-    page,
-    pageSize,
-  });
+  const surveys = api.survey.list.useQuery(
+    {
+      facilityId: assignedFacility.data?.id,
+      page,
+      pageSize,
+    },
+    {
+      enabled: !!assignedFacility.data,
+    },
+  );
 
   const surveysPending = api.survey.pendingSurveys.useQuery(
     {
       surveyorId: session.data?.user.id,
     },
-    { enabled: !!(session.data && session.data.user.id) },
+    {
+      enabled: !!(session.data && session.data.user.id),
+    },
   );
 
+  useEffect(() => {
+    console.log(assignedFacility.data);
+  }, [assignedFacility.data]);
+
   const hasViewSurveyPermission = useQuery({
-    queryKey: [],
+    queryKey: ["permissions", "read-survey", session.data?.user.id],
     queryFn: async () =>
       (
         await authClient.organization.hasPermission({
@@ -52,7 +69,7 @@ export default function () {
   });
 
   const hasNewSurveyPermission = useQuery({
-    queryKey: [],
+    queryKey: ["permissions", "new-survey", session.data?.user.id],
     queryFn: async () =>
       (
         await authClient.organization.hasPermission({
@@ -145,8 +162,16 @@ export default function () {
                             "-"
                           )}
                         </TableCell>
-                        <TableCell>{e.facility?.name ?? "-"}</TableCell>
-                        <TableCell>{e.template?.name ?? "-"}</TableCell>
+                        <TableCell>
+                          {e.facility && (
+                            <FacilityHoverCard facility={e.facility} />
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {e.template && (
+                            <TemplateHoverCard template={e.template} />
+                          )}
+                        </TableCell>
                       </TableRow>
                     ))}
                 </TableBody>
@@ -224,8 +249,16 @@ export default function () {
                             "-"
                           )}
                         </TableCell>
-                        <TableCell>{e.facility?.name ?? "-"}</TableCell>
-                        <TableCell>{e.template?.name ?? "-"}</TableCell>
+                        <TableCell>
+                          {e.facility && (
+                            <FacilityHoverCard facility={e.facility} />
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {e.template && (
+                            <TemplateHoverCard template={e.template} />
+                          )}
+                        </TableCell>
                         <TableCell>
                           <Link
                             href={`/qisv/surveys/${e.id}/`}
