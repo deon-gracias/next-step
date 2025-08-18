@@ -1,54 +1,61 @@
+// server/api/routers/survey.ts
 import { z } from "zod";
 import {
   survey,
   surveySelectSchema,
   surveyResponse,
-  surveyResponseInsertSchema,
   surveyResident,
   template,
   surveyResponseSelectSchema,
   user,
   facility,
   surveyCases,
+  surveyPOC,
 } from "@/server/db/schema";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
-import { eq, and, sql, getTableColumns, SQL, asc, desc } from "drizzle-orm";
+import { eq, and, inArray, sql, getTableColumns, asc, desc } from "drizzle-orm";
 import {
   paginationInputSchema,
   surveyCreateInputSchema,
 } from "@/server/utils/schema";
+
+const saveResponsesInput = z.object({
+  surveyId: z.number().int().positive(),
+  residentId: z.number().int().positive(),
+  responses: z.array(
+    z.object({
+      questionId: z.number().int().positive(),
+      requirementsMetOrUnmet: z.enum(["met", "unmet", "not_applicable"]),
+      findings: z.string().optional().nullable(),
+    }),
+  ),
+});
 
 export const surveyRouter = createTRPCRouter({
   create: protectedProcedure
     .input(surveyCreateInputSchema)
     .mutation(async ({ input, ctx }) => {
       const { residentIds: residents, caseCodes: cases, ...surveyData } = input;
-
-      // Create survey
-      const [newSurvey] = await ctx.db
-        .insert(survey)
-        .values(surveyData)
-        .returning();
-
+      const [newSurvey] = await ctx.db.insert(survey).values(surveyData).returning();
       if (!newSurvey) throw Error("Failed to create survey");
 
-      // Insert into survey_resident table
-      if (residents.length > 0)
+      if (residents.length > 0) {
         await ctx.db.insert(surveyResident).values(
           residents.map((residentId) => ({
             surveyId: newSurvey.id,
             residentId,
           })),
         );
+      }
 
-      // Insert into survey_case
-      if (cases.length > 0)
+      if (cases.length > 0) {
         await ctx.db.insert(surveyCases).values(
           cases.map((caseCode) => ({
             surveyId: newSurvey.id,
             caseCode,
           })),
         );
+      }
 
       return newSurvey;
     }),
@@ -87,15 +94,11 @@ export const surveyRouter = createTRPCRouter({
 
       const conditions = [];
       if (input.id !== undefined) conditions.push(eq(survey.id, input.id));
-      if (input.surveyorId !== undefined)
-        conditions.push(eq(survey.surveyorId, input.surveyorId));
-      if (input.facilityId !== undefined)
-        conditions.push(eq(survey.facilityId, input.facilityId));
-      if (input.templateId !== undefined)
-        conditions.push(eq(survey.templateId, input.templateId));
+      if (input.surveyorId !== undefined) conditions.push(eq(survey.surveyorId, input.surveyorId));
+      if (input.facilityId !== undefined) conditions.push(eq(survey.facilityId, input.facilityId));
+      if (input.templateId !== undefined) conditions.push(eq(survey.templateId, input.templateId));
 
-      const whereClause =
-        conditions.length > 0 ? and(...conditions) : undefined;
+      const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
       return await ctx.db
         .select({
@@ -143,12 +146,9 @@ export const surveyRouter = createTRPCRouter({
       const offset = (page - 1) * pageSize;
 
       const whereConditions = [];
-      if (surveyorId !== undefined)
-        whereConditions.push(eq(survey.surveyorId, surveyorId));
-      if (templateId !== undefined)
-        whereConditions.push(eq(survey.templateId, templateId));
-      if (facilityId !== undefined)
-        whereConditions.push(eq(survey.facilityId, facilityId));
+      if (surveyorId !== undefined) whereConditions.push(eq(survey.surveyorId, surveyorId));
+      if (templateId !== undefined) whereConditions.push(eq(survey.templateId, templateId));
+      if (facilityId !== undefined) whereConditions.push(eq(survey.facilityId, facilityId));
 
       const rows = await ctx.db
         .select({
@@ -169,37 +169,79 @@ export const surveyRouter = createTRPCRouter({
       return rows;
     }),
 
+  // Save resident-level responses and delete POCs for unmet -> met transitions (server-side)
   createResponse: protectedProcedure
-    .input(
-      z.object({
-        surveyId: z.number(),
-        responses: z.array(surveyResponseInsertSchema),
-      }),
-    )
+    .input(saveResponsesInput)
     .mutation(async ({ ctx, input }) => {
-      const data = input.responses.map((r) => ({
-        ...r,
-        surveyId: input.surveyId,
+      const { surveyId, residentId } = input;
+      const qids = input.responses.map((r) => r.questionId);
+
+      // 1) Load existing statuses for these questions (before update)
+      const existing = await ctx.db
+        .select({
+          questionId: surveyResponse.questionId,
+          status: surveyResponse.requirementsMetOrUnmet,
+        })
+        .from(surveyResponse)
+        .where(
+          and(
+            eq(surveyResponse.surveyId, surveyId),
+            eq(surveyResponse.residentId, residentId),
+            inArray(surveyResponse.questionId, qids),
+          ),
+        );
+
+      const beforeMap = new Map<number, "met" | "unmet" | "not_applicable">(
+        existing.map((r) => [r.questionId, r.status as any]),
+      );
+
+      // 2) Upsert responses on 3-column composite key
+      const values = input.responses.map((r) => ({
+        surveyId,
+        residentId,
+        questionId: r.questionId,
+        requirementsMetOrUnmet: r.requirementsMetOrUnmet,
+        findings: r.findings ?? null,
       }));
 
       await ctx.db
         .insert(surveyResponse)
-        .values(data)
+        .values(values)
         .onConflictDoUpdate({
           target: [
             surveyResponse.surveyId,
             surveyResponse.residentId,
-            surveyResponse.surveyCaseId,
             surveyResponse.questionId,
           ],
           set: {
-            requirementsMetOrUnmet: sql.raw(
-              `excluded.${surveyResponse.requirementsMetOrUnmet.name}`,
-            ),
-            findings: sql.raw(`excluded.${surveyResponse.findings.name}`),
+            requirementsMetOrUnmet: sql`excluded.requirements_met_or_unmet`,
+            findings: sql`excluded.findings`,
           },
         });
-      return { success: true };
+
+      // 3) Determine which questions transitioned from unmet -> met
+      const transitionedToMet: number[] = [];
+      for (const r of input.responses) {
+        const before = beforeMap.get(r.questionId);
+        if (before === "unmet" && r.requirementsMetOrUnmet === "met") {
+          transitionedToMet.push(r.questionId);
+        }
+      }
+
+      // 4) If any transitioned to met, delete corresponding POCs by composite key
+      if (transitionedToMet.length > 0) {
+        await ctx.db
+          .delete(surveyPOC)
+          .where(
+            and(
+              eq(surveyPOC.surveyId, surveyId),
+              eq(surveyPOC.residentId, residentId),
+              inArray(surveyPOC.questionId, transitionedToMet),
+            ),
+          );
+      }
+
+      return { success: true, deletedPOCsForQuestions: transitionedToMet };
     }),
 
   listResponses: protectedProcedure
@@ -208,22 +250,16 @@ export const surveyRouter = createTRPCRouter({
         .pick({
           surveyId: true,
           residentId: true,
-          surveyCaseId: true,
           questionId: true,
         })
         .partial(),
     )
     .query(async ({ ctx, input }) => {
       const whereConditions = [];
-
       if (input.surveyId !== undefined)
         whereConditions.push(eq(surveyResponse.surveyId, input.surveyId));
-      if (input.residentId)
+      if (input.residentId !== undefined)
         whereConditions.push(eq(surveyResponse.residentId, input.residentId));
-      if (input.surveyCaseId)
-        whereConditions.push(
-          eq(surveyResponse.surveyCaseId, input.surveyCaseId),
-        );
       if (input.questionId !== undefined)
         whereConditions.push(eq(surveyResponse.questionId, input.questionId));
 

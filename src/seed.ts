@@ -1,19 +1,24 @@
-// src/db/seed.ts
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "@/server/db/schema";
 import { sql } from "drizzle-orm";
-import { reset, seed } from "drizzle-seed";
+import { reset } from "drizzle-seed";
 import crypto from "crypto";
 
-const DATABASE_URL = "postgresql://admin:admin123@localhost:5435/next-step";
-const conn = postgres(DATABASE_URL, { max: 1 });
-const db = drizzle(conn, { schema });
-
 async function main() {
+  const DATABASE_URL = "postgresql://admin:admin123@localhost:5435/next-step";
+  if (!DATABASE_URL) {
+    throw new Error("DATABASE_URL is not set. Put it in your .env/.env.local");
+  }
+  console.log("Seeding DB:", DATABASE_URL);
+
+  const conn = postgres(DATABASE_URL, { max: 1 });
+  const db = drizzle(conn, { schema });
+
+  // DANGER: Resets all tables (intended for local/dev only)
   await reset(db, schema);
 
-  // 1. Admin user & account ---------------------------------------------------
+  // 1) Users ------------------------------------------------------------------
   await db
     .insert(schema.user)
     .values({
@@ -21,6 +26,8 @@ async function main() {
       name: "Admin",
       email: "admin@mail.com",
       emailVerified: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
     })
     .onConflictDoNothing();
 
@@ -31,9 +38,12 @@ async function main() {
       name: "Deon",
       email: "deon@mail.com",
       emailVerified: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
     })
     .onConflictDoNothing();
 
+  // 2) Accounts ---------------------------------------------------------------
   await db
     .insert(schema.account)
     .values({
@@ -62,36 +72,37 @@ async function main() {
     })
     .onConflictDoNothing();
 
-  // 2. Organisations ----------------------------------------------------------
+  // 3) Organizations ----------------------------------------------------------
   const orgs = [
     {
       id: "zI0djKRJb4HHgsPvm9J7PqVMtH9LGI2b",
       name: "QISV",
       slug: "qisv",
       createdAt: new Date(),
-      updatedAt: new Date(),
+      metadata: null,
     },
     {
       id: "V0Pt1WuCS7PC4xIXezjQIeFsr8NAcsXc",
       name: "QAL",
       slug: "qal",
       createdAt: new Date(),
-      updatedAt: new Date(),
+      metadata: null,
     },
     {
       id: "QnhkP7TAfPMm4ZG8B0IOXWZPUbuy41Co",
       name: "Dietary",
       slug: "dietary",
       createdAt: new Date(),
-      updatedAt: new Date(),
+      metadata: null,
     },
   ];
   await db.insert(schema.organization).values(orgs).onConflictDoNothing();
 
-  // 3. Memberships ------------------------------------------------------------
+  // 4) Memberships ------------------------------------------------------------
   const [{ count: memberCount }] = await db
     .select({ count: sql<number>`count(*)` })
     .from(schema.member);
+
   if (Number(memberCount) === 0) {
     const memberships = orgs.map((o) => ({
       id: crypto.randomUUID(),
@@ -99,12 +110,11 @@ async function main() {
       organizationId: o.id,
       role: "admin",
       createdAt: new Date(),
-      updatedAt: new Date(),
     }));
     await db.insert(schema.member).values(memberships);
   }
 
-  // 4. Facilities -------------------------------------------------------------
+  // 5) Facilities (insert first) ----------------------------------------------
   const facilities = [
     {
       name: "Riverside Care Center",
@@ -125,47 +135,131 @@ async function main() {
       address: "987 Hill St, Hillside, CA 90210",
     },
   ];
-  await db
+
+  const insertedFacilities = await db
     .insert(schema.facility)
     .values(facilities)
     .onConflictDoNothing()
-    .returning();
+    .returning({ id: schema.facility.id });
 
+  let facilityIds: number[] = insertedFacilities.map((f) => f.id);
+  if (facilityIds.length === 0) {
+    const existing = await db
+      .select({ id: schema.facility.id })
+      .from(schema.facility);
+    facilityIds = existing.map((f) => f.id);
+  }
+  if (facilityIds.length === 0) {
+    throw new Error("No facilities available to reference for residents.");
+  }
+  console.log("Facilities available:", facilityIds);
+
+  // 6) Residents (reference valid facility ids) -------------------------------
   const residents = Array.from({ length: 50 }, (_, i) => ({
     name: `Resident ${i + 1}`,
-    facilityId: (i % facilities.length) + 1,
+    facilityId: facilityIds[i % facilityIds.length],
     roomId: `Room ${i}`,
     pcciId: `PCCI ID ${i}`,
   }));
   await db.insert(schema.resident).values(residents).onConflictDoNothing();
 
-  // 5. Templates --------------------------------------------------------------
+  // 7) Templates --------------------------------------------------------------
   const templates = [
-    { name: "Basic Safety", type: "resident" },
-    { name: "Infection Control", type: "resident" },
-    { name: "Nutrition & Hydration", type: "resident" },
+    { name: "Basic Safety", type: "resident" as const },
+    { name: "Infection Control", type: "resident" as const },
+    { name: "Nutrition & Hydration", type: "resident" as const },
   ];
-  await db.insert(schema.template).values(templates).onConflictDoNothing();
+  const insertedTemplates = await db
+    .insert(schema.template)
+    .values(templates)
+    .onConflictDoNothing()
+    .returning({ id: schema.template.id });
 
-  // 6. Questions --------------------------------------------------------------
-  const questions = [
-    { text: "Hand-washing supplies accessible?", templateId: 1, points: 10 },
-    { text: "Staff perform hand hygiene?", templateId: 1, points: 10 },
-    { text: "PPE available and used correctly?", templateId: 1, points: 10 },
-    { text: "Isolation protocols followed?", templateId: 2, points: 10 },
-    { text: "Menus meet resident needs?", templateId: 3, points: 10 },
+  let templateIds: number[] = insertedTemplates.map((t) => t.id);
+  if (templateIds.length === 0) {
+    const existing = await db
+      .select({ id: schema.template.id })
+      .from(schema.template);
+    templateIds = existing.map((t) => t.id);
+  }
+  if (templateIds.length === 0) {
+    throw new Error("No templates available for questions.");
+  }
+  console.log("Templates available:", templateIds);
+
+  // 8) Questions (each row MUST have a single numeric templateId) -------------
+  const qData = [
+    {
+      text: "Hand-washing supplies accessible?",
+      templateId: templateIds[0],
+      points: 10,
+    },
+    {
+      text: "Staff perform hand hygiene?",
+      templateId: templateIds[0],
+      points: 10,
+    },
+    {
+      text: "PPE available and used correctly?",
+      templateId: templateIds[0],
+      points: 10,
+    },
+    {
+      text: "Isolation protocols followed?",
+      templateId: templateIds[1] ?? templateIds[0],
+      points: 10,
+    },
+    {
+      text: "Menus meet resident needs?",
+      templateId: templateIds[2] ?? templateIds[0],
+      points: 10,
+    },
   ];
-  await db.insert(schema.question).values(questions).onConflictDoNothing();
 
-  // 7. FTags ------------------------------------------------------------------
+  for (const q of qData) {
+    if (typeof q.templateId !== "number" || Number.isNaN(q.templateId)) {
+      throw new Error(
+        `Invalid templateId for question "${q.text}": ${String(q.templateId)}`,
+      );
+    }
+  }
+
+  const insertedQuestions = await db
+    .insert(schema.question)
+    .values(qData)
+    .onConflictDoNothing()
+    .returning({ id: schema.question.id });
+
+  let questionIds: number[] = insertedQuestions.map((q) => q.id);
+  if (questionIds.length === 0) {
+    const existing = await db
+      .select({ id: schema.question.id })
+      .from(schema.question);
+    questionIds = existing.map((q) => q.id);
+  }
+  if (questionIds.length === 0) {
+    throw new Error("No questions available.");
+  }
+
+  // 9) FTags ------------------------------------------------------------------
   const ftags = [
     { code: "F441", description: "Infection control" },
     { code: "F812", description: "Nutrition requirements" },
     { code: "F550", description: "Quality of care" },
   ];
-  await db.insert(schema.ftag).values(ftags).onConflictDoNothing();
+  const insertedFtags = await db
+    .insert(schema.ftag)
+    .values(ftags)
+    .onConflictDoNothing()
+    .returning({ id: schema.ftag.id });
 
-  // 7.1 Cases ------------------------------------------------------------------
+  let ftagIds: number[] = insertedFtags.map((f) => f.id);
+  if (ftagIds.length === 0) {
+    const existing = await db.select({ id: schema.ftag.id }).from(schema.ftag);
+    ftagIds = existing.map((f) => f.id);
+  }
+
+  // 10) Cases -----------------------------------------------------------------
   const cases = [
     { code: "C441", description: "Infection control" },
     { code: "C812", description: "Nutrition requirements" },
@@ -173,17 +267,22 @@ async function main() {
   ];
   await db.insert(schema.cases).values(cases).onConflictDoNothing();
 
-  // 8. Question-FTag links ----------------------------------------------------
-  await db
-    .insert(schema.questionFtag)
-    .values([
-      { questionId: 1, ftagId: 1 },
-      { questionId: 2, ftagId: 1 },
-      { questionId: 3, ftagId: 1 },
-      { questionId: 4, ftagId: 1 },
-      { questionId: 5, ftagId: 2 },
-    ])
-    .onConflictDoNothing();
+  // 11) Question-FTAG links ---------------------------------------------------
+  const qfValues: { questionId: number; ftagId: number }[] = [];
+  if (questionIds[0] && ftagIds[0])
+    qfValues.push({ questionId: questionIds[0], ftagId: ftagIds[0] });
+  if (questionIds[1] && ftagIds[0])
+    qfValues.push({ questionId: questionIds[1], ftagId: ftagIds[0] });
+  if (questionIds[2] && ftagIds[0])
+    qfValues.push({ questionId: questionIds[2], ftagId: ftagIds[0] });
+  if (questionIds[3] && ftagIds[0])
+    qfValues.push({ questionId: questionIds[3], ftagId: ftagIds[0] });
+  if (questionIds[4] && ftagIds[1])
+    qfValues.push({ questionId: questionIds[4], ftagId: ftagIds[1] });
+
+  if (qfValues.length > 0) {
+    await db.insert(schema.questionFtag).values(qfValues).onConflictDoNothing();
+  }
 
   console.log("✅ Seed complete");
   await conn.end();

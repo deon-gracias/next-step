@@ -227,28 +227,90 @@ export const metStatusEnum = pgEnum("met_status_enum", [
   "not_applicable",
 ]);
 
+// Replace your existing surveyResponse definition with this block
+
 export const surveyResponse = pgTable(
   "survey_response",
   {
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
+
     surveyId: integer("survey_id")
       .references(() => survey.id)
       .notNull(),
+
+    // Optional for case-level flows; NOT part of the unique key for resident page
     surveyCaseId: integer("survey_case_id").references(() => surveyCases.id),
-    residentId: integer("resident_id").references(() => resident.id),
+
+    // Make residentId NOT NULL so (survey_id, resident_id, question_id) is always valid
+    residentId: integer("resident_id")
+      .references(() => resident.id)
+      .notNull(),
+
     questionId: integer("question_id")
       .references(() => question.id)
       .notNull(),
+
     requirementsMetOrUnmet: metStatusEnum("requirements_met_or_unmet").default(
       "not_applicable",
     ),
+
     findings: text("findings"),
   },
   (table) => [
+    // EXACT three-column composite unique key you want to upsert on
+    unique().on(table.surveyId, table.residentId, table.questionId),
+  ],
+);
+
+
+//survey POC table
+export const surveyPOC = pgTable(
+  "survey_poc",
+  {
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+
+    // Context keys (all required)
+    surveyId: integer("survey_id")
+      .notNull()
+      .references(() => survey.id, { onDelete: "cascade" }),
+
+    residentId: integer("resident_id")
+      .notNull()
+      .references(() => resident.id, { onDelete: "cascade" }),
+
+    templateId: integer("template_id")
+      .notNull()
+      .references(() => template.id, { onDelete: "cascade" }),
+
+    questionId: integer("question_id")
+      .notNull()
+      .references(() => question.id, { onDelete: "cascade" }),
+
+    // Optional: link to survey_response row for easier joins/validation
+    surveyResponseId: integer("survey_response_id").references(
+      () => surveyResponse.id,
+      { onDelete: "set null" },
+    ),
+
+    // Content
+    pocText: text("poc_text").notNull(),
+
+    // Auditing (optional if you already track users)
+    createdByUserId: text("created_by_user_id").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    updatedByUserId: text("updated_by_user_id").references(() => user.id, {
+      onDelete: "set null" },
+    ),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    // One POC per survey+resident+template+question
     unique().on(
       table.surveyId,
       table.residentId,
-      table.surveyCaseId,
+      table.templateId,
       table.questionId,
     ),
   ],
@@ -365,6 +427,15 @@ export const surveyResponseSelectSchema = createSelectSchema(surveyResponse);
 export type SurveyResponseSelectType = z.infer<
   typeof surveyResponseSelectSchema
 >;
+
+// Survey POC
+export const surveyPOCInsertSchema = createInsertSchema(surveyPOC, {
+  pocText: (schema) => schema.min(1, "POC cannot be empty"),
+});
+export type SurveyPOCInsertType = z.infer<typeof surveyPOCInsertSchema>;
+
+export const surveyPOCSelectSchema = createSelectSchema(surveyPOC);
+export type SurveyPOCSelectType = z.infer<typeof surveyPOCSelectSchema>;
 
 // Dietary Survey
 export const dietarySurveysInsertSchema = createInsertSchema(dietarySurveys);
