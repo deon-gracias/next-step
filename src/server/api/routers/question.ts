@@ -156,7 +156,7 @@ export const questionRouter = createTRPCRouter({
         .select()
         .from(question)
         .where(whereClause)
-        .limit(input.pageSize)
+        .limit(1000)
         .offset(offset);
     }),
 });

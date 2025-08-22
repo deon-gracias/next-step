@@ -11,6 +11,7 @@ import {
   facility,
   surveyCases,
   surveyPOC,
+  question,
 } from "@/server/db/schema";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import { eq, and, inArray, sql, getTableColumns, asc, desc } from "drizzle-orm";
@@ -169,7 +170,7 @@ export const surveyRouter = createTRPCRouter({
       return rows;
     }),
 
-  // Save resident-level responses and delete POCs for unmet -> met transitions (server-side)
+  // Save resident-level responses and delete POCs for unmet -> met transitions
   createResponse: protectedProcedure
     .input(saveResponsesInput)
     .mutation(async ({ ctx, input }) => {
@@ -255,7 +256,7 @@ export const surveyRouter = createTRPCRouter({
         .partial(),
     )
     .query(async ({ ctx, input }) => {
-      const whereConditions = [];
+      const whereConditions: any[] = [];
       if (input.surveyId !== undefined)
         whereConditions.push(eq(surveyResponse.surveyId, input.surveyId));
       if (input.residentId !== undefined)
@@ -267,5 +268,30 @@ export const surveyRouter = createTRPCRouter({
         .select()
         .from(surveyResponse)
         .where(whereConditions.length ? and(...whereConditions) : undefined);
+    }),
+
+  // ===== Lock / Unlock (no role checks; no server-side "all answered" check) =====
+  lock: protectedProcedure
+    .input(z.object({ surveyId: z.number().int().positive() }))
+    .mutation(async ({ ctx, input }) => {
+      const [updated] = await ctx.db
+        .update(survey)
+        .set({ isLocked: true })
+        .where(eq(survey.id, input.surveyId))
+        .returning();
+      if (!updated) throw new Error("Survey not found");
+      return updated;
+    }),
+
+  unlock: protectedProcedure
+    .input(z.object({ surveyId: z.number().int().positive() }))
+    .mutation(async ({ ctx, input }) => {
+      const [updated] = await ctx.db
+        .update(survey)
+        .set({ isLocked: false })
+        .where(eq(survey.id, input.surveyId))
+        .returning();
+      if (!updated) throw new Error("Survey not found");
+      return updated;
     }),
 });
