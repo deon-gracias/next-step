@@ -8,5 +8,5 @@ typeof window !== "undefined"
 
 export const authClient = createAuthClient({
 plugins: [organizationClient()],
-baseURL,
+baseURL: baseURL,
 });
