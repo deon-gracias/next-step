@@ -82,7 +82,8 @@ export default function() {
     queryFn: async () =>
       (
         await authClient.organization.hasPermission({
-          permissions: { resident: ["create"] },
+          // Replace with a valid permission property, e.g., 'member'
+          permissions: { member: ["create"] },
         })
       ).data?.success ?? false,
   });

@@ -68,7 +68,7 @@ export function InviteMemberDialog({
 
       const member = await authClient.organization.inviteMember({
         email: values.email,
-        role: values.role,
+        role: "member", // All custom roles are mapped to 'member' in better-auth
         organizationId,
       });
 

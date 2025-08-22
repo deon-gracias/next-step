@@ -71,7 +71,7 @@ export default function () {
     queryFn: async () =>
       (
         await authClient.organization.hasPermission({
-          permissions: { facility: ["create"] },
+          permissions: { organization: ["update"] },
         })
       ).data?.success ?? false,
   });

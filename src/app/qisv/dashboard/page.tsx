@@ -111,7 +111,7 @@ export default function () {
                       defaultValue={member.role}
                       onValueChange={async (e) => {
                         await authClient.organization.updateMemberRole({
-                          role: e,
+                          role: e as "member" | "admin" | "owner",
                           memberId: member.id,
                         });
                         organizationMembers.refetch();

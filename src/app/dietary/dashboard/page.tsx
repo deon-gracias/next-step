@@ -4,38 +4,33 @@ import { InviteMemberDialog } from "@/components/invite-member-dialog";
 import { DietaryHeader } from "../_components/header";
 import { authClient } from "@/components/providers/auth-client";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useQuery, type UseQueryResult } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { roles } from "@/lib/permissions";
 import { PlusIcon, XIcon } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { api } from "@/trpc/react";
 import type { DietarySurveysSelectType } from "@/server/db/schema";
-import { differenceInDays, format, formatDistance, subDays } from "date-fns";
+import { differenceInDays, format, formatDistance } from "date-fns";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
-import type { UseTRPCQueryResult } from "node_modules/@trpc/react-query/dist/getQueryKey.d-CruH3ncI.mjs";
+import type { UseTRPCQueryResult } from "@trpc/react-query/shared";
 import type { TRPCClientErrorLike } from "@trpc/client";
 import type { AppRouter } from "@/server/api/root";
 
 const surveysPerMonth = 4;
 
-export default function() {
+export default function DietaryDashboardPage() {
   const session = authClient.useSession();
   const activeOrganization = authClient.useActiveOrganization();
 
   const organizationMembers = useQuery({
     queryKey: ["listMembers", activeOrganization.data?.id],
     queryFn: async () =>
-      await authClient.organization.listMembers({
+      authClient.organization.listMembers({
         fetchOptions: {},
         query: {
           organizationId: activeOrganization.data?.id ?? "",
@@ -44,11 +39,11 @@ export default function() {
           sortBy: "createdAt",
         },
       }),
-    enabled: !!activeOrganization.data,
+    enabled: Boolean(activeOrganization.data),
   });
 
   const manageMemberPermission = useQuery({
-    queryKey: [],
+    queryKey: ["memberPermission", activeOrganization.data?.id],
     queryFn: async () =>
       (
         await authClient.organization.hasPermission({
@@ -56,37 +51,23 @@ export default function() {
           permissions: { member: ["update"] },
         })
       ).data?.success,
-    enabled: !!activeOrganization.data,
+    enabled: Boolean(activeOrganization.data),
   });
 
   const newSurveyDate = () => {
     const date = new Date();
-
-    date.setMonth(
-      (Math.floor(date.getMonth() / surveysPerMonth) + 1) *
-      (12 / surveysPerMonth),
-    );
+    // Advance to the next survey window’s first day
+    date.setMonth((Math.floor(date.getMonth() / surveysPerMonth) + 1) * (12 / surveysPerMonth));
     date.setDate(1);
-
     return date;
   };
 
-  const isSurveyPendingThisTimeFrame = (
-    latestSurvey?: DietarySurveysSelectType,
-  ) => {
-    if (!latestSurvey || !latestSurvey.createdAt) return true;
-
+  const isSurveyPendingThisTimeFrame = (latestSurvey?: DietarySurveysSelectType) => {
+    if (!latestSurvey?.createdAt) return true;
     const currentDate = new Date();
-
-    const currentMonthSurveyNumber = Math.floor(
-      currentDate.getMonth() / surveysPerMonth,
-    );
-
-    const lastestSurveyMonthSurveyNumber = Math.floor(
-      latestSurvey.createdAt.getMonth() / surveysPerMonth,
-    );
-
-    return currentMonthSurveyNumber === lastestSurveyMonthSurveyNumber;
+    const currentBucket = Math.floor(currentDate.getMonth() / surveysPerMonth);
+    const latestBucket = Math.floor(new Date(latestSurvey.createdAt).getMonth() / surveysPerMonth);
+    return currentBucket === latestBucket;
   };
 
   const surveys = api.dietarySurvey.listSurveys.useQuery({
@@ -98,27 +79,23 @@ export default function() {
     surveys,
   }: {
     surveys: UseTRPCQueryResult<
-      {
-        data?: DietarySurveysSelectType[];
-        page: number;
-        pageSize: number;
-      },
+      { data?: DietarySurveysSelectType[]; page: number; pageSize: number },
       TRPCClientErrorLike<AppRouter>
     >;
   }) {
-    const daysTillSurvey = differenceInDays(newSurveyDate(), new Date());
-    const distanceTillSurveyDate = formatDistance(newSurveyDate(), new Date(), {
-      addSuffix: true,
-    });
+    const nextDate = newSurveyDate();
+    const daysTillSurvey = differenceInDays(nextDate, new Date());
+    const distanceTillSurveyDate = formatDistance(nextDate, new Date(), { addSuffix: true });
 
     if (surveys.isPending) return <Skeleton className="h-full w-full" />;
+
+    const latest = surveys.data?.data?.[0];
 
     return (
       <Card className="w-full gap-2">
         <CardHeader className="flex justify-between">
           <CardTitle>Upcoming</CardTitle>
-          {isSurveyPendingThisTimeFrame(surveys.data?.data?.[0] ?? undefined) &&
-            daysTillSurvey < 0 ? (
+          {isSurveyPendingThisTimeFrame(latest) && daysTillSurvey < 0 ? (
             <Badge variant="destructive">Overdue</Badge>
           ) : (
             <Badge>Due</Badge>
@@ -126,21 +103,12 @@ export default function() {
         </CardHeader>
         <CardContent className="flex flex-col gap-1">
           {surveys.isLoading && <Skeleton className="h-8" />}
-          {isSurveyPendingThisTimeFrame(surveys.data?.data?.[0]) && (
+          {isSurveyPendingThisTimeFrame(latest) && (
             <>
-              <span
-                className={cn(
-                  "text-xl font-bold",
-                  daysTillSurvey < 0 && "text-destructive",
-                )}
-              >
-                {format(newSurveyDate(), "PPP")}
+              <span className={cn("text-xl font-bold", daysTillSurvey < 0 && "text-destructive")}>
+                {format(nextDate, "PPP")}
               </span>
-              {daysTillSurvey < 0 ? (
-                <span>{distanceTillSurveyDate}</span>
-              ) : (
-                "Due"
-              )}
+              <span>{daysTillSurvey < 0 ? distanceTillSurveyDate : "Due"}</span>
             </>
           )}
         </CardContent>
@@ -152,60 +120,40 @@ export default function() {
     surveys,
   }: {
     surveys: UseTRPCQueryResult<
-      {
-        data?: DietarySurveysSelectType[];
-        page: number;
-        pageSize: number;
-      },
+      { data?: DietarySurveysSelectType[]; page: number; pageSize: number },
       TRPCClientErrorLike<AppRouter>
     >;
   }) {
     if (surveys.isPending) return <Skeleton className="h-full w-full" />;
 
-    // Find most recent completed survey (assuming completion flag exists)
-    const completedSurveys = surveys.data?.data?.sort(
-      (a, b) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-    );
+    const completed = surveys.data?.data
+      ?.slice()
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-    const mostRecent = completedSurveys?.[0];
+    const mostRecent = completed?.[0];
     const daysSinceCompleted = mostRecent
       ? differenceInDays(new Date(), new Date(mostRecent.createdAt))
       : null;
     const distanceSinceCompleted = mostRecent
-      ? formatDistance(new Date(), new Date(mostRecent.createdAt), {
-        addSuffix: true,
-      })
+      ? formatDistance(new Date(), new Date(mostRecent.createdAt), { addSuffix: true })
       : null;
 
     return (
       <Card className="w-full gap-2">
         <CardHeader className="flex justify-between">
           <CardTitle>Completed</CardTitle>
-          {mostRecent ? (
-            <Badge>Completed</Badge>
-          ) : (
-            <Badge variant="secondary">No Completed Surveys</Badge>
-          )}
+          {mostRecent ? <Badge>Completed</Badge> : <Badge variant="secondary">No Completed Surveys</Badge>}
         </CardHeader>
         <CardContent className="flex flex-col gap-1">
           {surveys.isLoading && <Skeleton className="h-8" />}
-          {
-            <>
-              <span className="text-xl font-bold">
-                {mostRecent
-                  ? format(new Date(mostRecent.createdAt), "PPP")
-                  : "---"}
-              </span>
-              <span>
-                {mostRecent
-                  ? daysSinceCompleted && daysSinceCompleted === 0
-                    ? "Today"
-                    : distanceSinceCompleted
-                  : "---"}
-              </span>
-            </>
-          }
+          <>
+            <span className="text-xl font-bold">
+              {mostRecent ? format(new Date(mostRecent.createdAt), "PPP") : "---"}
+            </span>
+            <span>
+              {mostRecent ? (daysSinceCompleted === 0 ? "Today" : distanceSinceCompleted) : "---"}
+            </span>
+          </>
         </CardContent>
       </Card>
     );
@@ -225,14 +173,9 @@ export default function() {
           <div className="flex justify-between">
             <div>
               <h2 className="text-xl font-semibold">Recent Surveys</h2>
-              <p className="text-muted-foreground max-w-fit text-sm">
-                Last 3 surveys
-              </p>
+              <p className="text-muted-foreground max-w-fit text-sm">Last 3 surveys</p>
             </div>
-            <Link
-              className={cn(buttonVariants({ variant: "outline" }), "w-fit")}
-              href={"/dietary/survey/new"}
-            >
+            <Link className={cn(buttonVariants({ variant: "outline" }), "w-fit")} href="/dietary/survey/new">
               <PlusIcon /> Survey
             </Link>
           </div>
@@ -242,7 +185,7 @@ export default function() {
                 <CardHeader>
                   <CardTitle>Completed</CardTitle>
                 </CardHeader>
-                <CardContent>{}</CardContent>
+                <CardContent />
               </Card>
             ))}
           </div>
@@ -257,8 +200,7 @@ export default function() {
               ) : (
                 <p className="text-muted-foreground max-w-fit text-sm">
                   {organizationMembers.data.data?.total ?? 0} member
-                  {organizationMembers.data.data?.total !== 1 ? "s" : ""} across
-                  all organizations
+                  {(organizationMembers.data.data?.total ?? 0) !== 1 ? "s" : ""} across all organizations
                 </p>
               )}
             </div>
@@ -266,17 +208,16 @@ export default function() {
               <InviteMemberDialog organizationId={activeOrganization.data.id} />
             )}
           </div>
+
           <div className="divide-y rounded-2xl border">
             {!organizationMembers.data &&
               Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="flex items-center gap-4 p-4">
-                  <Skeleton key={i} className="size-8 rounded-full" />
-
+                  <Skeleton className="size-8 rounded-full" />
                   <div className="flex-1 space-y-1">
                     <Skeleton className="h-4 w-[100px]" />
                     <Skeleton className="h-4 w-[200px]" />
                   </div>
-
                   <Skeleton className="h-4 w-[50px]" />
                 </div>
               ))}
@@ -285,32 +226,24 @@ export default function() {
               organizationMembers.data.data.members.map((member) => (
                 <div key={member.id} className="flex items-center gap-4 p-4">
                   <Avatar>
-                    <AvatarImage src={member.user.image || undefined} />
-                    <AvatarFallback>
-                      {member.user.name?.charAt(0).toUpperCase() || "U"}
-                    </AvatarFallback>
+                    <AvatarImage src={member.user.image ?? undefined} />
+                    <AvatarFallback>{member.user.name?.charAt(0).toUpperCase() ?? "U"}</AvatarFallback>
                   </Avatar>
                   <div className="flex-1 space-y-1">
-                    <p className="text-sm leading-none font-medium">
-                      {member.user.name}
-                    </p>
-                    <p className="text-muted-foreground text-sm">
-                      {member.user.email}
-                    </p>
+                    <p className="text-sm leading-none font-medium">{member.user.name}</p>
+                    <p className="text-muted-foreground text-sm">{member.user.email}</p>
                   </div>
 
-                  {manageMemberPermission.data &&
-                    session.data &&
-                    session.data.user.id !== member.userId ? (
+                  {manageMemberPermission.data && session.data && session.data.user.id !== member.userId ? (
                     <>
                       <Select
                         defaultValue={member.role}
                         onValueChange={async (e) => {
                           await authClient.organization.updateMemberRole({
-                            role: e,
+                            role: e as "member" | "admin" | "owner",
                             memberId: member.id,
                           });
-                          organizationMembers.refetch();
+                          void organizationMembers.refetch();
                         }}
                       >
                         <SelectTrigger>{member.role}</SelectTrigger>
@@ -326,9 +259,9 @@ export default function() {
                       {activeOrganization.data && (
                         <Button
                           size="icon"
-                          variant={"ghost"}
+                          variant="ghost"
                           onClick={() => {
-                            authClient.organization.removeMember({
+                            void authClient.organization.removeMember({
                               memberIdOrEmail: member.user.email,
                               organizationId: activeOrganization.data!.id,
                             });
@@ -339,13 +272,7 @@ export default function() {
                       )}
                     </>
                   ) : (
-                    <Badge
-                      variant={
-                        member.role === "admin" ? "default" : "secondary"
-                      }
-                    >
-                      {member.role}
-                    </Badge>
+                    <Badge variant={member.role === "admin" ? "default" : "secondary"}>{member.role}</Badge>
                   )}
                 </div>
               ))}

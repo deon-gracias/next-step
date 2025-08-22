@@ -54,7 +54,7 @@ export function ResidentComboBox({
   const items = api.resident.list.useQuery({
     name: debouncedInput,
     pcciId: debouncedInput,
-    matchType: "or",
+    matchType: "OR",
   });
 
   function setOpen(isOpen: boolean) {

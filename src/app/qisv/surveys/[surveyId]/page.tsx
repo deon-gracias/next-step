@@ -1,4 +1,3 @@
-// app/qisv/surveys/[surveyId]/page.tsx
 "use client";
 
 import { useParams } from "next/navigation";
@@ -6,27 +5,33 @@ import { api } from "@/trpc/react";
 import { QISVHeader } from "../../_components/header";
 import Link from "next/link";
 import { buttonVariants, Button } from "@/components/ui/button";
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import React, { useMemo, useState, useEffect, useCallback } from "react";
 import { Textarea } from "@/components/ui/textarea";
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle, SheetTrigger, SheetClose } from "@/components/ui/sheet";
 import {
-  Sheet, SheetContent, SheetDescription, SheetFooter,
-  SheetHeader, SheetTitle, SheetTrigger, SheetClose,
-} from "@/components/ui/sheet";
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
-  AlertDialogTitle, AlertDialogTrigger,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { Lock, Unlock } from "lucide-react";
 import { toast } from "sonner";
+
+// Local minimal types to avoid any
+type StatusVal = "met" | "unmet" | "not_applicable";
+type ResponseCell = { status: StatusVal | null; findings: string | null };
+type QuestionRow = { id: number; text: string; points?: number; ftags?: { code: string }[] };
 
 type QuestionStrength = {
   questionId: number;
@@ -39,15 +44,15 @@ type QuestionStrength = {
 
 export default function SurveyDetailPage() {
   const params = useParams();
-  const surveyId = Number(params.surveyId);
+  const surveyId = Number((params as any).surveyId); // params is unknown in Next types; safe cast
 
   // Data
   const survey = api.survey.byId.useQuery({ id: surveyId });
   const residents = api.survey.listResidents.useQuery({ surveyId });
   const cases = api.survey.listCases.useQuery({ surveyId });
   const questions = api.question.list.useQuery(
-    { templateId: survey.data?.templateId ?? -1 },
-    { enabled: !!survey.data }
+    { templateId: survey.data?.templateId ?? -1, page: 1, pageSize: 1000 },
+    { enabled: Boolean(survey.data?.templateId) }
   );
 
   // Mutations
@@ -57,14 +62,14 @@ export default function SurveyDetailPage() {
       await utils.survey.byId.invalidate({ id: surveyId });
       toast.success("Survey locked");
     },
-    onError: (e: any) => toast.error(e?.message ?? "Failed to lock survey"),
+    onError: (e) => toast.error((e as { message?: string })?.message ?? "Failed to lock survey"),
   });
   const unlockSurvey = api.survey.unlock.useMutation({
     onSuccess: async () => {
       await utils.survey.byId.invalidate({ id: surveyId });
       toast.success("Survey unlocked");
     },
-    onError: (e: any) => toast.error(e?.message ?? "Failed to unlock survey"),
+    onError: (e) => toast.error((e as { message?: string })?.message ?? "Failed to unlock survey"),
   });
   const pocUpsert = api.poc.upsert.useMutation();
 
@@ -73,7 +78,7 @@ export default function SurveyDetailPage() {
   const [combinedPOC, setCombinedPOC] = useState("");
   const [hasAnyPOC, setHasAnyPOC] = useState(false);
   const [allResponses, setAllResponses] = useState<
-    Array<{ residentId: number; questionId: number; status: "met" | "unmet" | "not_applicable" | null; findings: string | null }>
+    Array<{ residentId: number; questionId: number; status: StatusVal | null; findings: string | null }>
   >([]);
 
   // Fetch all responses across residents
@@ -82,7 +87,7 @@ export default function SurveyDetailPage() {
     (async () => {
       if (!survey.data || !residents.data) return;
       try {
-        const arr: Array<{ residentId: number; questionId: number; status: any; findings: any }> = [];
+        const arr: Array<{ residentId: number; questionId: number; status: StatusVal | null; findings: string | null }> = [];
         await Promise.all(
           residents.data.map(async (r) => {
             const rows = await utils.survey.listResponses.fetch({ surveyId, residentId: r.residentId });
@@ -90,28 +95,31 @@ export default function SurveyDetailPage() {
               arr.push({
                 residentId: r.residentId,
                 questionId: rr.questionId,
-                status: rr.requirementsMetOrUnmet as any,
+                status: (rr.requirementsMetOrUnmet as StatusVal) ?? null,
                 findings: rr.findings ?? null,
               });
             }
-          }),
+          })
         );
         if (!cancelled) setAllResponses(arr);
       } catch (e) {
+        // log only
         console.error("Failed loading responses", e);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [survey.data, residents.data, surveyId, utils.survey.listResponses]);
 
   // Lookups
   const allQuestionIds = useMemo(() => (questions.data ?? []).map((q) => q.id), [questions.data]);
 
   const byResident = useMemo(() => {
-    const m = new Map<number, Map<number, { status: "met" | "unmet" | "not_applicable"; findings: string | null }>>();
+    const m = new Map<number, Map<number, ResponseCell>>();
     for (const r of allResponses) {
-      const inner = m.get(r.residentId) ?? new Map();
-      if (r.status) inner.set(r.questionId, { status: r.status as any, findings: r.findings });
+      const inner = m.get(r.residentId) ?? new Map<number, ResponseCell>();
+      if (r.status) inner.set(r.questionId, { status: r.status, findings: r.findings });
       m.set(r.residentId, inner);
     }
     return m;
@@ -119,10 +127,11 @@ export default function SurveyDetailPage() {
 
   // Strength tiles
   const questionStrengths: QuestionStrength[] = useMemo(() => {
-    if (!questions.data) return [];
+    const qrows: QuestionRow[] = (questions.data ?? []) as QuestionRow[];
+    if (qrows.length === 0) return [];
     const metByQ = new Map<number, number>();
     const unmetByQ = new Map<number, number>();
-    for (const q of questions.data) {
+    for (const q of qrows) {
       metByQ.set(q.id, 0);
       unmetByQ.set(q.id, 0);
     }
@@ -132,14 +141,14 @@ export default function SurveyDetailPage() {
       else if (r.status === "unmet") unmetByQ.set(r.questionId, (unmetByQ.get(r.questionId) ?? 0) + 1);
     }
     const out: QuestionStrength[] = [];
-    for (const q of questions.data) {
+    for (const q of qrows) {
       const met = metByQ.get(q.id) ?? 0;
       const unmet = unmetByQ.get(q.id) ?? 0;
       const denom = met + unmet;
       out.push({
         questionId: q.id,
         text: q.text,
-        points: (q as any).points ?? 0,
+        points: q.points ?? 0,
         strengthPct: denom === 0 ? 0 : Math.round((met / denom) * 100),
         metCount: met,
         unmetCount: unmet,
@@ -148,16 +157,16 @@ export default function SurveyDetailPage() {
     return out;
   }, [questions.data, allResponses]);
 
-  // Progress table
+  // Progress table (kept in case needed elsewhere)
   const residentProgress = useMemo(() => {
     const map = new Map<number, { answered: number; unanswered: number }>();
     if (!residents.data || allQuestionIds.length === 0) return map;
     for (const r of residents.data) {
-      const ansMap = byResident.get(r.residentId) ?? new Map();
+      const ansMap = byResident.get(r.residentId) ?? new Map<number, ResponseCell>();
       let answered = 0;
       for (const qid of allQuestionIds) {
         const item = ansMap.get(qid);
-        if (item && item.status) answered += 1;
+        if (item?.status) answered += 1;
       }
       map.set(r.residentId, { answered, unanswered: allQuestionIds.length - answered });
     }
@@ -166,45 +175,60 @@ export default function SurveyDetailPage() {
 
   // Score and percent (for POC gating)
   const { overallScore, maxTemplatePoints, overallPercent } = useMemo(() => {
-    const qs = questions.data ?? [];
+    const qs: QuestionRow[] = (questions.data ?? []) as QuestionRow[];
     let awarded = 0;
     for (const q of qs) {
       let anyUnmetOrUnanswered = false;
       let anyMet = false;
       for (const r of residents.data ?? []) {
         const cell = byResident.get(r.residentId)?.get(q.id);
-        if (!cell) { anyUnmetOrUnanswered = true; break; }
-        if (cell.status === "unmet") { anyUnmetOrUnanswered = true; break; }
+        if (!cell) {
+          anyUnmetOrUnanswered = true;
+          break;
+        }
+        if (cell.status === "unmet") {
+          anyUnmetOrUnanswered = true;
+          break;
+        }
         if (cell.status === "met") anyMet = true;
       }
-      if (!anyUnmetOrUnanswered && anyMet) awarded += (q as any).points ?? 0;
+      if (!anyUnmetOrUnanswered && anyMet) awarded += q.points ?? 0;
     }
-    const max = qs.reduce((s, q) => s + ((q as any).points ?? 0), 0);
+    const max = qs.reduce((s, q) => s + (q.points ?? 0), 0);
     const pct = max > 0 ? Math.round((awarded / max) * 100) : 0;
     return { overallScore: awarded, maxTemplatePoints: max, overallPercent: pct };
   }, [questions.data, byResident, residents.data]);
 
-  // NEW: POC availability strictly requires LOCKED + score < 85
+  // POC availability requires LOCKED + score < 85
   const isLocked = Boolean(survey.data?.isLocked);
   const scoreAllowsPOC = overallPercent < 85;
   const canOpenPOCSheet = isLocked && scoreAllowsPOC;
 
   // Sheet blocks: all questions with >=1 UNMET
   const sheetBlocks = useMemo(() => {
-    if (!questions.data || !canOpenPOCSheet) return [] as Array<{
-      qid: number; text: string; ftags: string[]; strengthPct: number; items: Array<{ residentId: number; findings: string | null }>;
+    const qrows: QuestionRow[] = (questions.data ?? []) as QuestionRow[];
+    if (qrows.length === 0 || !canOpenPOCSheet) return [] as Array<{
+      qid: number;
+      text: string;
+      ftags: string[];
+      strengthPct: number;
+      items: Array<{ residentId: number; findings: string | null }>;
     }>;
     const blocks: Array<{
-      qid: number; text: string; ftags: string[]; strengthPct: number; items: Array<{ residentId: number; findings: string | null }>;
+      qid: number;
+      text: string;
+      ftags: string[];
+      strengthPct: number;
+      items: Array<{ residentId: number; findings: string | null }>;
     }> = [];
-    for (const q of questions.data) {
+    for (const q of qrows) {
       const items: Array<{ residentId: number; findings: string | null }> = [];
       for (const r of residents.data ?? []) {
         const cell = byResident.get(r.residentId)?.get(q.id);
         if (cell?.status === "unmet") items.push({ residentId: r.residentId, findings: cell.findings ?? null });
       }
       if (items.length > 0) {
-        const ftags = (((q as any).ftags ?? []) as any[]).map((f) => f.code);
+        const ftags = (q.ftags ?? []).map((f) => f.code);
         const s = questionStrengths.find((x) => x.questionId === q.id)?.strengthPct ?? 0;
         blocks.push({ qid: q.id, text: q.text, ftags, strengthPct: s, items });
       }
@@ -221,19 +245,19 @@ export default function SurveyDetailPage() {
         return;
       }
       try {
-        // Check quickly across residents for any POC row for this survey (reuse poc.list calls)
         const residentIds = (residents.data ?? []).map((r) => r.residentId);
         if (residentIds.length === 0) {
           if (!cancelled) setHasAnyPOC(false);
           return;
         }
-        const results = await Promise.all(
-          residentIds.map((rid) => utils.poc.list.fetch({ surveyId, residentId: rid }))
-        );
+        const results = await Promise.all(residentIds.map((rid) => utils.poc.list.fetch({ surveyId, residentId: rid })));
         let found = false;
         outer: for (const rows of results) {
           for (const row of rows ?? []) {
-            if ((row.pocText ?? "").trim()) { found = true; break outer; }
+            if ((row.pocText ?? "").trim()) {
+              found = true;
+              break outer;
+            }
           }
         }
         if (!cancelled) setHasAnyPOC(found);
@@ -241,17 +265,19 @@ export default function SurveyDetailPage() {
         if (!cancelled) setHasAnyPOC(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [survey.data, residents.data, surveyId, utils.poc.list]);
 
   // Completion gate for Lock
   const allAnswered = useMemo(() => {
     if (!residents.data || !questions.data) return false;
     for (const r of residents.data) {
-      const map = byResident.get(r.residentId) ?? new Map();
-      for (const q of questions.data) {
+      const map = byResident.get(r.residentId) ?? new Map<number, ResponseCell>();
+      for (const q of questions.data as QuestionRow[]) {
         const cell = map.get(q.id);
-        if (!cell || !cell.status) return false;
+        if (!cell?.status) return false;
       }
     }
     return true;
@@ -262,7 +288,10 @@ export default function SurveyDetailPage() {
     if (!survey.data || !canOpenPOCSheet) return;
     const templateId = survey.data.templateId;
     const text = combinedPOC.trim();
-    if (!text || sheetBlocks.length === 0) { setSheetOpen(false); return; }
+    if (!text || sheetBlocks.length === 0) {
+      setSheetOpen(false);
+      return;
+    }
     try {
       await Promise.all(
         sheetBlocks.map(async (blk) => {
@@ -274,10 +303,10 @@ export default function SurveyDetailPage() {
                 templateId,
                 questionId: blk.qid,
                 pocText: text,
-              }),
-            ),
+              })
+            )
           );
-        }),
+        })
       );
       const affected = Array.from(new Set(sheetBlocks.flatMap((b) => b.items.map((x) => x.residentId))));
       await Promise.all(affected.map((rid) => utils.poc.list.invalidate({ surveyId, residentId: rid })));
@@ -304,11 +333,7 @@ export default function SurveyDetailPage() {
   // Lock/Unlock: anyone can click; lock requires allAnswered; unlock has no precondition
   const lockDisabled = !allAnswered || lockSurvey.isPending;
   const unlockDisabled = unlockSurvey.isPending;
-  const lockDisabledReason = !allAnswered
-    ? "Complete all questions for all residents to enable lock."
-    : lockSurvey.isPending
-    ? "Locking..."
-    : "";
+  const lockDisabledReason = !allAnswered ? "Complete all questions for all residents to enable lock." : lockSurvey.isPending ? "Locking..." : "";
 
   const LockUnlockButtons = () => {
     if (!isLocked) {
@@ -316,11 +341,7 @@ export default function SurveyDetailPage() {
         <AlertDialog>
           <AlertDialogTrigger asChild>
             <div className="relative group">
-              <Button
-                variant="default"
-                disabled={lockDisabled}
-                className={cn(lockDisabled && "cursor-not-allowed opacity-60")}
-              >
+              <Button variant="default" disabled={lockDisabled} className={cn(lockDisabled && "cursor-not-allowed opacity-60")}>
                 <Lock className="mr-2 h-4 w-4" />
                 Lock Survey
               </Button>
@@ -334,14 +355,14 @@ export default function SurveyDetailPage() {
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Lock survey?</AlertDialogTitle>
-              <AlertDialogDescription>
-                Once locked, edits to this survey will be disabled until it is unlocked.
-              </AlertDialogDescription>
+              <AlertDialogDescription>Once locked, edits to this survey will be disabled until it is unlocked.</AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
               <AlertDialogAction
-                onClick={() => lockSurvey.mutate({ surveyId })}
+                onClick={() => {
+                  void lockSurvey.mutate({ surveyId });
+                }}
                 disabled={lockSurvey.isPending}
               >
                 {lockSurvey.isPending ? "Locking..." : "Confirm Lock"}
@@ -367,7 +388,9 @@ export default function SurveyDetailPage() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => unlockSurvey.mutate({ surveyId })}
+              onClick={() => {
+                void unlockSurvey.mutate({ surveyId });
+              }}
               disabled={unlockSurvey.isPending}
             >
               {unlockSurvey.isPending ? "Unlocking..." : "Confirm Unlock"}
@@ -378,25 +401,12 @@ export default function SurveyDetailPage() {
     );
   };
 
-  // Button visibility/labels per your rule:
-  // - Only show a POC button when the survey is locked.
-  // - If locked and score < 85:
-  //     - If any POC exists -> "View POC" (opens sheet)
-  //     - Else -> "Generate POC" (opens sheet)
-  // - If locked but score >= 85: show a disabled "POC unavailable" hint badge (no button).
-  // - If unlocked: hide POC button entirely.
+  // POC button logic
   const renderPOCControl = () => {
     if (!isLocked) return null;
-
     if (!scoreAllowsPOC) {
-      return (
-        <div className="text-xs text-muted-foreground">
-          POC available only when score is below 85%.
-        </div>
-      );
+      return <div className="text-xs text-muted-foreground">POC available only when score is below 85%.</div>;
     }
-
-    // At this point: locked AND scoreAllowsPOC
     const label = hasAnyPOC ? "View POC" : "Generate POC";
     return (
       <div className="relative group">
@@ -409,41 +419,28 @@ export default function SurveyDetailPage() {
             <div className="flex h-full flex-col">
               <SheetHeader className="px-4 pt-3 pb-1">
                 <SheetTitle className="text-base">{label}</SheetTitle>
-                <SheetDescription className="text-xs">
-                  Questions with at least one unmet and their residents.
-                </SheetDescription>
+                <SheetDescription className="text-xs">Questions with at least one unmet and their residents.</SheetDescription>
               </SheetHeader>
 
               {/* Compact scrollable list */}
               <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-2">
                 {sheetBlocks.length === 0 ? (
-                  <div className="text-xs text-muted-foreground mt-2">
-                    No questions have unmet answers.
-                  </div>
+                  <div className="text-xs text-muted-foreground mt-2">No questions have unmet answers.</div>
                 ) : (
                   sheetBlocks.map((blk) => (
                     <Card key={blk.qid} className="rounded-md">
                       <CardHeader className="py-2 px-3">
                         <div className="flex items-center justify-between">
                           <CardTitle className="text-sm leading-5">{blk.text}</CardTitle>
-                          <div className="text-[11px] text-muted-foreground">
-                            Strength: {blk.strengthPct}%
-                          </div>
+                          <div className="text-[11px] text-muted-foreground">Strength: {blk.strengthPct}%</div>
                         </div>
-                        {blk.ftags.length > 0 && (
-                          <div className="text-[11px] text-muted-foreground pt-0.5">
-                            F‑Tags: {blk.ftags.join(", ")}
-                          </div>
-                        )}
+                        {blk.ftags.length > 0 && <div className="text-[11px] text-muted-foreground pt-0.5">F‑Tags: {blk.ftags.join(", ")}</div>}
                       </CardHeader>
                       <CardContent className="pt-0 px-3 pb-2">
                         <div className="text-[12px] font-medium mb-1">Residents with unmet:</div>
                         <div className="grid gap-1">
                           {blk.items.map((it) => (
-                            <div
-                              key={`${blk.qid}-${it.residentId}`}
-                              className="border rounded-md px-2 py-1 text-[12px] leading-5"
-                            >
+                            <div key={`${blk.qid}-${it.residentId}`} className="border rounded-md px-2 py-1 text-[12px] leading-5">
                               <div className="font-medium">Resident {it.residentId}</div>
                               {it.findings && (
                                 <div className="text-[11px] leading-4">
@@ -475,13 +472,11 @@ export default function SurveyDetailPage() {
                   <div />
                   <div className="flex items-center gap-2">
                     <SheetClose asChild>
-                      <Button variant="ghost" size="sm">Close</Button>
+                      <Button variant="ghost" size="sm">
+                        Close
+                      </Button>
                     </SheetClose>
-                    <Button
-                      size="sm"
-                      onClick={handleSaveCombinedPOC}
-                      disabled={pocUpsert.isPending || sheetBlocks.length === 0}
-                    >
+                    <Button size="sm" onClick={handleSaveCombinedPOC} disabled={pocUpsert.isPending || sheetBlocks.length === 0}>
                       {pocUpsert.isPending ? "Saving..." : hasAnyPOC ? "Update POC" : "Save POC"}
                     </Button>
                   </div>
@@ -545,9 +540,7 @@ export default function SurveyDetailPage() {
                   >
                     <div className="font-semibold line-clamp-1">{qs.text}</div>
                     <div className="mt-1">Strength: {qs.strengthPct}%</div>
-                    <div className="text-muted-foreground">
-                      Met: {qs.metCount} ・ Unmet: {qs.unmetCount}
-                    </div>
+                    <div className="text-muted-foreground">Met: {qs.metCount} ・ Unmet: {qs.unmetCount}</div>
                   </div>
                 ))}
               </div>
@@ -568,11 +561,11 @@ export default function SurveyDetailPage() {
               </TableHeader>
               <TableBody>
                 {residents.data.map((r) => {
-                  const ansMap = byResident.get(r.residentId) ?? new Map();
+                  const ansMap = byResident.get(r.residentId) ?? new Map<number, ResponseCell>();
                   let answered = 0;
                   for (const qid of allQuestionIds) {
                     const item = ansMap.get(qid);
-                    if (item && item.status) answered += 1;
+                    if (item?.status) answered += 1;
                   }
                   const totalQ = allQuestionIds.length || 1;
                   const pct = Math.round((answered / totalQ) * 100);
@@ -618,10 +611,7 @@ export default function SurveyDetailPage() {
                   <TableRow key={r.id}>
                     <TableCell>{r.caseCode}</TableCell>
                     <TableCell className="text-right">
-                      <Link
-                        href={`/qisv/surveys/${surveyId}/case/${r.id}`}
-                        className={buttonVariants({ variant: "outline" })}
-                      >
+                      <Link href={`/qisv/surveys/${surveyId}/case/${r.id}`} className={buttonVariants({ variant: "outline" })}>
                         Open
                       </Link>
                     </TableCell>

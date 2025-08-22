@@ -25,9 +25,6 @@ import React from "react";
 import { FtagMultiSelectComboBox } from "./ftag-dropdown";
 import { CasesComboBox } from "./case-dropdown";
 import {
-  caseQuestionInsertSchema,
-  type CaseInsertType,
-  type CaseQuestionInsertType,
   type TemplateSelectType,
 } from "@/server/db/schema";
 

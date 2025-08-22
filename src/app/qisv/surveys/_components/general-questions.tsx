@@ -75,7 +75,12 @@ export default function GeneralQuestions({ surveyId }: { surveyId: number }) {
     toast.promise(
       upsert.mutateAsync({
         surveyId,
-        responses: vals.responses.map((r) => ({ ...r, surveyId })),
+        responses: vals.responses.map((r) => ({
+          ...r,
+          surveyId,
+          requirementsMetOrUnmet: r.requirementsMetOrUnmet ?? "not_applicable"
+        })),
+        residentId: 0
       }),
       {
         loading: "Saving Response",

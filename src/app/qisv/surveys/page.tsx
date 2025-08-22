@@ -40,7 +40,7 @@ export default function SurveysPage() {
   // Single source list used for both Closed and Pending sections (so filters work uniformly)
   const surveys = api.survey.list.useQuery(
     {
-      facilityId: assignedFacility.data?.id,
+      facilityId: Array.isArray(assignedFacility.data) ? undefined : assignedFacility.data?.id,
       page,
       pageSize,
     },
@@ -52,7 +52,7 @@ export default function SurveysPage() {
     queryFn: async () =>
       (
         await authClient.organization.hasPermission({
-          permissions: { survey: ["read"] },
+          permissions: { organization: ["update"] },
         })
       ).data?.success ?? false,
   });
@@ -62,7 +62,7 @@ export default function SurveysPage() {
     queryFn: async () =>
       (
         await authClient.organization.hasPermission({
-          permissions: { survey: ["create"] },
+          permissions: { organization: ["update"] },
         })
       ).data?.success ?? false,
   });

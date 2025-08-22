@@ -59,7 +59,6 @@ export default function ResidentSurveyPage() {
   const existingResponse = api.survey.listResponses.useQuery(
     {
       surveyId: surveyId,
-      surveyCaseId: caseId,
     },
     {
       select: (responses) =>
@@ -86,9 +85,11 @@ export default function ResidentSurveyPage() {
         surveyId,
         responses: vals.responses.map((r) => ({
           ...r,
+          requirementsMetOrUnmet: r.requirementsMetOrUnmet ?? "not_applicable",
           surveyCaseId: caseId,
           surveyId,
         })),
+        residentId: 0
       }),
       {
         loading: "Saving Response",

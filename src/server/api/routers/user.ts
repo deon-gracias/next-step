@@ -10,9 +10,11 @@ import { ac } from "@/lib/permissions";
 import { inArray } from "drizzle-orm";
 import { facility, memberFacility } from "@/server/db/schema";
 import { authClient } from "@/components/providers/auth-client";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import type { Sql } from "postgres";
 
 // TODO: Add appropriate types
-export async function getAllowedFacilities(ctx) {
+export async function getAllowedFacilities(ctx: { session: { user: { id: string; email: string; emailVerified: boolean; name: string; createdAt: Date; updatedAt: Date; image?: string | null | undefined | undefined; }; session: { id: string; userId: string; expiresAt: Date; createdAt: Date; updatedAt: Date; token: string; ipAddress?: string | null | undefined | undefined; userAgent?: string | null | undefined | undefined; activeOrganizationId?: string | null | undefined; }; }; headers: Headers; db: PostgresJsDatabase<typeof import("@/server/db/schema")> & { $client: Sql<{}>; }; }) {
   const userId = ctx.session.user.id;
 
   const [memberRecord] = await ctx.db

@@ -54,7 +54,7 @@ export default function Questions() {
     queryFn: async () =>
       (
         await authClient.organization.hasPermission({
-          permissions: { question: ["create"] },
+          permissions: { organization: ["update"] },
         })
       ).data?.success ?? false,
   });

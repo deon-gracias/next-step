@@ -66,7 +66,7 @@ export default function TemplatePage() {
     queryFn: async () =>
       (
         await authClient.organization.hasPermission({
-          permissions: { template: ["create"] },
+          permissions: { organization: ["update"] },
         })
       ).data?.success ?? false,
   });

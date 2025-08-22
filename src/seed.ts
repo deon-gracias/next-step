@@ -303,7 +303,7 @@ import { reset } from "drizzle-seed";
 import crypto from "crypto";
 
 async function main() {
-  const DATABASE_URL = "postgresql://admin:admin123@localhost:5435/next-step";
+  const DATABASE_URL = "postgresql://postgres:Rahul@2025@db.odjkzowqixaqpesalenl.supabase.co:5432/postgres";
   if (!DATABASE_URL) {
     throw new Error("DATABASE_URL is not set. Put it in your .env/.env.local");
   }
@@ -396,9 +396,11 @@ async function main() {
   await db.insert(schema.organization).values(orgs).onConflictDoNothing();
 
   // 4) Memberships ------------------------------------------------------------
-  const [{ count: memberCount }] = await db
+  const memberCountResult = await db
     .select({ count: sql<number>`count(*)` })
     .from(schema.member);
+
+  const memberCount = memberCountResult[0]?.count ?? 0;
 
   if (Number(memberCount) === 0) {
     const memberships = orgs.map((o) => ({
@@ -452,12 +454,18 @@ async function main() {
   console.log("Facilities available:", facilityIds);
 
   // 6) Residents (reference valid facility ids) -------------------------------
-  const residents = Array.from({ length: 50 }, (_, i) => ({
-    name: `Resident ${i + 1}`,
-    facilityId: facilityIds[i % facilityIds.length],
-    roomId: `Room ${i}`,
-    pcciId: `PCCI ID ${i}`,
-  }));
+  const residents = Array.from({ length: 50 }, (_, i) => {
+    const facilityId = facilityIds[i % facilityIds.length];
+    if (facilityId === undefined) {
+      throw new Error(`No facilityId found for resident index ${i}`);
+    }
+    return {
+      name: `Resident ${i + 1}`,
+      facilityId,
+      roomId: `Room ${i}`,
+      pcciId: `PCCI ID ${i}`,
+    };
+  });
   await db.insert(schema.resident).values(residents).onConflictDoNothing();
 
   // 7) Templates — REMOVED base examples (Basic Safety, Infection Control, Nutrition & Hydration)
@@ -519,7 +527,7 @@ async function main() {
       .from(schema.template)
       .where(sql`${schema.template.name} = ${name} AND ${schema.template.type} = ${type}`)
       .limit(1);
-    return found?.id ?? null;
+    return found[0]?.id ?? null;
   }
 
   async function ensureQuestion(templateId: number, text: string, points: number) {
@@ -537,7 +545,7 @@ async function main() {
         sql`${schema.question.templateId} = ${templateId} AND ${schema.question.text} = ${text}`,
       )
       .limit(1);
-    return found?.id ?? null;
+    return found[0]?.id ?? null;
   }
 
   type TemplatePack = {

@@ -81,7 +81,9 @@ export default function ResidentSurveyPage() {
     if (questions.data) {
       const prefilled = questions.data.map((q) => {
         const existing = responsesQuery.data?.find((r) => r.questionId === q.id);
-        const status = (existing?.requirementsMetOrUnmet as Status | undefined) ?? undefined;
+        const status = typeof existing?.requirementsMetOrUnmet === "string"
+          ? existing.requirementsMetOrUnmet
+          : undefined;
         return {
           questionId: q.id,
           requirementsMetOrUnmet: status,
@@ -112,7 +114,7 @@ export default function ResidentSurveyPage() {
 
       const payload = filtered.map((r) => ({
         questionId: r.questionId,
-        requirementsMetOrUnmet: r.requirementsMetOrUnmet as Status,
+        requirementsMetOrUnmet: r.requirementsMetOrUnmet as "met" | "unmet" | "not_applicable",
         findings: r.findings,
       }));
 
@@ -128,9 +130,13 @@ export default function ResidentSurveyPage() {
 
       const prefilled = questions.data.map((q) => {
         const existing = latestResponses.find((r) => r.questionId === q.id);
+        const status =
+          typeof existing?.requirementsMetOrUnmet === "string"
+            ? existing.requirementsMetOrUnmet
+            : undefined;
         return {
           questionId: q.id,
-          requirementsMetOrUnmet: (existing?.requirementsMetOrUnmet as Status | undefined) ?? undefined,
+          requirementsMetOrUnmet: status,
           findings: existing?.findings ?? "",
         };
       });
