@@ -48,7 +48,7 @@ export function SignInForm({
         {
           email: data.email,
           password: data.password,
-          callbackURL: "https://nshc-survey-system.vercel.app/",
+          callbackURL: "/",
         },
         {
           onSuccess: () => {
