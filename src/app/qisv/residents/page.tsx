@@ -10,6 +10,8 @@ import {
   ChevronRightIcon,
   ChevronsRightIcon,
   ChevronsLeftIcon,
+  UploadIcon,
+  FileTextIcon,
 } from "lucide-react";
 import { NewResidentForm } from "./_components/new-resident-form";
 import {
@@ -27,7 +29,7 @@ import {
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
 import { Badge } from "@/components/ui/badge";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Dialog,
@@ -47,6 +49,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { authClient } from "@/components/providers/auth-client";
 import { FacilityHoverCard } from "../_components/facility-card";
+import { toast } from "sonner";
 
 function FacilityValue({ id }: { id: number }) {
   const facility = api.facility.byId.useQuery({ id: id });
@@ -61,14 +64,16 @@ function FacilityValue({ id }: { id: number }) {
 
 const PAGE_SIZES = [10, 50, 100];
 
-export default function() {
+export default function ResidentsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const page = Number(searchParams.get("page") ?? 1);
   const pageSize = Number(searchParams.get("pageSize") ?? PAGE_SIZES[0]);
 
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [isUploadingCSV, setIsUploadingCSV] = useState(false);
 
   const activeOrganization = authClient.useActiveOrganization();
 
@@ -77,12 +82,25 @@ export default function() {
     pageSize,
   });
 
+  const utils = api.useUtils();
+
+  const bulkCreateResidents = api.resident.bulkCreate.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Successfully added ${data.count} residents`);
+      void utils.resident.list.invalidate();
+      setIsUploadingCSV(false);
+    },
+    onError: (error) => {
+      toast.error(`Failed to upload residents: ${error.message}`);
+      setIsUploadingCSV(false);
+    },
+  });
+
   const hasNewResidentPermission = useQuery({
-    queryKey: [],
+    queryKey: ["residentPermission"],
     queryFn: async () =>
       (
         await authClient.organization.hasPermission({
-          // Replace with a valid permission property, e.g., 'member'
           permissions: { member: ["create"] },
         })
       ).data?.success ?? false,
@@ -100,6 +118,110 @@ export default function() {
     router.replace(`?${newSearchParams.toString()}`);
   }
 
+  const parseCSV = (csvContent: string): any[] => {
+    const lines = csvContent.trim().split('\n');
+    if (lines.length < 2) {
+      throw new Error('CSV must have at least a header row and one data row');
+    }
+
+    const firstLine = lines[0];
+    if (!firstLine) {
+      throw new Error('CSV header row is empty');
+    }
+
+    const headers = firstLine.split(',').map(h => h.trim().toLowerCase());
+    
+    // Expected headers based on your schema
+    const requiredHeaders = ['name', 'facilityid', 'roomid', 'pcciid'];
+    const missingHeaders = requiredHeaders.filter(h => !headers.includes(h));
+    
+    if (missingHeaders.length > 0) {
+      throw new Error(`Missing required columns: ${missingHeaders.join(', ')}`);
+    }
+
+    const residents = [];
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i];
+      if (!line) continue;
+      
+      const values = line.split(',').map(v => v.trim());
+      const resident: any = {};
+      
+      headers.forEach((header, index) => {
+        let value = values[index] || '';
+        
+        // Remove quotes if present
+        if (value.startsWith('"') && value.endsWith('"')) {
+          value = value.slice(1, -1);
+        }
+        
+        switch (header) {
+          case 'name':
+            resident.name = value;
+            break;
+          case 'facilityid':
+            resident.facilityId = parseInt(value);
+            if (isNaN(resident.facilityId)) {
+              throw new Error(`Invalid facility ID on row ${i + 1}: ${value}`);
+            }
+            break;
+          case 'roomid':
+            resident.roomId = value;
+            break;
+          case 'pcciid':
+            resident.pcciId = value; // This will map to ppci_id in your schema
+            break;
+        }
+      });
+
+      if (!resident.name || !resident.facilityId || !resident.roomId || !resident.pcciId) {
+        throw new Error(`Missing required data on row ${i + 1}`);
+      }
+
+      residents.push(resident);
+    }
+
+    return residents;
+  };
+
+  const handleCSVUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+      toast.error('Please select a CSV file');
+      return;
+    }
+
+    setIsUploadingCSV(true);
+
+    try {
+      const csvContent = await file.text();
+      const residents = parseCSV(csvContent);
+      
+      if (residents.length === 0) {
+        toast.error('No valid resident data found in CSV');
+        setIsUploadingCSV(false);
+        return;
+      }
+
+      await bulkCreateResidents.mutateAsync({ residents });
+      
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to process CSV file');
+      setIsUploadingCSV(false);
+    }
+
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const triggerCSVUpload = () => {
+    fileInputRef.current?.click();
+  };
+
   return (
     <>
       <QISVHeader crumbs={[{ label: "Residents" }]} />
@@ -113,21 +235,68 @@ export default function() {
           </div>
 
           {hasNewResidentPermission.data && (
-            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-              <DialogTrigger asChild>
-                <Button>
-                  <PlusIcon className="size-4" />
-                  New Resident
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="w-[400px] sm:w-[540px]">
-                <DialogHeader>
-                  <DialogTitle>Add New Resident</DialogTitle>
-                </DialogHeader>
-                <NewResidentForm />
-              </DialogContent>
-            </Dialog>
+            <div className="flex items-center gap-3">
+              {/* Hidden file input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv"
+                onChange={handleCSVUpload}
+                className="hidden"
+              />
+              
+              {/* CSV Upload Button */}
+              <Button
+                variant="outline"
+                onClick={triggerCSVUpload}
+                disabled={isUploadingCSV}
+              >
+                {isUploadingCSV ? (
+                  <>
+                    <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    Uploading...
+                  </>
+                ) : (
+                  <>
+                    <UploadIcon className="mr-2 size-4" />
+                    Attach CSV
+                  </>
+                )}
+              </Button>
+
+              {/* New Resident Button */}
+              <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button>
+                    <PlusIcon className="mr-2 size-4" />
+                    New Resident
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="w-[400px] sm:w-[540px]">
+                  <DialogHeader>
+                    <DialogTitle>Add New Resident</DialogTitle>
+                  </DialogHeader>
+                  <NewResidentForm />
+                </DialogContent>
+              </Dialog>
+            </div>
           )}
+        </div>
+
+        {/* CSV Format Helper */}
+        <div className="mb-4 rounded-lg bg-muted/50 p-4">
+          <div className="flex items-start gap-2">
+            <FileTextIcon className="mt-0.5 size-4 text-muted-foreground" />
+            <div>
+              <p className="text-sm font-medium">CSV Format</p>
+              <p className="text-xs text-muted-foreground">
+                Required columns: <code>name, facilityId, roomId, pcciId</code>
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Example: <code>John Doe,1,Room-101,PCCI-001</code>
+              </p>
+            </div>
+          </div>
         </div>
 
         <div className="rounded-lg border">
@@ -146,9 +315,9 @@ export default function() {
                 Array.from({ length: pageSize }).map((_, i) => (
                   <TableRow key={i}>
                     <TableCell className="text-right">
-                      <Skeleton className="ml-auto h-6" />
+                      <Skeleton className="ml-auto h-6 w-12" />
                     </TableCell>
-                    {Array.from({ length: 3 }).map((_, i) => (
+                    {Array.from({ length: 4 }).map((_, i) => (
                       <TableCell key={i}>
                         <Skeleton className="h-6" />
                       </TableCell>

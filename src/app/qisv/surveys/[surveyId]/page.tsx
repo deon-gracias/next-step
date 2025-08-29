@@ -44,14 +44,16 @@ type QuestionStrength = {
 
 export default function SurveyDetailPage() {
   const params = useParams();
-  const surveyId = Number((params as any).surveyId); // params is unknown in Next types; safe cast
+  const surveyId = Number((params as any).surveyId);
 
   // Data
   const survey = api.survey.byId.useQuery({ id: surveyId });
   const residents = api.survey.listResidents.useQuery({ surveyId });
   const cases = api.survey.listCases.useQuery({ surveyId });
+  
+  // Get ALL questions without pagination
   const questions = api.question.list.useQuery(
-    { templateId: survey.data?.templateId ?? -1, page: 1, pageSize: 1000 },
+    { templateId: survey.data?.templateId ?? -1 },
     { enabled: Boolean(survey.data?.templateId) }
   );
 
@@ -101,9 +103,10 @@ export default function SurveyDetailPage() {
             }
           })
         );
-        if (!cancelled) setAllResponses(arr);
+        if (!cancelled) {
+          setAllResponses(arr);
+        }
       } catch (e) {
-        // log only
         console.error("Failed loading responses", e);
       }
     })();
@@ -112,20 +115,23 @@ export default function SurveyDetailPage() {
     };
   }, [survey.data, residents.data, surveyId, utils.survey.listResponses]);
 
-  // Lookups
-  const allQuestionIds = useMemo(() => (questions.data ?? []).map((q) => q.id), [questions.data]);
+  // Get all question IDs
+  const allQuestionIds = useMemo(() => {
+    return (questions.data ?? []).map((q) => q.id);
+  }, [questions.data]);
 
+  // Map responses by resident and question
   const byResident = useMemo(() => {
     const m = new Map<number, Map<number, ResponseCell>>();
     for (const r of allResponses) {
       const inner = m.get(r.residentId) ?? new Map<number, ResponseCell>();
-      if (r.status) inner.set(r.questionId, { status: r.status, findings: r.findings });
+      inner.set(r.questionId, { status: r.status, findings: r.findings });
       m.set(r.residentId, inner);
     }
     return m;
   }, [allResponses]);
 
-  // Strength tiles
+  // Question strengths calculation
   const questionStrengths: QuestionStrength[] = useMemo(() => {
     const qrows: QuestionRow[] = (questions.data ?? []) as QuestionRow[];
     if (qrows.length === 0) return [];
@@ -157,23 +163,29 @@ export default function SurveyDetailPage() {
     return out;
   }, [questions.data, allResponses]);
 
-  // Progress table (kept in case needed elsewhere)
+  // Progress calculation for each resident
   const residentProgress = useMemo(() => {
     const map = new Map<number, { answered: number; unanswered: number }>();
     if (!residents.data || allQuestionIds.length === 0) return map;
+    
     for (const r of residents.data) {
       const ansMap = byResident.get(r.residentId) ?? new Map<number, ResponseCell>();
       let answered = 0;
+      
       for (const qid of allQuestionIds) {
         const item = ansMap.get(qid);
-        if (item?.status) answered += 1;
+        if (item?.status && (item.status === "met" || item.status === "unmet" || item.status === "not_applicable")) {
+          answered += 1;
+        }
       }
-      map.set(r.residentId, { answered, unanswered: allQuestionIds.length - answered });
+      
+      const unanswered = allQuestionIds.length - answered;
+      map.set(r.residentId, { answered, unanswered });
     }
     return map;
   }, [residents.data, allQuestionIds, byResident]);
 
-  // Score and percent (for POC gating)
+  // Score calculation
   const { overallScore, maxTemplatePoints, overallPercent } = useMemo(() => {
     const qs: QuestionRow[] = (questions.data ?? []) as QuestionRow[];
     let awarded = 0;
@@ -182,7 +194,7 @@ export default function SurveyDetailPage() {
       let anyMet = false;
       for (const r of residents.data ?? []) {
         const cell = byResident.get(r.residentId)?.get(q.id);
-        if (!cell) {
+        if (!cell?.status) {
           anyUnmetOrUnanswered = true;
           break;
         }
@@ -199,12 +211,12 @@ export default function SurveyDetailPage() {
     return { overallScore: awarded, maxTemplatePoints: max, overallPercent: pct };
   }, [questions.data, byResident, residents.data]);
 
-  // POC availability requires LOCKED + score < 85
+  // POC availability
   const isLocked = Boolean(survey.data?.isLocked);
   const scoreAllowsPOC = overallPercent < 85;
   const canOpenPOCSheet = isLocked && scoreAllowsPOC;
 
-  // Sheet blocks: all questions with >=1 UNMET
+  // POC sheet blocks
   const sheetBlocks = useMemo(() => {
     const qrows: QuestionRow[] = (questions.data ?? []) as QuestionRow[];
     if (qrows.length === 0 || !canOpenPOCSheet) return [] as Array<{
@@ -236,7 +248,7 @@ export default function SurveyDetailPage() {
     return blocks;
   }, [questions.data, canOpenPOCSheet, byResident, residents.data, questionStrengths]);
 
-  // Detect if ANY POC exists for this survey to flip button label to "View POC"
+  // Check for existing POCs
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -270,20 +282,22 @@ export default function SurveyDetailPage() {
     };
   }, [survey.data, residents.data, surveyId, utils.poc.list]);
 
-  // Completion gate for Lock
+  // Check if all questions are answered
   const allAnswered = useMemo(() => {
     if (!residents.data || !questions.data) return false;
     for (const r of residents.data) {
       const map = byResident.get(r.residentId) ?? new Map<number, ResponseCell>();
       for (const q of questions.data as QuestionRow[]) {
         const cell = map.get(q.id);
-        if (!cell?.status) return false;
+        if (!cell?.status || !["met", "unmet", "not_applicable"].includes(cell.status)) {
+          return false;
+        }
       }
     }
     return true;
   }, [residents.data, questions.data, byResident]);
 
-  // Save POC
+  // Save POC handler
   const handleSaveCombinedPOC = useCallback(async () => {
     if (!survey.data || !canOpenPOCSheet) return;
     const templateId = survey.data.templateId;
@@ -317,7 +331,7 @@ export default function SurveyDetailPage() {
     }
   }, [survey.data, canOpenPOCSheet, sheetBlocks, combinedPOC, pocUpsert, utils.poc.list, surveyId]);
 
-  // Loading
+  // Loading state
   if (!survey.data || !residents.data || !cases.data) {
     return (
       <>
@@ -330,11 +344,12 @@ export default function SurveyDetailPage() {
     );
   }
 
-  // Lock/Unlock: anyone can click; lock requires allAnswered; unlock has no precondition
+  // Lock/Unlock button configuration
   const lockDisabled = !allAnswered || lockSurvey.isPending;
   const unlockDisabled = unlockSurvey.isPending;
   const lockDisabledReason = !allAnswered ? "Complete all questions for all residents to enable lock." : lockSurvey.isPending ? "Locking..." : "";
 
+  // Lock/Unlock buttons component
   const LockUnlockButtons = () => {
     if (!isLocked) {
       return (
@@ -401,7 +416,7 @@ export default function SurveyDetailPage() {
     );
   };
 
-  // POC button logic
+  // POC control component
   const renderPOCControl = () => {
     if (!isLocked) return null;
     if (!scoreAllowsPOC) {
@@ -422,7 +437,6 @@ export default function SurveyDetailPage() {
                 <SheetDescription className="text-xs">Questions with at least one unmet and their residents.</SheetDescription>
               </SheetHeader>
 
-              {/* Compact scrollable list */}
               <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-2">
                 {sheetBlocks.length === 0 ? (
                   <div className="text-xs text-muted-foreground mt-2">No questions have unmet answers.</div>
@@ -456,7 +470,6 @@ export default function SurveyDetailPage() {
                 )}
               </div>
 
-              {/* Editor + Footer */}
               <div className="border-t">
                 <div className="px-4 py-3">
                   <Textarea
@@ -512,7 +525,6 @@ export default function SurveyDetailPage() {
           </div>
 
           <div className="ml-auto flex items-center gap-3">
-            {/* Score (raw only, no %) */}
             <div className="text-right mr-2">
               <div className="text-xs uppercase text-muted-foreground">Score</div>
               <div className="text-xl font-semibold">{`${overallScore} / ${maxTemplatePoints}`}</div>
@@ -526,7 +538,17 @@ export default function SurveyDetailPage() {
 
         {survey.data.template?.type === "resident" && (
           <>
-            {/* Strengths */}
+            {/* Template Information */}
+            <div className="mb-4">
+              <h2 className="text-xl font-bold">
+                {survey.data.template?.name || `Template #${survey.data.templateId}`}
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                {allQuestionIds.length} questions • {residents.data.length} residents
+              </p>
+            </div>
+
+            {/* Question Strengths */}
             <div className="rounded-md border p-3">
               <div className="text-sm font-medium mb-2">Question Strengths</div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
@@ -561,20 +583,16 @@ export default function SurveyDetailPage() {
               </TableHeader>
               <TableBody>
                 {residents.data.map((r) => {
-                  const ansMap = byResident.get(r.residentId) ?? new Map<number, ResponseCell>();
-                  let answered = 0;
-                  for (const qid of allQuestionIds) {
-                    const item = ansMap.get(qid);
-                    if (item?.status) answered += 1;
-                  }
+                  const progress = residentProgress.get(r.residentId) ?? { answered: 0, unanswered: allQuestionIds.length };
                   const totalQ = allQuestionIds.length || 1;
-                  const pct = Math.round((answered / totalQ) * 100);
+                  const pct = Math.round((progress.answered / totalQ) * 100);
+                  
                   return (
                     <TableRow key={r.id}>
                       <TableCell>{r.residentId}</TableCell>
                       <TableCell>
                         <div className="text-sm">
-                          {answered} answered • {totalQ - answered} pending
+                          {progress.answered} answered • {progress.unanswered} pending
                         </div>
                         <div className="mt-1 h-2 w-full rounded bg-muted overflow-hidden">
                           <div className="h-2 bg-primary" style={{ width: `${pct}%` }} />
@@ -598,6 +616,16 @@ export default function SurveyDetailPage() {
 
         {survey.data.template?.type === "case" && (
           <>
+            {/* Template Information */}
+            <div className="mb-4">
+              <h2 className="text-xl font-bold">
+                {survey.data.template?.name || `Template #${survey.data.templateId}`}
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                {allQuestionIds.length} questions • {cases.data.length} cases
+              </p>
+            </div>
+
             <h2 className="mb-3 text-xl font-semibold">Cases</h2>
             <Table>
               <TableHeader>

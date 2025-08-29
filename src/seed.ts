@@ -415,25 +415,72 @@ async function main() {
 
   // 5) Facilities (insert first) ----------------------------------------------
   const facilities = [
-    {
-      name: "Riverside Care Center",
-      address: "123 Main St, Riverside, CA 92501",
-    },
-    { name: "Sunset Manor", address: "456 Oak Ave, Sunset, CA 90210" },
-    {
-      name: "Pine Valley Healthcare",
-      address: "789 Pine St, Pine Valley, CA 91962",
-    },
-    { name: "Golden Years Manor", address: "321 Golden Rd, Golden, CA 80403" },
-    {
-      name: "Meadowbrook Care",
-      address: "654 Meadow Ln, Meadowbrook, CA 90210",
-    },
-    {
-      name: "Hillside Nursing Home",
-      address: "987 Hill St, Hillside, CA 90210",
-    },
-  ];
+  {
+    name: "Dexter House Healthcare",
+    address: "120 Main Street, Malden, MA 02148",
+  },
+  {
+    name: "The Elmhurst Healthcare",
+    address: "743 Main Street, Melrose, MA 02176",
+  },
+  {
+    name: "Melrose Healthcare",
+    address: "40 Martin Street, Melrose, MA 02176",
+  },
+  {
+    name: "West Newton Healthcare",
+    address: "25 Armory Street, West Newton, MA 02465",
+  },
+  {
+    name: "Fall River Healthcare",
+    address: "1748 Highland Avenue, Fall River, MA 02720",
+  },
+  {
+    name: "Garden Place Healthcare",
+    address: "193 Pleasant Street, Attleboro, MA 02703",
+  },
+  {
+    name: "Norwood Healthcare",
+    address: "460 Washington Street, Norwood, MA 02062",
+  },
+  {
+    name: "Oakhill Healthcare",
+    address: "76 North Street, Middleboro, MA 02346",
+  },
+  {
+    name: "Plymouth Harborside Healthcare",
+    address: "19 Obery Street, Plymouth, MA 02360",
+  },
+  {
+    name: "Walpole Healthcare",
+    address: "160 Main Street, Walpole, MA 02081",
+  },
+  {
+    name: "Wedgemere Healthcare",
+    address: "146 Dean Street, Taunton, MA 02780",
+  },
+  {
+    name: "Fitchburg Healthcare",
+    address: "1199 John Fitch Highway, Fitchburg, MA 01420",
+  },
+  {
+    name: "The Hermitage Healthcare",
+    address: "383 Mill Street, Worcester, MA 01602",
+  },
+  {
+    name: "The Landing at Laurel Lake",
+    address: "600 Laurel Street, Lee, MA 01238",
+  },
+  {
+    name: "Lee Healthcare",
+    address: "620 Laurel Street, Lee, MA 01238",
+  },
+  {
+    name: "Westborough Healthcare",
+    address: "8 Colonial Drive, Westborough, MA 01581",
+  },
+];
+
 
   const insertedFacilities = await db
     .insert(schema.facility)

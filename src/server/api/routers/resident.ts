@@ -27,10 +27,28 @@ import { getAllowedFacilities } from "./user";
 
 export const residentRouter = createTRPCRouter({
   create: protectedProcedure
-    .input(residentInsertSchema)
-    .mutation(async ({ ctx, input }) => {
-      return await ctx.db.insert(resident).values(input).returning();
-    }),
+  .input(residentInsertSchema)
+  .mutation(async ({ ctx, input }) => {
+    return await ctx.db.insert(resident).values(input).returning();
+  }),
+
+  bulkCreate: protectedProcedure
+  .input(
+    z.object({
+      residents: z.array(
+        z.object({
+          name: z.string().min(1),
+          facilityId: z.number().int().positive(),
+          roomId: z.string().min(1),
+          pcciId: z.string().min(1), // This maps to ppci_id in your schema
+        })
+      ),
+    })
+  )
+  .mutation(async ({ ctx, input }) => {
+    await ctx.db.insert(resident).values(input.residents);
+    return { count: input.residents.length };
+  }),
 
   delete: protectedProcedure
     .input(
