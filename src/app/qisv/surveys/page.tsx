@@ -8,7 +8,7 @@ import {
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
-import { ExternalLinkIcon, PlusIcon, ChevronDownIcon, ChevronRightIcon } from "lucide-react";
+import { ExternalLinkIcon, PlusIcon, ChevronDownIcon, ChevronRightIcon, CalendarIcon, ArrowUpIcon, ArrowDownIcon, XIcon } from "lucide-react";
 import { authClient } from "@/components/providers/auth-client";
 import { Badge } from "@/components/ui/badge";
 import { useSearchParams } from "next/navigation";
@@ -25,6 +25,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { format } from "date-fns";
 
 const PAGE_SIZES = [10, 50, 100];
 
@@ -37,6 +44,8 @@ type GroupedSurvey = {
   completedSurveys: number;
   pocCount: number;
 };
+
+type DateSortOrder = "asc" | "desc" | null;
 
 export default function SurveysPage() {
   const session = authClient.useSession();
@@ -77,9 +86,98 @@ export default function SurveysPage() {
       ).data?.success ?? false,
   });
 
-  // Group surveys by facility
+  // Date filtering states
+  const [selectedDate, setSelectedDate] = React.useState<Date | undefined>(undefined);
+  const [dateSortOrder, setDateSortOrder] = React.useState<DateSortOrder>(null);
+  const [datePopoverOpen, setDatePopoverOpen] = React.useState(false);
+
+  // Filters
+  const [closedFacilityFilter, setClosedFacilityFilter] = React.useState<string>("all");
+  const [pendingFacilityFilter, setPendingFacilityFilter] = React.useState<string>("all");
+
+  // Expanded states for facility groups
+  const [expandedClosed, setExpandedClosed] = React.useState<Set<number>>(new Set());
+  const [expandedPending, setExpandedPending] = React.useState<Set<number>>(new Set());
+
+  // Helper function to check if survey date matches selected date (ignoring time)
+  const doesDateMatch = (surveyDate: string | Date | null | undefined, selectedDate: Date): boolean => {
+    if (!surveyDate || !selectedDate) return false;
+    
+    try {
+      let surveyDateObj: Date;
+      
+      // Handle different date formats
+      if (typeof surveyDate === 'string') {
+        // Try parsing ISO format first (YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)
+        surveyDateObj = new Date(surveyDate);
+      } else {
+        surveyDateObj = surveyDate;
+      }
+      
+      // Check if date is valid
+      if (isNaN(surveyDateObj.getTime()) || isNaN(selectedDate.getTime())) {
+        return false;
+      }
+      
+      // Compare year, month, and day only (ignoring time)
+      return surveyDateObj.getFullYear() === selectedDate.getFullYear() &&
+             surveyDateObj.getMonth() === selectedDate.getMonth() &&
+             surveyDateObj.getDate() === selectedDate.getDate();
+    } catch (error) {
+      console.warn('Date comparison error:', error);
+      return false;
+    }
+  };
+
+  // Function to filter and sort surveys by date
+  const filterAndSortSurveys = React.useCallback((surveyList: any[]) => {
+    let filtered = [...surveyList];
+
+    console.log('Filtering surveys:', {
+      totalSurveys: filtered.length,
+      selectedDate: selectedDate,
+      selectedDateFormatted: selectedDate ? format(selectedDate, "yyyy-MM-dd") : null,
+      sampleSurveyDates: filtered.slice(0, 3).map(s => ({
+        id: s.id,
+        surveyDate: s.surveyDate,
+        type: typeof s.surveyDate
+      }))
+    });
+
+    // Filter by specific date if selected
+    if (selectedDate) {
+      filtered = filtered.filter(survey => {
+        const matches = doesDateMatch(survey.surveyDate, selectedDate);
+        console.log(`Survey ${survey.id} (${survey.surveyDate}) matches ${format(selectedDate, "yyyy-MM-dd")}:`, matches);
+        return matches;
+      });
+      
+      console.log('After date filter:', filtered.length, 'surveys remain');
+    }
+
+    // Sort by date if order is specified
+    if (dateSortOrder) {
+      filtered.sort((a, b) => {
+        const dateA = new Date(a.surveyDate || 0);
+        const dateB = new Date(b.surveyDate || 0);
+        
+        if (isNaN(dateA.getTime()) && isNaN(dateB.getTime())) return 0;
+        if (isNaN(dateA.getTime())) return 1;
+        if (isNaN(dateB.getTime())) return -1;
+        
+        return dateSortOrder === "asc" ? dateA.getTime() - dateB.getTime() : dateB.getTime() - dateA.getTime();
+      });
+    }
+
+    return filtered;
+  }, [selectedDate, dateSortOrder]);
+
+  // Group surveys by facility with date filtering
   const groupedSurveys = React.useMemo(() => {
     if (!surveys.data) return { closed: [], pending: [] };
+
+    const closedSurveys = filterAndSortSurveys(surveys.data.filter(s => s.isLocked));
+    const pendingSurveys = filterAndSortSurveys(surveys.data.filter(s => !s.isLocked));
 
     const groupByFacility = (surveyList: any[]) => {
       const facilityMap = new Map<number, GroupedSurvey>();
@@ -106,16 +204,13 @@ export default function SurveysPage() {
 
         // Calculate completion for pending surveys
         if (!survey.isLocked) {
-          // Check if survey has responses or is marked as completed
           const isCompleted = survey.responses && survey.responses.length > 0;
           if (isCompleted) group.completedSurveys++;
         }
 
         // Calculate POC count for closed surveys
         if (survey.isLocked) {
-          // You can add POC logic here if needed
-          // For now, we'll assume POC is generated if survey has certain properties
-          const hasPOC = survey.pocGenerated || false; // Adjust based on your survey schema
+          const hasPOC = survey.pocGenerated || false;
           if (hasPOC) group.pocCount++;
         }
       });
@@ -123,22 +218,11 @@ export default function SurveysPage() {
       return Array.from(facilityMap.values());
     };
 
-    const closedSurveys = surveys.data.filter(s => s.isLocked);
-    const pendingSurveys = surveys.data.filter(s => !s.isLocked);
-
     return {
       closed: groupByFacility(closedSurveys),
       pending: groupByFacility(pendingSurveys),
     };
-  }, [surveys.data]);
-
-  // Filters
-  const [closedFacilityFilter, setClosedFacilityFilter] = React.useState<string>("all");
-  const [pendingFacilityFilter, setPendingFacilityFilter] = React.useState<string>("all");
-
-  // Expanded states for facility groups
-  const [expandedClosed, setExpandedClosed] = React.useState<Set<number>>(new Set());
-  const [expandedPending, setExpandedPending] = React.useState<Set<number>>(new Set());
+  }, [surveys.data, filterAndSortSurveys]);
 
   const toggleExpanded = (facilityId: number, type: 'closed' | 'pending') => {
     if (type === 'closed') {
@@ -190,6 +274,17 @@ export default function SurveysPage() {
     return Array.from(uniqueFacilities.values());
   }, [groupedSurveys]);
 
+  // Clear all filters
+  const clearAllFilters = () => {
+    setSelectedDate(undefined);
+    setDateSortOrder(null);
+    setClosedFacilityFilter("all");
+    setPendingFacilityFilter("all");
+  };
+
+  // Check if any filters are active
+  const hasActiveFilters = selectedDate || dateSortOrder || closedFacilityFilter !== "all" || pendingFacilityFilter !== "all";
+
   const FacilityGroupRow = ({ 
     group, 
     type, 
@@ -237,50 +332,55 @@ export default function SurveysPage() {
         </TableCell>
       </TableRow>
       
-      {isExpanded && group.surveys.map((survey) => (
-        <TableRow key={`${type}-survey-${survey.id}`} className="bg-background">
-          <TableCell className="text-right font-mono tabular-nums pl-8">
-            {survey.id}
-          </TableCell>
-          <TableCell>
-            <Badge variant="secondary">{String(survey.surveyDate ?? "")}</Badge>
-          </TableCell>
-          <TableCell>
-            <div className="flex items-center gap-2">
-              {survey.surveyor ? (
-                <>
-                  <span>{survey.surveyor.name}</span>
-                  <Badge variant="outline" className="text-xs">{survey.surveyor.email}</Badge>
-                </>
+      {isExpanded && group.surveys.map((survey) => {
+        const surveyDate = survey.surveyDate ? new Date(survey.surveyDate) : null;
+        const formattedDate = surveyDate && !isNaN(surveyDate.getTime()) ? format(surveyDate, "yyyy-MM-dd") : "No date";
+        
+        return (
+          <TableRow key={`${type}-survey-${survey.id}`} className="bg-background">
+            <TableCell className="text-right font-mono tabular-nums pl-8">
+              {survey.id}
+            </TableCell>
+            <TableCell>
+              <Badge variant="secondary">{formattedDate}</Badge>
+            </TableCell>
+            <TableCell>
+              <div className="flex items-center gap-2">
+                {survey.surveyor ? (
+                  <>
+                    <span>{survey.surveyor.name}</span>
+                    <Badge variant="outline" className="text-xs">{survey.surveyor.email}</Badge>
+                  </>
+                ) : (
+                  "-"
+                )}
+              </div>
+            </TableCell>
+            <TableCell>
+              {survey.template && <TemplateHoverCard template={survey.template} />}
+            </TableCell>
+            <TableCell>
+              {type === 'closed' ? (
+                <Badge variant={survey.pocGenerated ? "default" : "secondary"}>
+                  {survey.pocGenerated ? "POC Generated" : "No POC"}
+                </Badge>
               ) : (
-                "-"
+                <Badge variant={survey.isCompleted ? "default" : "secondary"}>
+                  {survey.isCompleted ? "Completed" : "In Progress"}
+                </Badge>
               )}
-            </div>
-          </TableCell>
-          <TableCell>
-            {survey.template && <TemplateHoverCard template={survey.template} />}
-          </TableCell>
-          <TableCell>
-            {type === 'closed' ? (
-              <Badge variant={survey.pocGenerated ? "default" : "secondary"}>
-                {survey.pocGenerated ? "POC Generated" : "No POC"}
-              </Badge>
-            ) : (
-              <Badge variant={survey.isCompleted ? "default" : "secondary"}>
-                {survey.isCompleted ? "Completed" : "In Progress"}
-              </Badge>
-            )}
-          </TableCell>
-          <TableCell className="text-right">
-            <Link
-              href={`/qisv/surveys/${survey.id}`}
-              className={cn(buttonVariants({ variant: "outline", size: "icon" }), "size-6")}
-            >
-              <ExternalLinkIcon className="h-3 w-3" />
-            </Link>
-          </TableCell>
-        </TableRow>
-      ))}
+            </TableCell>
+            <TableCell className="text-right">
+              <Link
+                href={`/qisv/surveys/${survey.id}`}
+                className={cn(buttonVariants({ variant: "outline", size: "icon" }), "size-6")}
+              >
+                <ExternalLinkIcon className="h-3 w-3" />
+              </Link>
+            </TableCell>
+          </TableRow>
+        );
+      })}
     </>
   );
 
@@ -302,6 +402,105 @@ export default function SurveysPage() {
                   <PlusIcon className="mr-2 h-4 w-4" /> Create Survey
                 </Link>
               )}
+            </div>
+
+            {/* Global Filters */}
+            <div className="mb-6 rounded-lg border bg-muted/30 p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold">Filters</h3>
+                {hasActiveFilters && (
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={clearAllFilters}
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    <XIcon className="mr-1 h-3 w-3" />
+                    Clear All
+                  </Button>
+                )}
+              </div>
+              
+              <div className="flex flex-wrap items-center gap-3">
+                {/* Date Picker */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-muted-foreground">Date:</span>
+                  <Popover open={datePopoverOpen} onOpenChange={setDatePopoverOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "h-8 justify-start text-left font-normal",
+                          !selectedDate && "text-muted-foreground",
+                          selectedDate && "bg-primary/10 border-primary/20"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-3 w-3" />
+                        {selectedDate ? format(selectedDate, "MMM dd, yyyy") : "Select date"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={selectedDate}
+                        onSelect={(date) => {
+                          console.log('Date selected:', date, 'formatted as:', date ? format(date, "yyyy-MM-dd") : null);
+                          setSelectedDate(date);
+                          setDatePopoverOpen(false);
+                        }}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  {selectedDate && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setSelectedDate(undefined)}
+                      className="h-6 w-6 p-0"
+                    >
+                      <XIcon className="h-3 w-3" />
+                    </Button>
+                  )}
+                </div>
+
+                {/* Date Sort */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-muted-foreground">Sort:</span>
+                  <div className="flex rounded-md border">
+                    <Button
+                      variant={dateSortOrder === "asc" ? "default" : "ghost"}
+                      size="sm"
+                      onClick={() => setDateSortOrder(dateSortOrder === "asc" ? null : "asc")}
+                      className="h-8 rounded-r-none border-r"
+                    >
+                      <ArrowUpIcon className="h-3 w-3" />
+                      Oldest
+                    </Button>
+                    <Button
+                      variant={dateSortOrder === "desc" ? "default" : "ghost"}
+                      size="sm"
+                      onClick={() => setDateSortOrder(dateSortOrder === "desc" ? null : "desc")}
+                      className="h-8 rounded-l-none"
+                    >
+                      <ArrowDownIcon className="h-3 w-3" />
+                      Newest
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Active Filter Indicators */}
+                {selectedDate && (
+                  <Badge variant="secondary" className="bg-primary/10 text-primary">
+                    Date: {format(selectedDate, "MMM dd, yyyy")}
+                  </Badge>
+                )}
+                {dateSortOrder && (
+                  <Badge variant="secondary" className="bg-primary/10 text-primary">
+                    Sort: {dateSortOrder === "asc" ? "Oldest First" : "Newest First"}
+                  </Badge>
+                )}
+              </div>
             </div>
 
             {/* Completed Surveys (Locked) */}
@@ -359,7 +558,7 @@ export default function SurveysPage() {
                   ) : filteredClosedGroups.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={6} className="text-muted-foreground py-8 text-center">
-                        No completed surveys found.
+                        {hasActiveFilters ? "No completed surveys found with current filters." : "No completed surveys found."}
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -432,7 +631,7 @@ export default function SurveysPage() {
                   ) : filteredPendingGroups.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={6} className="text-muted-foreground py-8 text-center">
-                        No pending surveys found.
+                        {hasActiveFilters ? "No pending surveys found with current filters." : "No pending surveys found."}
                       </TableCell>
                     </TableRow>
                   ) : (
