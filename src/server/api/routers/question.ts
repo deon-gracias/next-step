@@ -7,7 +7,7 @@ import {
   questionFtag,
 } from "@/server/db/schema";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
-import { eq, ilike, and, inArray } from "drizzle-orm";
+import { eq, ilike, and, inArray, asc } from "drizzle-orm";
 import {
   paginationInputSchema,
   questionCreateInputSchema,
@@ -123,8 +123,7 @@ export const questionRouter = createTRPCRouter({
       }),
     )
     .query(async ({ ctx, input }) => {
-      const offset = (input.page - 1) * input.pageSize;
-
+      // FIXED: Remove the offset logic and limit for now to get ALL results
       const conditions = [];
       if (input.id !== undefined) conditions.push(eq(question.id, input.id));
       if (input.text) conditions.push(ilike(question.text, `%${input.text}%`));
@@ -152,11 +151,11 @@ export const questionRouter = createTRPCRouter({
       const whereClause =
         conditions.length > 0 ? and(...conditions) : undefined;
 
+      // FIXED: Added ORDER BY to ensure consistent results and removed limit/offset for now
       return await ctx.db
         .select()
         .from(question)
         .where(whereClause)
-        .limit(1000)
-        .offset(offset);
+        .orderBy(asc(question.id)); // Order by ID to ensure consistent results
     }),
 });

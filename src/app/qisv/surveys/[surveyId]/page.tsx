@@ -8,7 +8,7 @@ import { buttonVariants, Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import React, { useMemo, useState, useEffect, useCallback } from "react";
+import React, { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle, SheetTrigger, SheetClose } from "@/components/ui/sheet";
 import {
@@ -25,10 +25,14 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { Lock, Unlock, MessageCircle, Send, User, Clock } from "lucide-react";
+import { Lock, Unlock, MessageCircle, Send, User, Clock, Download } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { format } from "date-fns";
+
+// Import jsPDF - you'll need to install it: npm install jspdf html2canvas
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 // Local minimal types to avoid any
 type StatusVal = "met" | "unmet" | "not_applicable";
@@ -104,6 +108,10 @@ export default function SurveyDetailPage() {
   >([]);
   const [showComments, setShowComments] = useState(false);
   const [newComment, setNewComment] = useState("");
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+
+  // PDF ref for hidden content
+  const pdfContentRef = useRef<HTMLDivElement>(null);
 
   // Fetch all responses across residents
   useEffect(() => {
@@ -351,6 +359,175 @@ export default function SurveyDetailPage() {
     }
     return true;
   }, [residents.data, questions.data, byResident]);
+
+  // Generate PDF function
+  const handleDownloadPDF = useCallback(async () => {
+    if (!survey.data || !hasAnyPOC) return;
+
+    setIsGeneratingPDF(true);
+    try {
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      // Header
+      doc.setFontSize(20);
+      doc.setFont("helvetica", "bold");
+      doc.text("Plan of Correction Report", 20, 25);
+
+      // Survey Details
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "normal");
+      let yPos = 45;
+
+      doc.text(`Survey Number: #${surveyId}`, 20, yPos);
+      yPos += 8;
+      
+      const facilityName = survey.data.facilityId || `Facility ${survey.data.facilityId}`;
+      doc.text(`Facility: ${facilityName}`, 20, yPos);
+      yPos += 8;
+      
+      const surveyorName = survey.data.surveyorId || `Surveyor ${survey.data.surveyorId}`;
+      doc.text(`Surveyor: ${surveyorName}`, 20, yPos);
+      yPos += 8;
+      
+      const templateName = survey.data.template?.name || `Template #${survey.data.templateId}`;
+      doc.text(`Template: ${templateName}`, 20, yPos);
+      yPos += 8;
+
+      doc.text(`Generated: ${format(new Date(), "MMM dd, yyyy 'at' h:mm a")}`, 20, yPos);
+      yPos += 15;
+
+      // Plan of Correction Section
+      doc.setFontSize(16);
+      doc.setFont("helvetica", "bold");
+      doc.text("Plan of Correction", 20, yPos);
+      yPos += 10;
+
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "normal");
+      
+      // Split POC text into lines that fit the page width
+      const pocLines = doc.splitTextToSize(combinedPOC, 170);
+      
+      // Check if we need a new page
+      if (yPos + (pocLines.length * 5) > 280) {
+        doc.addPage();
+        yPos = 20;
+      }
+      
+      doc.text(pocLines, 20, yPos);
+      yPos += pocLines.length * 5 + 15;
+
+      // Comments Section
+      if (comments.data && comments.data.length > 0) {
+        // Check if we need a new page for comments
+        if (yPos + 30 > 280) {
+          doc.addPage();
+          yPos = 20;
+        }
+
+        doc.setFontSize(16);
+        doc.setFont("helvetica", "bold");
+        doc.text("Comments", 20, yPos);
+        yPos += 10;
+
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "normal");
+
+        for (const comment of comments.data) {
+          // Check if we need a new page for this comment
+          if (yPos + 25 > 280) {
+            doc.addPage();
+            yPos = 20;
+          }
+
+          // Comment author and date
+          const authorName = comment.author?.name || "Unknown User";
+          const commentDate = comment.createdAt ? format(new Date(comment.createdAt), "MMM dd, yyyy 'at' h:mm a") : "";
+          
+          doc.setFont("helvetica", "bold");
+          doc.text(`${authorName} - ${commentDate}`, 20, yPos);
+          yPos += 6;
+
+          // Comment text
+          doc.setFont("helvetica", "normal");
+          const commentLines = doc.splitTextToSize(comment.commentText, 170);
+          doc.text(commentLines, 20, yPos);
+          yPos += commentLines.length * 4 + 8;
+        }
+      }
+
+      // Unmet Questions Summary
+      if (sheetBlocks.length > 0) {
+        // Check if we need a new page
+        if (yPos + 30 > 280) {
+          doc.addPage();
+          yPos = 20;
+        }
+
+        doc.setFontSize(16);
+        doc.setFont("helvetica", "bold");
+        doc.text("Questions Requiring Attention", 20, yPos);
+        yPos += 10;
+
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "normal");
+
+        for (const block of sheetBlocks) {
+          // Check if we need a new page for this block
+          if (yPos + 30 > 280) {
+            doc.addPage();
+            yPos = 20;
+          }
+
+          // Question text
+          doc.setFont("helvetica", "bold");
+          const questionLines = doc.splitTextToSize(block.text, 170);
+          doc.text(questionLines, 20, yPos);
+          yPos += questionLines.length * 4 + 3;
+
+          // Strength and F-Tags
+          doc.setFont("helvetica", "normal");
+          doc.text(`Strength: ${block.strengthPct}%`, 20, yPos);
+          if (block.ftags.length > 0) {
+            doc.text(`F-Tags: ${block.ftags.join(", ")}`, 90, yPos);
+          }
+          yPos += 6;
+
+          // Residents with unmet
+          doc.setFont("helvetica", "italic");
+          doc.text("Residents with unmet:", 20, yPos);
+          yPos += 4;
+
+          doc.setFont("helvetica", "normal");
+          for (const item of block.items) {
+            doc.text(`• Resident ${item.residentId}`, 25, yPos);
+            if (item.findings) {
+              yPos += 4;
+              const findingsLines = doc.splitTextToSize(`  Findings: ${item.findings}`, 160);
+              doc.text(findingsLines, 25, yPos);
+              yPos += findingsLines.length * 4;
+            }
+            yPos += 3;
+          }
+          yPos += 5;
+        }
+      }
+
+      // Save the PDF
+      doc.save(`POC_Report_Survey_${surveyId}_${format(new Date(), "yyyy-MM-dd")}.pdf`);
+      toast.success("PDF downloaded successfully");
+
+    } catch (error) {
+      console.error("Failed to generate PDF:", error);
+      toast.error("Failed to generate PDF");
+    } finally {
+      setIsGeneratingPDF(false);
+    }
+  }, [survey.data, hasAnyPOC, surveyId, combinedPOC, comments.data, sheetBlocks]);
 
   // Save POC handler
   const handleSaveCombinedPOC = useCallback(async () => {
@@ -655,11 +832,12 @@ export default function SurveyDetailPage() {
               </div>
 
               {/* Comments Section in POC Sheet */}
-                {hasAnyPOC && (
-                  <div className="px-4">
-                    <CommentsSection />
-                  </div>
-                )}
+              {hasAnyPOC && (
+                <div className="px-4">
+                  <CommentsSection />
+                </div>
+              )}
+              
               <div className="border-t">
                 <div className="px-4 py-3">
                   <div className="text-xs text-muted-foreground mb-2">
@@ -674,10 +852,21 @@ export default function SurveyDetailPage() {
                   />
                 </div>
 
-                
-
                 <SheetFooter className="px-4 py-3 flex items-center justify-between">
-                  <div />
+                  <div>
+                    {hasAnyPOC && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleDownloadPDF}
+                        disabled={isGeneratingPDF}
+                        className="flex items-center gap-2"
+                      >
+                        <Download className="h-4 w-4" />
+                        {isGeneratingPDF ? "Generating PDF..." : "Download PDF"}
+                      </Button>
+                    )}
+                  </div>
                   <div className="flex items-center gap-2">
                     <SheetClose asChild>
                       <Button variant="ghost" size="sm">
@@ -749,12 +938,12 @@ export default function SurveyDetailPage() {
         <div className="flex items-start justify-between flex-wrap gap-3">
           <div>
             <h1 className="mb-1 flex items-center gap-2 text-2xl font-bold">
-              Survey #{surveyId} – {survey.data.templateId}{" "}
+              Survey #{surveyId}{" "}
               {survey.data.template && <Badge>{survey.data.template.type}</Badge>}
               {isLocked && <Badge variant="secondary">Locked</Badge>}
             </h1>
             <p className="text-sm text-muted-foreground">
-              Facility&nbsp;{survey.data.facilityId} ・ Surveyor&nbsp;{survey.data.surveyorId}
+              {survey.data.facilityId || `Facility ${survey.data.facilityId}`} ・ {survey.data.surveyorId || `Surveyor ${survey.data.surveyorId}`}
             </p>
           </div>
 

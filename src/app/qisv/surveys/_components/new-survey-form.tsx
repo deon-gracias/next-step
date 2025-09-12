@@ -32,7 +32,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useDebounce } from "@uidotdev/usehooks";
 import {
   residentInsertSchema,
@@ -87,6 +87,18 @@ export type NewMultiSurveyCreateInputType = z.infer<
 
 export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
   const user = authClient.useSession();
+  
+  // Get current organization ID from session
+  const currentOrgId = user.data?.session.activeOrganizationId;
+  
+  // Use listInOrg instead of list
+  const users = api.user.listInOrg.useQuery({
+    organizationId: currentOrgId || "",
+    page: 1,
+    pageSize: 100, // Get enough users for the dropdown
+  }, {
+    enabled: !!currentOrgId, // Only fetch when we have an org ID
+  });
 
   const createSurvey = api.survey.create.useMutation();
 
@@ -104,15 +116,41 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
     name: "surveyors",
   });
 
+  // Auto-select admin user and initialize surveyors
   useEffect(() => {
     if (form.watch("surveyors").length > 0) return;
-    if (!(user.data && user.data.user)) return;
+    
+    let defaultSurveyorId = "";
+    
+    // Try to find admin user first
+    if (users.data && users.data.length > 0) {
+      const adminUser = users.data.find(u => 
+        u.role === "admin" || 
+        u.email?.toLowerCase().includes("admin") ||
+        u.name?.toLowerCase().includes("admin")
+      );
+      
+      if (adminUser) {
+        defaultSurveyorId = adminUser.id;
+      } else if (user.data?.user) {
+        // Fallback to current user
+        defaultSurveyorId = user.data.user.id;
+      } else {
+        // Fallback to first user
+        defaultSurveyorId = users.data[0]?.id || "";
+      }
+    } else if (user.data?.user) {
+      // If users list not loaded yet, use current user
+      defaultSurveyorId = user.data.user.id;
+    }
 
-    surveyorsField.append({
-      surveyorId: user.data.user.id,
-      templates: [],
-    });
-  }, [user.data]);
+    if (defaultSurveyorId) {
+      surveyorsField.append({
+        surveyorId: defaultSurveyorId,
+        templates: [],
+      });
+    }
+  }, [user.data, users.data, surveyorsField, form]);
 
   const onSubmit = (values: NewMultiSurveyCreateInputType) => {
     const createSurveyRequest: SurveyCreateInputType[] = [];
@@ -139,7 +177,14 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
       {
         loading: "Creating surveys",
         success: () => {
-          form.reset({ facilityId: values.facilityId, surveyors: [] });
+          form.reset({ 
+            surveyDate: new Date(),
+            facilityId: values.facilityId, 
+            surveyors: [{
+              surveyorId: values.surveyors[0]?.surveyorId || "",
+              templates: []
+            }]
+          });
           return "Survey created successfully!";
         },
         error: () => "Failed to create survey.",
@@ -235,6 +280,8 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
               sIndex={sIndex}
               surveyor={surveyor}
               surveyorsField={surveyorsField}
+              usersData={users.data}
+              currentOrgId={currentOrgId ?? undefined}
             />
           );
         })}
@@ -245,8 +292,9 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
             variant="outline"
             className="w-full border-dashed border-2 border-green-200 text-green-700 hover:bg-green-50 hover:border-green-300"
             onClick={() => {
+              const defaultSurveyorId = users.data?.[0]?.id || "";
               toast.success("Added new surveyor");
-              surveyorsField.append({ surveyorId: "", templates: [] });
+              surveyorsField.append({ surveyorId: defaultSurveyorId, templates: [] });
             }}
           >
             <PlusIcon className="mr-2 h-4 w-4" /> Add Surveyor
@@ -280,11 +328,15 @@ function SurveyorField({
   sIndex,
   surveyor,
   surveyorsField,
+  usersData,
+  currentOrgId,
 }: {
   form: UseFormReturn<NewMultiSurveyCreateInputType>;
   sIndex: number;
   surveyor: any;
   surveyorsField: UseFieldArrayReturn<NewMultiSurveyCreateInputType>;
+  usersData?: any[];
+  currentOrgId?: string;
 }) {
   const templatesField = useFieldArray({
     control: form.control,
@@ -411,21 +463,30 @@ function SurveyorField({
                                   size="icon"
                                   variant="secondary"
                                   className="bg-slate-200 hover:bg-slate-300"
-                                  onClick={() =>
-                                    ref.current?.value &&
-                                    field.onChange([
-                                      ...field.value,
-                                      ref.current?.value,
-                                    ])
-                                  }
+                                  onClick={() => {
+                                    if (ref.current?.value && ref.current.value.trim()) {
+                                      field.onChange([
+                                        ...field.value,
+                                        ref.current.value.trim(),
+                                      ]);
+                                      ref.current.value = "";
+                                    }
+                                  }}
                                 >
                                   <PlusIcon className="h-4 w-4" />
                                 </Button>
                               </div>
                               <div className="flex flex-wrap gap-1 mt-2">
                                 {field.value.map((e, i) => (
-                                  <Badge variant="secondary" key={i} className="bg-slate-200">
-                                    {e}
+                                  <Badge 
+                                    variant="secondary" 
+                                    key={i} 
+                                    className="bg-slate-200 cursor-pointer hover:bg-slate-300"
+                                    onClick={() => {
+                                      field.onChange(field.value.filter((_, index) => index !== i));
+                                    }}
+                                  >
+                                    {e} <XIcon className="h-3 w-3 ml-1" />
                                   </Badge>
                                 ))}
                               </div>
@@ -609,38 +670,6 @@ function ResidentRowById({
   );
 }
 
-function CaseRowsById({
-  id,
-  handleRemove,
-}: {
-  id: number;
-  handleRemove: () => void;
-}) {
-  const cases = api.cases.byId.useQuery({ id });
-
-  return (
-    <TableRow>
-      <TableCell className="text-right font-mono tabular-nums">{id}</TableCell>
-      <TableCell className="tabular-nums">
-        {!cases.data ? <Skeleton className="h-6" /> : cases.data.id}
-      </TableCell>
-      <TableCell className="font-medium">
-        {!cases.data ? <Skeleton className="h-6" /> : cases.data.code}
-      </TableCell>
-      <TableCell>
-        <Badge variant="secondary" className="text-xs">
-          {!cases.data ? <Skeleton className="h-6" /> : cases.data.description}
-        </Badge>
-      </TableCell>
-      <TableCell className="flex items-center gap-2">
-        <Button size="icon" variant="outline" onClick={handleRemove}>
-          <XIcon />
-        </Button>
-      </TableCell>
-    </TableRow>
-  );
-}
-
 function AddResidentInput({
   value,
   onChange,
@@ -653,12 +682,14 @@ function AddResidentInput({
   facilityId: number;
 }) {
   const apiUtils = api.useUtils();
+  const [isSearching, setIsSearching] = useState(false);
+  
   const form = useForm({
     resolver: zodResolver(residentInsertSchema),
     defaultValues: { name: "", pcciId: "", roomId: "", facilityId: 0 },
   });
 
-  const pcciIdDebounce = useDebounce(form.watch("pcciId"), 500);
+  const pcciIdDebounce = useDebounce(form.watch("pcciId"), 800);
 
   const resident = api.resident.list.useQuery(
     {
@@ -666,28 +697,43 @@ function AddResidentInput({
       pageSize: 1,
     },
     {
+      enabled: !!pcciIdDebounce && pcciIdDebounce.length > 0,
       select: (response) =>
-        response.data?.find((e) => e.pcciId === form.watch("pcciId")),
+        response.data?.find((e) => e.pcciId === pcciIdDebounce),
     },
   );
 
+  // Auto-fill resident data when found
   useEffect(() => {
     if (resident.data) {
-      form.reset({ ...resident.data });
+      form.setValue("name", resident.data.name || "");
+      form.setValue("roomId", resident.data.roomId || "");
+      form.setValue("facilityId", resident.data.facilityId);
+      setIsSearching(false);
+      toast.success("Resident details loaded!");
       return;
     }
 
-    form.reset({
-      pcciId: form.getValues("pcciId"),
-      name: "",
-      roomId: "",
-    });
-  }, [resident.data]);
+    // Only clear if we were searching and no result found
+    if (pcciIdDebounce && pcciIdDebounce.length > 0 && !resident.isLoading && !resident.data) {
+      form.setValue("name", "");
+      form.setValue("roomId", "");
+      setIsSearching(false);
+    }
+  }, [resident.data, pcciIdDebounce, resident.isLoading, form]);
+
+  // Show searching state
+  useEffect(() => {
+    if (pcciIdDebounce && pcciIdDebounce.length > 0 && resident.isLoading) {
+      setIsSearching(true);
+    }
+  }, [pcciIdDebounce, resident.isLoading]);
 
   const residentMutation = api.resident.create.useMutation();
 
   function onSubmit(values: Omit<ResidentInsertType, "facilityId">) {
     if (!resident.data) {
+      // Create new resident
       toast.promise(residentMutation.mutateAsync({ ...values, facilityId }), {
         loading: "Creating resident...",
         success: async (response) => {
@@ -703,17 +749,28 @@ function AddResidentInput({
       return;
     }
 
+    // Validate facility match for existing resident
     if (resident.data.facilityId !== facilityId) {
       form.setError(
         "pcciId",
         {
-          message: `Resident doesn't belong to this facility ${resident.data.facilityId}`,
+          message: `Resident belongs to different facility (Facility ID: ${resident.data.facilityId})`,
         },
         { shouldFocus: true },
       );
       return;
     }
+
+    // Check if resident already added
+    if (value.includes(resident.data.id)) {
+      toast.error("This resident is already added");
+      return;
+    }
+
+    // Add existing resident
     onChange([...value, resident.data.id]);
+    form.reset({});
+    toast.success(`Added ${resident.data.name} to the survey`);
   }
 
   return (
@@ -735,8 +792,21 @@ function AddResidentInput({
                 <FormItem>
                   <FormLabel>PCCI ID</FormLabel>
                   <FormControl>
-                    <Input {...field} className="bg-white" />
+                    <div className="relative">
+                      <Input {...field} className="bg-white" placeholder="Enter PCCI ID" />
+                      {isSearching && (
+                        <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600"></div>
+                        </div>
+                      )}
+                    </div>
                   </FormControl>
+                  {isSearching && (
+                    <p className="text-xs text-muted-foreground">Searching for resident...</p>
+                  )}
+                  {resident.data && (
+                    <p className="text-xs text-green-600">✓ Resident found and details loaded</p>
+                  )}
                   <FormMessage />
                 </FormItem>
               )}
@@ -749,7 +819,12 @@ function AddResidentInput({
                   <FormItem>
                     <FormLabel>Name</FormLabel>
                     <FormControl>
-                      <Input {...field} disabled={!!resident.data} className="bg-white disabled:bg-gray-50" />
+                      <Input 
+                        {...field} 
+                        disabled={!!resident.data} 
+                        className="bg-white disabled:bg-gray-50" 
+                        placeholder="Resident name"
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -762,7 +837,12 @@ function AddResidentInput({
                   <FormItem>
                     <FormLabel>Room ID</FormLabel>
                     <FormControl>
-                      <Input {...field} disabled={!!resident.data} className="bg-white disabled:bg-gray-50" />
+                      <Input 
+                        {...field} 
+                        disabled={!!resident.data} 
+                        className="bg-white disabled:bg-gray-50" 
+                        placeholder="Room number"
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -770,19 +850,20 @@ function AddResidentInput({
               />
             </div>
 
-<div className="hidden">
-  <Input type="hidden" value={facilityId} />
-</div>
+            <input type="hidden" value={facilityId} />
 
             <Button
               type="submit"
               className="w-full bg-indigo-600 hover:bg-indigo-700"
               disabled={
-                pcciIdDebounce !== form.watch("pcciId") || resident.isLoading
+                !form.watch("pcciId") || 
+                !form.watch("name") || 
+                isSearching ||
+                resident.isLoading
               }
             >
               <PlusIcon className="mr-2 h-4 w-4" />
-              Add Resident
+              {resident.data ? "Add Existing Resident" : "Create & Add Resident"}
             </Button>
           </form>
         </Form>

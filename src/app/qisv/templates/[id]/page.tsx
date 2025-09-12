@@ -81,6 +81,7 @@ export default function AddQuestionsPage() {
     },
     { enabled: !!template.data },
   );
+  console.log("Questions", questions);
 
   const hasNewQuestionPermission = useQuery({
     queryKey: ["question-create-permission"],
