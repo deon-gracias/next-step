@@ -3,7 +3,7 @@ import { questionInsertSchema, surveyInsertSchema } from "../db/schema";
 import { and, or, SQL } from "drizzle-orm";
 
 export const paginationInputSchema = z.object({
-  page: z.number().min(1).default(1),
+  page: z.number().min(1).default(2),
   pageSize: z.number().min(1).max(100).default(10),
 });
 

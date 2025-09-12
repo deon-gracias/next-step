@@ -316,6 +316,30 @@ export const surveyPOC = pgTable(
   ],
 );
 
+export const pocComment = pgTable("poc_comment", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  
+  // Reference to the survey and template (for easier querying)
+  surveyId: integer("survey_id")
+    .notNull()
+    .references(() => survey.id, { onDelete: "cascade" }),
+  
+  templateId: integer("template_id")
+    .notNull()
+    .references(() => template.id, { onDelete: "cascade" }),
+  
+  // Comment content
+  commentText: text("comment_text").notNull(),
+  
+  // Author tracking
+  authorId: text("author_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  
+  // Timestamps (comments cannot be edited)
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const dietarySurveys = pgTable("dietary_surveys", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -476,3 +500,11 @@ export const dietaryAnswerInsertSchema = createInsertSchema(dietaryAnswers);
 export type DietaryAnswerInsertType = z.infer<typeof dietaryAnswerInsertSchema>;
 export const dietaryAnswerSelectSchema = createSelectSchema(dietaryAnswers);
 export type DietaryAnswerSelectType = z.infer<typeof dietaryAnswerSelectSchema>;
+
+export const pocCommentInsertSchema = createInsertSchema(pocComment, {
+  commentText: (schema) => schema.min(1, "Comment cannot be empty"),
+});
+export type PocCommentInsertType = z.infer<typeof pocCommentInsertSchema>;
+
+export const pocCommentSelectSchema = createSelectSchema(pocComment);
+export type PocCommentSelectType = z.infer<typeof pocCommentSelectSchema>;

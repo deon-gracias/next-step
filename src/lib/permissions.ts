@@ -8,6 +8,7 @@ export const roles = [
   { label: "lead_surveyor" },
   { label: "surveyor" },
   { label: "facility_coordinator" },
+  { label: "facility_viewer"}
 ] as const;
 
 /* Extend org resources, including POC */

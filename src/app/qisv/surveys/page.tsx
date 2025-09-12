@@ -99,6 +99,65 @@ export default function SurveysPage() {
   const [expandedClosed, setExpandedClosed] = React.useState<Set<number>>(new Set());
   const [expandedPending, setExpandedPending] = React.useState<Set<number>>(new Set());
 
+  // State to store POC status for each survey
+  const [surveyPocStatus, setSurveyPocStatus] = React.useState<Map<number, boolean>>(new Map());
+
+  // Fetch POC status for all surveys
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!surveys.data || surveys.data.length === 0) return;
+
+      try {
+        const pocStatusMap = new Map<number, boolean>();
+        
+        // Check each survey for POC existence
+        await Promise.all(
+          surveys.data.map(async (survey) => {
+            try {
+              // Use the utils to fetch POC data for this survey and template
+              const residents = await utils.survey.listResidents.fetch({ surveyId: survey.id });
+              if (!residents || residents.length === 0) {
+                pocStatusMap.set(survey.id, false);
+                return;
+              }
+
+              // Check if any resident has POC for this survey/template combination
+              const pocResults = await Promise.all(
+                residents.map(r => utils.poc.list.fetch({ surveyId: survey.id, residentId: r.residentId }))
+              );
+
+              let hasPOC = false;
+              outer: for (const pocRows of pocResults) {
+                for (const pocRow of pocRows ?? []) {
+                  if (pocRow.pocText && pocRow.pocText.trim() && pocRow.templateId === survey.templateId) {
+                    hasPOC = true;
+                    break outer;
+                  }
+                }
+              }
+
+              pocStatusMap.set(survey.id, hasPOC);
+            } catch (error) {
+              console.error(`Failed to check POC for survey ${survey.id}:`, error);
+              pocStatusMap.set(survey.id, false);
+            }
+          })
+        );
+
+        if (!cancelled) {
+          setSurveyPocStatus(pocStatusMap);
+        }
+      } catch (error) {
+        console.error("Failed to fetch POC status:", error);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [surveys.data]);
+
   // Helper function to check if survey date matches selected date (ignoring time)
   const doesDateMatch = (surveyDate: string | Date | null | undefined, selectedDate: Date): boolean => {
     if (!surveyDate || !selectedDate) return false;
@@ -172,6 +231,9 @@ export default function SurveysPage() {
     return filtered;
   }, [selectedDate, dateSortOrder]);
 
+  // Access utils for POC fetching
+  const utils = api.useUtils();
+
   // Group surveys by facility with date filtering
   const groupedSurveys = React.useMemo(() => {
     if (!surveys.data) return { closed: [], pending: [] };
@@ -208,9 +270,9 @@ export default function SurveysPage() {
           if (isCompleted) group.completedSurveys++;
         }
 
-        // Calculate POC count for closed surveys
+        // Calculate POC count for closed surveys - check if survey has POC in our status map
         if (survey.isLocked) {
-          const hasPOC = survey.pocGenerated || false;
+          const hasPOC = surveyPocStatus.get(survey.id) || false;
           if (hasPOC) group.pocCount++;
         }
       });
@@ -222,7 +284,7 @@ export default function SurveysPage() {
       closed: groupByFacility(closedSurveys),
       pending: groupByFacility(pendingSurveys),
     };
-  }, [surveys.data, filterAndSortSurveys]);
+  }, [surveys.data, filterAndSortSurveys, surveyPocStatus]);
 
   const toggleExpanded = (facilityId: number, type: 'closed' | 'pending') => {
     if (type === 'closed') {
@@ -310,7 +372,7 @@ export default function SurveysPage() {
           <div className="flex items-center gap-2">
             {group.facility && <FacilityHoverCard facility={group.facility} />}
             <Badge variant="outline" className="ml-2">
-              {group.surveys.length} survey{group.surveys.length !== 1 ? 's' : ''}
+              {group.surveys.length} template{group.surveys.length !== 1 ? 's' : ''}
             </Badge>
           </div>
         </TableCell>
@@ -335,6 +397,9 @@ export default function SurveysPage() {
       {isExpanded && group.surveys.map((survey) => {
         const surveyDate = survey.surveyDate ? new Date(survey.surveyDate) : null;
         const formattedDate = surveyDate && !isNaN(surveyDate.getTime()) ? format(surveyDate, "yyyy-MM-dd") : "No date";
+        
+        // Check POC status for individual survey from our status map
+        const hasPOC = surveyPocStatus.get(survey.id) || false;
         
         return (
           <TableRow key={`${type}-survey-${survey.id}`} className="bg-background">
@@ -361,8 +426,8 @@ export default function SurveysPage() {
             </TableCell>
             <TableCell>
               {type === 'closed' ? (
-                <Badge variant={survey.pocGenerated ? "default" : "secondary"}>
-                  {survey.pocGenerated ? "POC Generated" : "No POC"}
+                <Badge variant={hasPOC ? "default" : "secondary"}>
+                  {hasPOC ? "POC Generated" : "No POC"}
                 </Badge>
               ) : (
                 <Badge variant={survey.isCompleted ? "default" : "secondary"}>

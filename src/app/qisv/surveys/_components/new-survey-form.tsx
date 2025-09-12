@@ -654,8 +654,8 @@ function AddResidentInput({
 }) {
   const apiUtils = api.useUtils();
   const form = useForm({
-    resolver: zodResolver(residentInsertSchema.omit({ facilityId: true })),
-    defaultValues: { name: "", pcciId: "", roomId: "" },
+    resolver: zodResolver(residentInsertSchema),
+    defaultValues: { name: "", pcciId: "", roomId: "", facilityId: 0 },
   });
 
   const pcciIdDebounce = useDebounce(form.watch("pcciId"), 500);
@@ -770,14 +770,9 @@ function AddResidentInput({
               />
             </div>
 
-            <FormItem>
-              <FormLabel>Facility</FormLabel>
-              <FacilityComboBox
-                selectedItem={resident.data?.facilityId ?? facilityId}
-                disabled
-                onSelect={function (item: number): void {}}
-              />
-            </FormItem>
+<div className="hidden">
+  <Input type="hidden" value={facilityId} />
+</div>
 
             <Button
               type="submit"

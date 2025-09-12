@@ -25,8 +25,10 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { Lock, Unlock } from "lucide-react";
+import { Lock, Unlock, MessageCircle, Send, User, Clock } from "lucide-react";
 import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
+import { format } from "date-fns";
 
 // Local minimal types to avoid any
 type StatusVal = "met" | "unmet" | "not_applicable";
@@ -57,6 +59,15 @@ export default function SurveyDetailPage() {
     { enabled: Boolean(survey.data?.templateId) }
   );
 
+  // Comments
+  const comments = api.pocComment.list.useQuery(
+    { 
+      surveyId: surveyId,
+      templateId: survey.data?.templateId ?? -1 
+    },
+    { enabled: Boolean(survey.data?.templateId) }
+  );
+
   // Mutations
   const utils = api.useUtils();
   const lockSurvey = api.survey.lock.useMutation({
@@ -74,14 +85,25 @@ export default function SurveyDetailPage() {
     onError: (e) => toast.error((e as { message?: string })?.message ?? "Failed to unlock survey"),
   });
   const pocUpsert = api.poc.upsert.useMutation();
+  const addComment = api.pocComment.create.useMutation({
+    onSuccess: async () => {
+      await utils.pocComment.list.invalidate({ surveyId, templateId: survey.data?.templateId ?? -1 });
+      setNewComment("");
+      toast.success("Comment added successfully");
+    },
+    onError: (e) => toast.error("Failed to add comment"),
+  });
 
   // Local state
   const [sheetOpen, setSheetOpen] = useState(false);
   const [combinedPOC, setCombinedPOC] = useState("");
   const [hasAnyPOC, setHasAnyPOC] = useState(false);
+  const [pocMap, setPocMap] = useState<Map<string, string>>(new Map());
   const [allResponses, setAllResponses] = useState<
     Array<{ residentId: number; questionId: number; status: StatusVal | null; findings: string | null }>
   >([]);
+  const [showComments, setShowComments] = useState(false);
+  const [newComment, setNewComment] = useState("");
 
   // Fetch all responses across residents
   useEffect(() => {
@@ -114,6 +136,73 @@ export default function SurveyDetailPage() {
       cancelled = true;
     };
   }, [survey.data, residents.data, surveyId, utils.survey.listResponses]);
+
+  // Fetch existing POCs for the survey
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!survey.data || !residents.data || residents.data.length === 0) {
+        if (!cancelled) {
+          setHasAnyPOC(false);
+          setPocMap(new Map());
+          setCombinedPOC("");
+        }
+        return;
+      }
+      
+      try {
+        const residentIds = residents.data.map((r) => r.residentId);
+        const pocResults = await Promise.all(
+          residentIds.map((rid) => utils.poc.list.fetch({ surveyId, residentId: rid }))
+        );
+        
+        const newPocMap = new Map<string, string>();
+        let foundAnyPOC = false;
+        let firstPocText = "";
+
+        // For each resident, collect POC text per question
+        for (let i = 0; i < residentIds.length; i++) {
+          const residentId = residentIds[i];
+          const pocRows = pocResults[i] ?? [];
+          
+          for (const pocRow of pocRows) {
+            if (pocRow.pocText && pocRow.pocText.trim()) {
+              const key = `${residentId}-${pocRow.questionId}`;
+              newPocMap.set(key, pocRow.pocText.trim());
+              foundAnyPOC = true;
+              if (!firstPocText) {
+                firstPocText = pocRow.pocText.trim();
+              }
+            }
+          }
+        }
+
+        if (!cancelled) {
+          setPocMap(newPocMap);
+          setHasAnyPOC(foundAnyPOC);
+          setCombinedPOC(firstPocText);
+        }
+      } catch (error) {
+        console.error("Failed to fetch POCs:", error);
+        if (!cancelled) {
+          setHasAnyPOC(false);
+          setPocMap(new Map());
+          setCombinedPOC("");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [survey.data, residents.data, surveyId, utils.poc.list]);
+
+  // When sheet opens, set the POC text from the map
+  useEffect(() => {
+    if (sheetOpen && pocMap.size > 0) {
+      const firstPocText = Array.from(pocMap.values())[0] || "";
+      setCombinedPOC(firstPocText);
+    }
+  }, [sheetOpen, pocMap]);
 
   // Get all question IDs
   const allQuestionIds = useMemo(() => {
@@ -248,40 +337,6 @@ export default function SurveyDetailPage() {
     return blocks;
   }, [questions.data, canOpenPOCSheet, byResident, residents.data, questionStrengths]);
 
-  // Check for existing POCs
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      if (!survey.data) {
-        if (!cancelled) setHasAnyPOC(false);
-        return;
-      }
-      try {
-        const residentIds = (residents.data ?? []).map((r) => r.residentId);
-        if (residentIds.length === 0) {
-          if (!cancelled) setHasAnyPOC(false);
-          return;
-        }
-        const results = await Promise.all(residentIds.map((rid) => utils.poc.list.fetch({ surveyId, residentId: rid })));
-        let found = false;
-        outer: for (const rows of results) {
-          for (const row of rows ?? []) {
-            if ((row.pocText ?? "").trim()) {
-              found = true;
-              break outer;
-            }
-          }
-        }
-        if (!cancelled) setHasAnyPOC(found);
-      } catch {
-        if (!cancelled) setHasAnyPOC(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [survey.data, residents.data, surveyId, utils.poc.list]);
-
   // Check if all questions are answered
   const allAnswered = useMemo(() => {
     if (!residents.data || !questions.data) return false;
@@ -302,34 +357,74 @@ export default function SurveyDetailPage() {
     if (!survey.data || !canOpenPOCSheet) return;
     const templateId = survey.data.templateId;
     const text = combinedPOC.trim();
-    if (!text || sheetBlocks.length === 0) {
-      setSheetOpen(false);
+    if (!text) {
+      toast.error("POC text cannot be empty");
       return;
     }
+
     try {
+      const updates: Array<{ residentId: number; questionId: number }> = [];
+      
+      for (const r of residents.data ?? []) {
+        const ansMap = byResident.get(r.residentId) ?? new Map<number, ResponseCell>();
+        for (const q of questions.data ?? []) {
+          const cell = ansMap.get(q.id);
+          if (cell?.status === "unmet") {
+            updates.push({ residentId: r.residentId, questionId: q.id });
+          }
+        }
+      }
+
+      if (updates.length === 0) {
+        toast.error("No questions with unmet answers found");
+        return;
+      }
+
       await Promise.all(
-        sheetBlocks.map(async (blk) => {
-          await Promise.all(
-            blk.items.map((it) =>
-              pocUpsert.mutateAsync({
-                surveyId,
-                residentId: it.residentId,
-                templateId,
-                questionId: blk.qid,
-                pocText: text,
-              })
-            )
-          );
-        })
+        updates.map((update) =>
+          pocUpsert.mutateAsync({
+            surveyId,
+            residentId: update.residentId,
+            templateId,
+            questionId: update.questionId,
+            pocText: text,
+          })
+        )
       );
-      const affected = Array.from(new Set(sheetBlocks.flatMap((b) => b.items.map((x) => x.residentId))));
-      await Promise.all(affected.map((rid) => utils.poc.list.invalidate({ surveyId, residentId: rid })));
-      setSheetOpen(false);
+
+      const newPocMap = new Map(pocMap);
+      updates.forEach(update => {
+        const key = `${update.residentId}-${update.questionId}`;
+        newPocMap.set(key, text);
+      });
+      setPocMap(newPocMap);
       setHasAnyPOC(true);
+
+      const affectedResidents = Array.from(new Set(updates.map(u => u.residentId)));
+      await Promise.all(affectedResidents.map((rid) => utils.poc.list.invalidate({ surveyId, residentId: rid })));
+      
+      setSheetOpen(false);
+      toast.success("POC updated for unmet questions successfully");
     } catch (e) {
       console.error("Save combined POC failed", e);
+      toast.error("Failed to save POC");
     }
-  }, [survey.data, canOpenPOCSheet, sheetBlocks, combinedPOC, pocUpsert, utils.poc.list, surveyId]);
+  }, [survey.data, canOpenPOCSheet, combinedPOC, pocUpsert, utils.poc.list, surveyId, questions.data, residents.data, byResident, pocMap]);
+
+  // Handle adding comment
+  const handleAddComment = useCallback(async () => {
+    if (!survey.data || !newComment.trim()) return;
+    
+    try {
+      await addComment.mutateAsync({
+        surveyId,
+        templateId: survey.data.templateId,
+        commentText: newComment.trim(),
+      });
+    } catch (e) {
+      console.error("Failed to add comment", e);
+    }
+  }, [survey.data, newComment, addComment, surveyId]);
 
   // Loading state
   if (!survey.data || !residents.data || !cases.data) {
@@ -416,6 +511,93 @@ export default function SurveyDetailPage() {
     );
   };
 
+  // Comments component
+  const CommentsSection = () => (
+    <div className="border-t mt-4 pt-4 pb-4">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <MessageCircle className="h-4 w-4" />
+          <span className="text-sm font-medium">Comments</span>
+          {comments.data && comments.data.length > 0 && (
+            <Badge variant="secondary" className="text-xs">
+              {comments.data.length}
+            </Badge>
+          )}
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setShowComments(!showComments)}
+        >
+          {showComments ? "Hide" : "Show"} Comments
+        </Button>
+      </div>
+
+      {showComments && (
+        <div className="space-y-4">
+          {/* Comments List with CSS scroll area */}
+          <div className="custom-scroll-area">
+            {comments.data && comments.data.length > 0 ? (
+              <div className="space-y-3">
+                {comments.data?.map((comment) => (
+                  <div key={comment.id} className="flex gap-3 p-3 rounded-lg bg-muted/50">
+                    <div className="flex-shrink-0">
+                      <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                        <User className="h-4 w-4" />
+                      </div>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-sm font-medium">
+                          {comment.author ? comment.author.name : "Unknown User"}
+                        </span>
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Clock className="h-3 w-3" />
+                          {comment.createdAt && format(new Date(comment.createdAt), "MMM dd, yyyy 'at' h:mm a")}
+                        </div>
+                      </div>
+                      <p className="text-sm text-foreground break-words">
+                        {comment.commentText}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center text-muted-foreground py-8">
+                <MessageCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">No comments yet. Be the first to add one!</p>
+              </div>
+            )}
+          </div>
+
+          {/* Add Comment */}
+          <div className="flex gap-2">
+            <Input
+              placeholder="Add a comment..."
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleAddComment();
+                }
+              }}
+              disabled={addComment.isPending}
+            />
+            <Button
+              onClick={handleAddComment}
+              disabled={!newComment.trim() || addComment.isPending}
+              size="sm"
+            >
+              <Send className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
   // POC control component
   const renderPOCControl = () => {
     if (!isLocked) return null;
@@ -434,7 +616,9 @@ export default function SurveyDetailPage() {
             <div className="flex h-full flex-col">
               <SheetHeader className="px-4 pt-3 pb-1">
                 <SheetTitle className="text-base">{label}</SheetTitle>
-                <SheetDescription className="text-xs">Questions with at least one unmet and their residents.</SheetDescription>
+                <SheetDescription className="text-xs">
+                  {hasAnyPOC ? "View and update the Plan of Correction for unmet questions." : "Generate a Plan of Correction for questions with unmet answers."}
+                </SheetDescription>
               </SheetHeader>
 
               <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-2">
@@ -470,8 +654,17 @@ export default function SurveyDetailPage() {
                 )}
               </div>
 
+              {/* Comments Section in POC Sheet */}
+                {hasAnyPOC && (
+                  <div className="px-4">
+                    <CommentsSection />
+                  </div>
+                )}
               <div className="border-t">
                 <div className="px-4 py-3">
+                  <div className="text-xs text-muted-foreground mb-2">
+                    This Plan of Correction will be applied only to questions with "unmet" status.
+                  </div>
                   <Textarea
                     placeholder="Enter Plan of Correction"
                     value={combinedPOC}
@@ -481,6 +674,8 @@ export default function SurveyDetailPage() {
                   />
                 </div>
 
+                
+
                 <SheetFooter className="px-4 py-3 flex items-center justify-between">
                   <div />
                   <div className="flex items-center gap-2">
@@ -489,7 +684,11 @@ export default function SurveyDetailPage() {
                         Close
                       </Button>
                     </SheetClose>
-                    <Button size="sm" onClick={handleSaveCombinedPOC} disabled={pocUpsert.isPending || sheetBlocks.length === 0}>
+                    <Button 
+                      size="sm" 
+                      onClick={handleSaveCombinedPOC} 
+                      disabled={pocUpsert.isPending || !combinedPOC.trim()}
+                    >
                       {pocUpsert.isPending ? "Saving..." : hasAnyPOC ? "Update POC" : "Save POC"}
                     </Button>
                   </div>
@@ -504,6 +703,41 @@ export default function SurveyDetailPage() {
 
   return (
     <>
+      <style jsx>{`
+        .custom-scroll-area {
+          height: 240px;
+          width: 100%;
+          overflow-y: auto;
+          border-radius: 0.375rem;
+          border: 1px solid #e5e7eb;
+          padding: 1rem;
+        }
+
+        .custom-scroll-area::-webkit-scrollbar {
+          width: 8px;
+        }
+
+        .custom-scroll-area::-webkit-scrollbar-track {
+          background: #f1f5f9;
+          border-radius: 4px;
+        }
+
+        .custom-scroll-area::-webkit-scrollbar-thumb {
+          background: #cbd5e1;
+          border-radius: 4px;
+        }
+
+        .custom-scroll-area::-webkit-scrollbar-thumb:hover {
+          background: #94a3b8;
+        }
+
+        /* Firefox scrollbar styling */
+        .custom-scroll-area {
+          scrollbar-width: thin;
+          scrollbar-color: #cbd5e1 #f1f5f9;
+        }
+      `}</style>
+
       <QISVHeader
         crumbs={[
           { label: "Surveys", href: "/qisv/surveys" },

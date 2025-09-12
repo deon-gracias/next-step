@@ -31,6 +31,7 @@ type ComboboxProps = {
   className?: string;
   disabled?: boolean;
   align?: (typeof ALIGN_OPTIONS)[number];
+  showAll?: boolean;
 };
 
 export function FacilityComboBox({
@@ -40,15 +41,21 @@ export function FacilityComboBox({
   className,
   disabled = false,
   align,
+  showAll = true,
 }: ComboboxProps) {
   const [open, setOpenState] = React.useState(false);
   const [input, setInput] = React.useState<string>("");
 
   const debouncedInput = useDebounce(input, 300);
   const handleOnSearchChange = (e: string) => setInput(e);
-  // (e === "" && fetchItems(e)) || debouncedFetchItems(e);
 
-  const items = api.facility.list.useQuery({ name: debouncedInput });
+  // Use showAll flag to fetch unlimited results
+  const items = api.facility.list.useQuery({
+    name: debouncedInput,
+    page: 1,
+    pageSize: 10,
+    showAll: showAll, // Pass the showAll flag to backend
+  });
 
   function setOpen(isOpen: boolean) {
     if (isOpen) {
@@ -69,7 +76,7 @@ export function FacilityComboBox({
         >
           <span className="flex items-center truncate">
             {(items.data && items.data?.data.find((e) => e.id === selectedItem))
-              ?.name || "Select an facility"}
+              ?.name || "Select a facility"}
           </span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
@@ -115,7 +122,7 @@ export function FacilityComboBox({
                       {item.name}
                       <Check
                         className={cn(
-                          "h-4 w-4",
+                          "ml-auto h-4 w-4",
                           isSelected ? "opacity-100" : "opacity-0",
                         )}
                       />

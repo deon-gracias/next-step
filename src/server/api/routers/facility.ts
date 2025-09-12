@@ -47,17 +47,34 @@ export const facilityRouter = createTRPCRouter({
       z.object({
         ...facilitySelectSchema.partial().shape,
         ...paginationInputSchema.shape,
+        showAll: z.boolean().optional().default(false),
       }),
     )
     .query(async ({ ctx, input }) => {
-      const offset = (input.page - 1) * input.pageSize;
-
       const conditions = [];
       if (input.id !== undefined) conditions.push(eq(facility.id, input.id));
       if (input.name) conditions.push(ilike(facility.name, `%${input.name}%`));
 
       const whereClause =
         conditions.length > 0 ? and(...conditions) : undefined;
+
+      // If showAll is true or pageSize is very large, fetch all without pagination
+      if (input.showAll == true) {
+        console.log("Fetching all facilities without pagination");
+        const data = await ctx.db
+          .select()
+          .from(facility)
+          .where(whereClause);
+
+        return {
+          data,
+          total: data.length,
+          totalPages: 1,
+        };
+      }
+
+      // Use pagination for normal requests
+      const offset = (input.page - 1) * input.pageSize;
 
       const [totalResult] = await ctx.db
         .select({ count: count() })
