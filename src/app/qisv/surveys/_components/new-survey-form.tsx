@@ -19,9 +19,6 @@ import {
   type UseFormReturn,
 } from "react-hook-form";
 import { toast } from "sonner";
-import { FacilityComboBox } from "../../_components/facility-dropdown";
-import { TemplateComboBox } from "../../_components/template-dropdown";
-import { UserComboBox } from "../../_components/user-dropdown";
 import { type SurveyCreateInputType } from "@/server/utils/schema";
 import {
   Table,
@@ -39,22 +36,36 @@ import {
   templateSelectSchema,
   type ResidentInsertType,
 } from "@/server/db/schema";
-import { CalendarIcon, PlusIcon, Trash2Icon, XIcon, UserIcon, ClipboardListIcon, UsersIcon } from "lucide-react";
+import { 
+  CalendarIcon, 
+  PlusIcon, 
+  Trash2Icon, 
+  XIcon, 
+  UserIcon, 
+  ClipboardListIcon, 
+  UsersIcon, 
+  ChevronDownIcon, 
+  CheckIcon, 
+  FileTextIcon, 
+  ChevronLeftIcon, 
+  ChevronRightIcon, 
+  SearchIcon,
+  BuildingIcon
+} from "lucide-react";
 import { FacilityHoverCard } from "../../_components/facility-card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-
-import { z } from "zod";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+
+import { z } from "zod";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { authClient } from "@/components/providers/auth-client";
-import { CasesMultiSelectComboBox } from "../../templates/_components/case-dropdown";
 
 export const newMultiSurveyCreateInputSchema = z.object({
   surveyDate: z.date(),
@@ -85,19 +96,499 @@ export type NewMultiSurveyCreateInputType = z.infer<
   typeof newMultiSurveyCreateInputSchema
 >;
 
+// Custom User Combobox Component with Fixed Search
+function UserComboBox({
+  selectedItem,
+  onSelect,
+}: {
+  selectedItem?: string;
+  onSelect: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const debouncedSearch = useDebounce(search, 300);
+
+  // Get current organization ID from session
+  const user = authClient.useSession();
+  const currentOrgId = user.data?.session.activeOrganizationId;
+
+  // Fetch users with search
+  const users = api.user.listInOrg.useQuery({
+    organizationId: currentOrgId || "",
+    page: 1,
+    pageSize: 100,
+    search: debouncedSearch,
+  }, {
+    enabled: !!currentOrgId,
+  });
+
+  const selectedUser = users.data?.find(user => user.id === selectedItem);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full justify-between bg-white"
+        >
+          {selectedUser ? (
+            <div className="flex items-center gap-2">
+              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-100">
+                <UserIcon className="h-3 w-3 text-blue-600" />
+              </div>
+              <span className="truncate">{selectedUser.name || selectedUser.email}</span>
+              {selectedUser.role && (
+                <Badge variant="secondary" className="text-xs">
+                  {selectedUser.role}
+                </Badge>
+              )}
+            </div>
+          ) : users.isLoading ? (
+            "Loading users..."
+          ) : (
+            "Select user..."
+          )}
+          <ChevronDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-full p-0">
+        <div className="p-3 border-b">
+          <div className="relative">
+            <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search users..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+        </div>
+
+        <div className="max-h-64 overflow-y-auto">
+          {users.isLoading ? (
+            <div className="p-4 space-y-2">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-2 p-2">
+                  <Skeleton className="h-6 w-6 rounded-full" />
+                  <div className="flex-1 space-y-1">
+                    <Skeleton className="h-4 w-3/4" />
+                    <Skeleton className="h-3 w-1/2" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : users.data?.length === 0 ? (
+            <div className="p-4 text-center text-muted-foreground">
+              {debouncedSearch ? "No users found matching your search." : "No users available."}
+            </div>
+          ) : (
+            <div className="p-2">
+              {users.data?.map((user) => (
+                <div
+                  key={user.id}
+                  className={cn(
+                    "flex items-center gap-2 p-2 cursor-pointer hover:bg-gray-100 rounded-md",
+                    selectedItem === user.id && "bg-blue-50"
+                  )}
+                  onClick={() => {
+                    onSelect(user.id === selectedItem ? "" : user.id);
+                    setOpen(false);
+                  }}
+                >
+                  <CheckIcon
+                    className={cn(
+                      "h-4 w-4",
+                      selectedItem === user.id ? "opacity-100 text-blue-600" : "opacity-0"
+                    )}
+                  />
+                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-100">
+                    <UserIcon className="h-3 w-3 text-blue-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium truncate">{user.name || "Unknown"}</div>
+                    <div className="text-xs text-muted-foreground truncate">{user.email}</div>
+                  </div>
+                  {user.role && (
+                    <Badge variant="secondary" className="text-xs">
+                      {user.role}
+                    </Badge>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// Custom Facility Combobox Component with Fixed Search
+function FacilityComboBox({
+  selectedItem,
+  onSelect,
+}: {
+  selectedItem?: number;
+  onSelect: (value: number) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 20;
+
+  const debouncedSearch = useDebounce(search, 300);
+
+  // Fetch facilities with pagination and search
+  const facilities = api.facility.list.useQuery({
+    page: currentPage,
+    pageSize,
+    name: debouncedSearch,
+  });
+
+  // Fetch selected facility details if we have a selection
+  const selectedFacility = api.facility.byId.useQuery(
+    { id: selectedItem! },
+    { enabled: !!selectedItem && selectedItem > -1 }
+  );
+
+  const totalPages = facilities.data?.totalPages || 1;
+  const hasNextPage = currentPage < totalPages;
+  const hasPreviousPage = currentPage > 1;
+
+  // Reset to first page when search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch]);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full justify-between bg-white"
+        >
+          {selectedFacility.data ? (
+            <div className="flex items-center gap-2">
+              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-green-100">
+                <BuildingIcon className="h-3 w-3 text-green-600" />
+              </div>
+              <span className="truncate">{selectedFacility.data.name}</span>
+              <Badge variant="secondary" className="text-xs">
+                ID: {selectedFacility.data.id}
+              </Badge>
+            </div>
+          ) : selectedItem !== undefined && selectedItem > -1 ? (
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-6 w-6 rounded-full" />
+              <Skeleton className="h-4 w-32" />
+            </div>
+          ) : (
+            "Select facility..."
+          )}
+          <ChevronDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-full p-0">
+        <div className="p-3 border-b">
+          <div className="relative">
+            <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search facilities..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+        </div>
+        
+        <div className="max-h-64 overflow-y-auto">
+          {facilities.isLoading ? (
+            <div className="p-4 space-y-2">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-2 p-2">
+                  <Skeleton className="h-6 w-6 rounded-full" />
+                  <Skeleton className="h-4 flex-1" />
+                </div>
+              ))}
+            </div>
+          ) : facilities.data?.data.length === 0 ? (
+            <div className="p-4 text-center text-muted-foreground">
+              {debouncedSearch ? "No facilities found matching your search." : "No facilities available."}
+            </div>
+          ) : (
+            <div className="p-2">
+              {facilities.data?.data.map((facility) => (
+                <div
+                  key={facility.id}
+                  className={cn(
+                    "flex items-center gap-2 p-2 cursor-pointer hover:bg-gray-100 rounded-md",
+                    selectedItem === facility.id && "bg-green-50"
+                  )}
+                  onClick={() => {
+                    onSelect(facility.id === selectedItem ? -1 : facility.id);
+                    setOpen(false);
+                  }}
+                >
+                  <CheckIcon
+                    className={cn(
+                      "h-4 w-4",
+                      selectedItem === facility.id ? "opacity-100 text-green-600" : "opacity-0"
+                    )}
+                  />
+                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-green-100">
+                    <BuildingIcon className="h-3 w-3 text-green-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium truncate">{facility.name}</div>
+                    <div className="text-xs text-muted-foreground">
+                      ID: {facility.id} • {facility.address || "No address"}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Pagination Controls */}
+        {totalPages > 1 && (
+          <div className="border-t p-3">
+            <div className="flex items-center justify-between text-sm">
+              <div className="text-muted-foreground">
+                Page {currentPage} of {totalPages}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={!hasPreviousPage || facilities.isLoading}
+                >
+                  <ChevronLeftIcon className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={!hasNextPage || facilities.isLoading}
+                >
+                  <ChevronRightIcon className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+            {facilities.data && (
+              <div className="text-xs text-muted-foreground mt-1">
+                Showing {facilities.data.data.length} of {facilities.data.total} facilities
+              </div>
+            )}
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// Custom Template Combobox Component with Fixed Search
+function TemplateComboBox({
+  selectedItem,
+  onSelect,
+  withValue = false,
+}: {
+  selectedItem?: any;
+  onSelect: (value: any) => void;
+  withValue?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 15;
+
+  const debouncedSearch = useDebounce(search, 300);
+
+  // Fetch templates with pagination and search
+  const templates = api.template.list.useQuery({
+    page: currentPage,
+    pageSize,
+    name: debouncedSearch,
+  });
+
+  const totalPages = templates.data?.totalPages || 1;
+  const hasNextPage = currentPage < totalPages;
+  const hasPreviousPage = currentPage > 1;
+
+  // Reset to first page when search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch]);
+
+  // Get type badge color
+  const getTypeBadgeColor = (type: string) => {
+    switch (type) {
+      case 'case':
+        return 'bg-orange-100 text-orange-700';
+      case 'resident':
+        return 'bg-blue-100 text-blue-700';
+      default:
+        return 'bg-gray-100 text-gray-700';
+    }
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full justify-between bg-white"
+        >
+          {selectedItem ? (
+            <div className="flex items-center gap-2">
+              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-purple-100">
+                <FileTextIcon className="h-3 w-3 text-purple-600" />
+              </div>
+              <span className="truncate">{selectedItem.name}</span>
+              <Badge variant="secondary" className={`text-xs ${getTypeBadgeColor(selectedItem.type)}`}>
+                {selectedItem.type}
+              </Badge>
+            </div>
+          ) : (
+            "Select template..."
+          )}
+          <ChevronDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-full p-0">
+        <div className="p-3 border-b">
+          <div className="relative">
+            <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search templates..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+        </div>
+        
+        <div className="max-h-80 overflow-y-auto">
+          {templates.isLoading ? (
+            <div className="p-4 space-y-2">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-2 p-2">
+                  <Skeleton className="h-6 w-6 rounded-full" />
+                  <div className="flex-1 space-y-1">
+                    <Skeleton className="h-4 w-3/4" />
+                    <Skeleton className="h-3 w-1/2" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : templates.data?.data.length === 0 ? (
+            <div className="p-4 text-center text-muted-foreground">
+              {debouncedSearch ? "No templates found matching your search." : "No templates available."}
+            </div>
+          ) : (
+            <div className="p-2">
+              {templates.data?.data.map((template) => (
+                <div
+                  key={template.id}
+                  className={cn(
+                    "flex items-center gap-2 p-2 cursor-pointer hover:bg-gray-100 rounded-md",
+                    selectedItem?.id === template.id && "bg-purple-50"
+                  )}
+                  onClick={() => {
+                    const newValue = withValue 
+                      ? (template.id === selectedItem?.id ? undefined : template)
+                      : (template.id === selectedItem?.id ? undefined : template.id);
+                    onSelect(newValue);
+                    setOpen(false);
+                  }}
+                >
+                  <CheckIcon
+                    className={cn(
+                      "h-4 w-4",
+                      selectedItem?.id === template.id ? "opacity-100 text-purple-600" : "opacity-0"
+                    )}
+                  />
+                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-purple-100">
+                    <FileTextIcon className="h-3 w-3 text-purple-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium truncate">{template.name}</div>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <Badge 
+                      variant="secondary" 
+                      className={`text-xs ${getTypeBadgeColor(template.type)}`}
+                    >
+                      {template.type}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">ID: {template.id}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Pagination Controls */}
+        {totalPages > 1 && (
+          <div className="border-t p-3">
+            <div className="flex items-center justify-between text-sm">
+              <div className="text-muted-foreground">
+                Page {currentPage} of {totalPages}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={!hasPreviousPage || templates.isLoading}
+                >
+                  <ChevronLeftIcon className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={!hasNextPage || templates.isLoading}
+                >
+                  <ChevronRightIcon className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+            {templates.data && (
+              <div className="text-xs text-muted-foreground mt-1">
+                Showing {templates.data.data.length} of {templates.data.total} templates
+              </div>
+            )}
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
   const user = authClient.useSession();
   
   // Get current organization ID from session
   const currentOrgId = user.data?.session.activeOrganizationId;
   
-  // Use listInOrg instead of list
+  // Fetch users for initial load
   const users = api.user.listInOrg.useQuery({
     organizationId: currentOrgId || "",
     page: 1,
-    pageSize: 100, // Get enough users for the dropdown
+    pageSize: 100,
   }, {
-    enabled: !!currentOrgId, // Only fetch when we have an org ID
+    enabled: !!currentOrgId,
+    retry: 3,
+    retryDelay: 1000,
   });
 
   const createSurvey = api.survey.create.useMutation();
@@ -194,7 +685,7 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
 
   return (
     <div className="space-y-6">
-      {/* Main Form - Clean white background */}
+      {/* Main Form */}
       <Card className="border-2 border-blue-100 bg-gradient-to-r from-blue-50/30 to-indigo-50/30">
         <CardHeader className="border-b border-blue-100">
           <div className="flex items-center gap-2">
@@ -280,8 +771,6 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
               sIndex={sIndex}
               surveyor={surveyor}
               surveyorsField={surveyorsField}
-              usersData={users.data}
-              currentOrgId={currentOrgId ?? undefined}
             />
           );
         })}
@@ -328,15 +817,11 @@ function SurveyorField({
   sIndex,
   surveyor,
   surveyorsField,
-  usersData,
-  currentOrgId,
 }: {
   form: UseFormReturn<NewMultiSurveyCreateInputType>;
   sIndex: number;
   surveyor: any;
   surveyorsField: UseFieldArrayReturn<NewMultiSurveyCreateInputType>;
-  usersData?: any[];
-  currentOrgId?: string;
 }) {
   const templatesField = useFieldArray({
     control: form.control,
@@ -379,7 +864,7 @@ function SurveyorField({
                 <FormLabel>User</FormLabel>
                 <FormControl>
                   <UserComboBox
-                    selectedItem={String(field.value)}
+                    selectedItem={field.value}
                     onSelect={(item) => field.onChange(item)}
                   />
                 </FormControl>
@@ -460,6 +945,7 @@ function SurveyorField({
                                   />
                                 </FormControl>
                                 <Button
+                                  type="button"
                                   size="icon"
                                   variant="secondary"
                                   className="bg-slate-200 hover:bg-slate-300"
