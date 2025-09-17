@@ -48,6 +48,109 @@ type QuestionStrength = {
   unmetCount: number;
 };
 
+// Move CommentsSection outside the main component
+const CommentsSection = ({
+  comments,
+  showComments,
+  setShowComments,
+  newComment,
+  setNewComment,
+  handleAddComment,
+  addComment
+}: {
+  comments: any;
+  showComments: boolean;
+  setShowComments: (show: boolean) => void;
+  newComment: string;
+  setNewComment: (comment: string) => void;
+  handleAddComment: () => void;
+  addComment: any;
+}) => (
+  <div className="border-t mt-4 pt-4 pb-4">
+    <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center gap-2">
+        <MessageCircle className="h-4 w-4" />
+        <span className="text-sm font-medium">Comments</span>
+        {comments.data && comments.data.length > 0 && (
+          <Badge variant="secondary" className="text-xs">
+            {comments.data.length}
+          </Badge>
+        )}
+      </div>
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => setShowComments(!showComments)}
+      >
+        {showComments ? "Hide" : "Show"} Comments
+      </Button>
+    </div>
+
+    {showComments && (
+      <div className="space-y-4">
+        {/* Comments List with CSS scroll area */}
+        <div className="custom-scroll-area">
+          {comments.data && comments.data.length > 0 ? (
+            <div className="space-y-3">
+              {comments.data?.map((comment: any) => (
+                <div key={comment.id} className="flex gap-3 p-3 rounded-lg bg-muted/50">
+                  <div className="flex-shrink-0">
+                    <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                      <User className="h-4 w-4" />
+                    </div>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-sm font-medium">
+                        {comment.author ? comment.author.name : "Unknown User"}
+                      </span>
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <Clock className="h-3 w-3" />
+                        {comment.createdAt && format(new Date(comment.createdAt), "MMM dd, yyyy 'at' h:mm a")}
+                      </div>
+                    </div>
+                    <p className="text-sm text-foreground break-words">
+                      {comment.commentText}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center text-muted-foreground py-8">
+              <MessageCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
+              <p className="text-sm">No comments yet. Be the first to add one!</p>
+            </div>
+          )}
+        </div>
+
+        {/* Add Comment */}
+        <div className="flex gap-2">
+          <Input
+            placeholder="Add a comment..."
+            value={newComment}
+            onChange={(e) => setNewComment(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleAddComment();
+              }
+            }}
+            disabled={addComment.isPending}
+          />
+          <Button
+            onClick={handleAddComment}
+            disabled={!newComment.trim() || addComment.isPending}
+            size="sm"
+          >
+            <Send className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+    )}
+  </div>
+);
+
 export default function SurveyDetailPage() {
   const params = useParams();
   const surveyId = Number((params as any).surveyId);
@@ -56,7 +159,7 @@ export default function SurveyDetailPage() {
   const survey = api.survey.byId.useQuery({ id: surveyId });
   const residents = api.survey.listResidents.useQuery({ surveyId });
   const cases = api.survey.listCases.useQuery({ surveyId });
-  
+
   // Get ALL questions without pagination
   const questions = api.question.list.useQuery(
     { templateId: survey.data?.templateId ?? -1 },
@@ -65,9 +168,9 @@ export default function SurveyDetailPage() {
 
   // Comments
   const comments = api.pocComment.list.useQuery(
-    { 
+    {
       surveyId: surveyId,
-      templateId: survey.data?.templateId ?? -1 
+      templateId: survey.data?.templateId ?? -1
     },
     { enabled: Boolean(survey.data?.templateId) }
   );
@@ -157,13 +260,13 @@ export default function SurveyDetailPage() {
         }
         return;
       }
-      
+
       try {
         const residentIds = residents.data.map((r) => r.residentId);
         const pocResults = await Promise.all(
           residentIds.map((rid) => utils.poc.list.fetch({ surveyId, residentId: rid }))
         );
-        
+
         const newPocMap = new Map<string, string>();
         let foundAnyPOC = false;
         let firstPocText = "";
@@ -172,7 +275,7 @@ export default function SurveyDetailPage() {
         for (let i = 0; i < residentIds.length; i++) {
           const residentId = residentIds[i];
           const pocRows = pocResults[i] ?? [];
-          
+
           for (const pocRow of pocRows) {
             if (pocRow.pocText && pocRow.pocText.trim()) {
               const key = `${residentId}-${pocRow.questionId}`;
@@ -264,18 +367,18 @@ export default function SurveyDetailPage() {
   const residentProgress = useMemo(() => {
     const map = new Map<number, { answered: number; unanswered: number }>();
     if (!residents.data || allQuestionIds.length === 0) return map;
-    
+
     for (const r of residents.data) {
       const ansMap = byResident.get(r.residentId) ?? new Map<number, ResponseCell>();
       let answered = 0;
-      
+
       for (const qid of allQuestionIds) {
         const item = ansMap.get(qid);
         if (item?.status && (item.status === "met" || item.status === "unmet" || item.status === "not_applicable")) {
           answered += 1;
         }
       }
-      
+
       const unanswered = allQuestionIds.length - answered;
       map.set(r.residentId, { answered, unanswered });
     }
@@ -384,15 +487,15 @@ export default function SurveyDetailPage() {
 
       doc.text(`Survey Number: #${surveyId}`, 20, yPos);
       yPos += 8;
-      
+
       const facilityName = survey.data.facilityId || `Facility ${survey.data.facilityId}`;
       doc.text(`Facility: ${facilityName}`, 20, yPos);
       yPos += 8;
-      
+
       const surveyorName = survey.data.surveyorId || `Surveyor ${survey.data.surveyorId}`;
       doc.text(`Surveyor: ${surveyorName}`, 20, yPos);
       yPos += 8;
-      
+
       const templateName = survey.data.template?.name || `Template #${survey.data.templateId}`;
       doc.text(`Template: ${templateName}`, 20, yPos);
       yPos += 8;
@@ -408,16 +511,16 @@ export default function SurveyDetailPage() {
 
       doc.setFontSize(11);
       doc.setFont("helvetica", "normal");
-      
+
       // Split POC text into lines that fit the page width
       const pocLines = doc.splitTextToSize(combinedPOC, 170);
-      
+
       // Check if we need a new page
       if (yPos + (pocLines.length * 5) > 280) {
         doc.addPage();
         yPos = 20;
       }
-      
+
       doc.text(pocLines, 20, yPos);
       yPos += pocLines.length * 5 + 15;
 
@@ -447,7 +550,7 @@ export default function SurveyDetailPage() {
           // Comment author and date
           const authorName = comment.author?.name || "Unknown User";
           const commentDate = comment.createdAt ? format(new Date(comment.createdAt), "MMM dd, yyyy 'at' h:mm a") : "";
-          
+
           doc.setFont("helvetica", "bold");
           doc.text(`${authorName} - ${commentDate}`, 20, yPos);
           yPos += 6;
@@ -541,7 +644,7 @@ export default function SurveyDetailPage() {
 
     try {
       const updates: Array<{ residentId: number; questionId: number }> = [];
-      
+
       for (const r of residents.data ?? []) {
         const ansMap = byResident.get(r.residentId) ?? new Map<number, ResponseCell>();
         for (const q of questions.data ?? []) {
@@ -579,7 +682,7 @@ export default function SurveyDetailPage() {
 
       const affectedResidents = Array.from(new Set(updates.map(u => u.residentId)));
       await Promise.all(affectedResidents.map((rid) => utils.poc.list.invalidate({ surveyId, residentId: rid })));
-      
+
       setSheetOpen(false);
       toast.success("POC updated for unmet questions successfully");
     } catch (e) {
@@ -591,7 +694,7 @@ export default function SurveyDetailPage() {
   // Handle adding comment
   const handleAddComment = useCallback(async () => {
     if (!survey.data || !newComment.trim()) return;
-    
+
     try {
       await addComment.mutateAsync({
         surveyId,
@@ -688,93 +791,6 @@ export default function SurveyDetailPage() {
     );
   };
 
-  // Comments component
-  const CommentsSection = () => (
-    <div className="border-t mt-4 pt-4 pb-4">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <MessageCircle className="h-4 w-4" />
-          <span className="text-sm font-medium">Comments</span>
-          {comments.data && comments.data.length > 0 && (
-            <Badge variant="secondary" className="text-xs">
-              {comments.data.length}
-            </Badge>
-          )}
-        </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setShowComments(!showComments)}
-        >
-          {showComments ? "Hide" : "Show"} Comments
-        </Button>
-      </div>
-
-      {showComments && (
-        <div className="space-y-4">
-          {/* Comments List with CSS scroll area */}
-          <div className="custom-scroll-area">
-            {comments.data && comments.data.length > 0 ? (
-              <div className="space-y-3">
-                {comments.data?.map((comment) => (
-                  <div key={comment.id} className="flex gap-3 p-3 rounded-lg bg-muted/50">
-                    <div className="flex-shrink-0">
-                      <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
-                        <User className="h-4 w-4" />
-                      </div>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-sm font-medium">
-                          {comment.author ? comment.author.name : "Unknown User"}
-                        </span>
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Clock className="h-3 w-3" />
-                          {comment.createdAt && format(new Date(comment.createdAt), "MMM dd, yyyy 'at' h:mm a")}
-                        </div>
-                      </div>
-                      <p className="text-sm text-foreground break-words">
-                        {comment.commentText}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center text-muted-foreground py-8">
-                <MessageCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">No comments yet. Be the first to add one!</p>
-              </div>
-            )}
-          </div>
-
-          {/* Add Comment */}
-          <div className="flex gap-2">
-            <Input
-              placeholder="Add a comment..."
-              value={newComment}
-              onChange={(e) => setNewComment(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleAddComment();
-                }
-              }}
-              disabled={addComment.isPending}
-            />
-            <Button
-              onClick={handleAddComment}
-              disabled={!newComment.trim() || addComment.isPending}
-              size="sm"
-            >
-              <Send className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-
   // POC control component
   const renderPOCControl = () => {
     if (!isLocked) return null;
@@ -834,10 +850,18 @@ export default function SurveyDetailPage() {
               {/* Comments Section in POC Sheet */}
               {hasAnyPOC && (
                 <div className="px-4">
-                  <CommentsSection />
+                  <CommentsSection
+                    comments={comments}
+                    showComments={showComments}
+                    setShowComments={setShowComments}
+                    newComment={newComment}
+                    setNewComment={setNewComment}
+                    handleAddComment={handleAddComment}
+                    addComment={addComment}
+                  />
                 </div>
               )}
-              
+
               <div className="border-t">
                 <div className="px-4 py-3">
                   <div className="text-xs text-muted-foreground mb-2">
@@ -873,9 +897,9 @@ export default function SurveyDetailPage() {
                         Close
                       </Button>
                     </SheetClose>
-                    <Button 
-                      size="sm" 
-                      onClick={handleSaveCombinedPOC} 
+                    <Button
+                      size="sm"
+                      onClick={handleSaveCombinedPOC}
                       disabled={pocUpsert.isPending || !combinedPOC.trim()}
                     >
                       {pocUpsert.isPending ? "Saving..." : hasAnyPOC ? "Update POC" : "Save POC"}
@@ -959,7 +983,7 @@ export default function SurveyDetailPage() {
 
         <Separator />
 
-        {survey.data.template?.type === "resident" && (
+        {(survey.data.template?.type === "general" || survey.data.template?.type === "resident") && (
           <>
             {/* Template Information */}
             <div className="mb-4">
@@ -1009,7 +1033,7 @@ export default function SurveyDetailPage() {
                   const progress = residentProgress.get(r.residentId) ?? { answered: 0, unanswered: allQuestionIds.length };
                   const totalQ = allQuestionIds.length || 1;
                   const pct = Math.round((progress.answered / totalQ) * 100);
-                  
+
                   return (
                     <TableRow key={r.id}>
                       <TableCell>{r.residentId}</TableCell>
