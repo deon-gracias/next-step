@@ -4,7 +4,6 @@ import { QISVHeader } from "../_components/header";
 import { api } from "@/trpc/react";
 import { Button } from "@/components/ui/button";
 import {
-  MapPinIcon,
   PlusIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -12,6 +11,7 @@ import {
   ChevronsLeftIcon,
   UploadIcon,
   FileTextIcon,
+  TrashIcon,
 } from "lucide-react";
 import { NewResidentForm } from "./_components/new-resident-form";
 import {
@@ -24,13 +24,16 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@/components/ui/hover-card";
-import { Badge } from "@/components/ui/badge";
-import { useState, useRef } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   Dialog,
   DialogContent,
@@ -46,20 +49,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useState, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { authClient } from "@/components/providers/auth-client";
 import { FacilityHoverCard } from "../_components/facility-card";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
 function FacilityValue({ id }: { id: number }) {
-  const facility = api.facility.byId.useQuery({ id: id });
+  const facility = api.facility.byId.useQuery({ id });
 
   if (facility.isPending) return <Skeleton className="h-4 w-[100px]" />;
 
   if (!facility.data)
     return <span className="text-muted-foreground text-sm">No facility</span>;
 
-  return facility.data && <FacilityHoverCard facility={facility.data} />;
+  return <FacilityHoverCard facility={facility.data} />;
 }
 
 const PAGE_SIZES = [10, 50, 100];
@@ -74,6 +80,7 @@ export default function ResidentsPage() {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [isUploadingCSV, setIsUploadingCSV] = useState(false);
+  const [residentToDelete, setResidentToDelete] = useState<{ id: number; name: string } | null>(null);
 
   const activeOrganization = authClient.useActiveOrganization();
 
@@ -96,12 +103,34 @@ export default function ResidentsPage() {
     },
   });
 
+  const deleteResident = api.resident.delete.useMutation({
+    onSuccess: () => {
+      toast.success("Resident deleted successfully");
+      void utils.resident.list.invalidate();
+      setResidentToDelete(null);
+    },
+    onError: (error) => {
+      toast.error(`Failed to delete resident: ${error.message}`);
+      setResidentToDelete(null);
+    },
+  });
+
   const hasNewResidentPermission = useQuery({
     queryKey: ["residentPermission"],
     queryFn: async () =>
       (
         await authClient.organization.hasPermission({
           permissions: { member: ["create"] },
+        })
+      ).data?.success ?? false,
+  });
+
+  const hasDeleteResidentPermission = useQuery({
+    queryKey: ["residentDeletePermission"],
+    queryFn: async () =>
+      (
+        await authClient.organization.hasPermission({
+          permissions: { member: ["delete"] },
         })
       ).data?.success ?? false,
   });
@@ -130,11 +159,10 @@ export default function ResidentsPage() {
     }
 
     const headers = firstLine.split(',').map(h => h.trim().toLowerCase());
-    
-    // Expected headers based on your schema
+
     const requiredHeaders = ['name', 'facilityid', 'roomid', 'pcciid'];
     const missingHeaders = requiredHeaders.filter(h => !headers.includes(h));
-    
+
     if (missingHeaders.length > 0) {
       throw new Error(`Missing required columns: ${missingHeaders.join(', ')}`);
     }
@@ -143,18 +171,17 @@ export default function ResidentsPage() {
     for (let i = 1; i < lines.length; i++) {
       const line = lines[i];
       if (!line) continue;
-      
+
       const values = line.split(',').map(v => v.trim());
       const resident: any = {};
-      
+
       headers.forEach((header, index) => {
         let value = values[index] || '';
-        
-        // Remove quotes if present
+
         if (value.startsWith('"') && value.endsWith('"')) {
           value = value.slice(1, -1);
         }
-        
+
         switch (header) {
           case 'name':
             resident.name = value;
@@ -198,7 +225,7 @@ export default function ResidentsPage() {
     try {
       const csvContent = await file.text();
       const residents = parseCSV(csvContent);
-      
+
       if (residents.length === 0) {
         toast.error('No valid resident data found in CSV');
         setIsUploadingCSV(false);
@@ -206,13 +233,12 @@ export default function ResidentsPage() {
       }
 
       await bulkCreateResidents.mutateAsync({ residents });
-      
+
     } catch (error: any) {
       toast.error(error.message || 'Failed to process CSV file');
       setIsUploadingCSV(false);
     }
 
-    // Reset file input
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -233,10 +259,8 @@ export default function ResidentsPage() {
               Manage residents and their facility assignments
             </p>
           </div>
-
           {hasNewResidentPermission.data && (
             <div className="flex items-center gap-3">
-              {/* Hidden file input */}
               <input
                 ref={fileInputRef}
                 type="file"
@@ -244,8 +268,6 @@ export default function ResidentsPage() {
                 onChange={handleCSVUpload}
                 className="hidden"
               />
-              
-              {/* CSV Upload Button */}
               <Button
                 variant="outline"
                 onClick={triggerCSVUpload}
@@ -263,8 +285,6 @@ export default function ResidentsPage() {
                   </>
                 )}
               </Button>
-
-              {/* New Resident Button */}
               <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
                 <DialogTrigger asChild>
                   <Button>
@@ -282,8 +302,6 @@ export default function ResidentsPage() {
             </div>
           )}
         </div>
-
-        {/* CSV Format Helper */}
         <div className="mb-4 rounded-lg bg-muted/50 p-4">
           <div className="flex items-start gap-2">
             <FileTextIcon className="mt-0.5 size-4 text-muted-foreground" />
@@ -298,7 +316,6 @@ export default function ResidentsPage() {
             </div>
           </div>
         </div>
-
         <div className="rounded-lg border">
           <Table>
             <TableHeader>
@@ -308,6 +325,9 @@ export default function ResidentsPage() {
                 <TableHead>Facility</TableHead>
                 <TableHead>Room</TableHead>
                 <TableHead>PCCI ID</TableHead>
+                {hasDeleteResidentPermission.data && (
+                  <TableHead className="w-[100px]">Actions</TableHead>
+                )}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -322,15 +342,19 @@ export default function ResidentsPage() {
                         <Skeleton className="h-6" />
                       </TableCell>
                     ))}
+                    {hasDeleteResidentPermission.data && (
+                      <TableCell>
+                        <Skeleton className="h-8 w-8" />
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
-
               {!residents.isPending &&
                 residents.data &&
                 residents.data.data.length === 0 && (
                   <TableRow>
                     <TableCell
-                      colSpan={5}
+                      colSpan={hasDeleteResidentPermission.data ? 6 : 5}
                       className="text-muted-foreground py-8 text-center"
                     >
                       No residents found. Add your first resident to get
@@ -338,7 +362,6 @@ export default function ResidentsPage() {
                     </TableCell>
                   </TableRow>
                 )}
-
               {!residents.isPending &&
                 residents.data &&
                 residents.data.data.map((resident) => (
@@ -346,9 +369,7 @@ export default function ResidentsPage() {
                     <TableCell className="text-right font-mono tabular-nums">
                       {resident.id}
                     </TableCell>
-                    <TableCell className="font-medium">
-                      {resident.name}
-                    </TableCell>
+                    <TableCell className="font-medium">{resident.name}</TableCell>
                     <TableCell>
                       <FacilityValue id={resident.facilityId} />
                     </TableCell>
@@ -362,13 +383,69 @@ export default function ResidentsPage() {
                         {resident.pcciId}
                       </code>
                     </TableCell>
+                    {hasDeleteResidentPermission.data && (
+                      <TableCell>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-destructive hover:text-destructive"
+                              onClick={() =>
+                                setResidentToDelete({
+                                  id: resident.id,
+                                  name: resident.name,
+                                })
+                              }
+                              disabled={deleteResident.isPending}
+                            >
+                              <TrashIcon className="h-4 w-4" />
+                              <span className="sr-only">Delete resident</span>
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>
+                                Are you absolutely sure?
+                              </AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This action cannot be undone. This will
+                                permanently delete the resident "
+                                {residentToDelete?.id === resident.id
+                                  ? residentToDelete.name
+                                  : resident.name}
+                                " and remove all data from our servers.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel
+                                onClick={() => setResidentToDelete(null)}
+                                disabled={deleteResident.isPending}
+                              >
+                                Cancel
+                              </AlertDialogCancel>
+                              <AlertDialogAction
+                                className="px-6 py-2 rounded-lg bg-destructive text-white font-semibold transition-colors duration-150 hover:bg-red-700 active:bg-red-800 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                                onClick={() => {
+                                  setResidentToDelete(null);
+                                  deleteResident.mutate({ id: resident.id });
+                                }}
+                                disabled={deleteResident.isPending}
+                              >
+                                {deleteResident.isPending
+                                  ? "Deleting..."
+                                  : "Delete"}
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
             </TableBody>
           </Table>
         </div>
-
-        {/* Footer */}
         <div className="mt-4 flex items-center justify-between px-4">
           <div className="text-muted-foreground hidden flex-1 text-sm lg:flex"></div>
           <div className="flex w-full items-center gap-8 lg:w-fit">

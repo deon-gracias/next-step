@@ -12,6 +12,7 @@ import {
   surveyCases,
   surveyPOC,
   question,
+  surveyDOC,
 } from "@/server/db/schema";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import { eq, and, inArray, sql, getTableColumns, asc, desc } from "drizzle-orm";
@@ -62,10 +63,44 @@ export const surveyRouter = createTRPCRouter({
     }),
 
   delete: protectedProcedure
-    .input(z.object({ id: surveySelectSchema.shape.id }))
-    .mutation(async ({ ctx, input }) => {
-      await ctx.db.delete(survey).where(eq(survey.id, input.id));
-    }),
+  .input(z.object({ id: surveySelectSchema.shape.id }))
+  .mutation(async ({ ctx, input }) => {
+    // Delete all related records first to avoid foreign key constraint violations
+    
+    // 1. Delete survey responses
+    await ctx.db
+      .delete(surveyResponse)
+      .where(eq(surveyResponse.surveyId, input.id));
+    
+    // 2. Delete survey residents
+    await ctx.db
+      .delete(surveyResident)
+      .where(eq(surveyResident.surveyId, input.id));
+    
+    // 3. Delete survey cases
+    await ctx.db
+      .delete(surveyCases)
+      .where(eq(surveyCases.surveyId, input.id));
+    
+    // 4. Delete survey POCs
+    await ctx.db
+      .delete(surveyPOC)
+      .where(eq(surveyPOC.surveyId, input.id));
+    
+    // 5. Delete survey DOCs (ADD THIS)
+    await ctx.db
+      .delete(surveyDOC)
+      .where(eq(surveyDOC.surveyId, input.id));
+    
+    // 6. Finally delete the survey itself
+    await ctx.db
+      .delete(survey)
+      .where(eq(survey.id, input.id));
+    
+    return { success: true, deletedSurveyId: input.id };
+  }),
+
+
 
   byId: protectedProcedure
     .input(z.object({ id: surveySelectSchema.shape.id }))

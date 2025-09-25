@@ -25,7 +25,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { Lock, Unlock, MessageCircle, Send, User, Clock, Download } from "lucide-react";
+import { Lock, Unlock, MessageCircle, Send, User, Clock, Download, Calendar, AlertTriangle, Users, FileText, Tag } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { format } from "date-fns";
@@ -66,21 +66,26 @@ const CommentsSection = ({
   handleAddComment: () => void;
   addComment: any;
 }) => (
-  <div className="border-t mt-4 pt-4 pb-4">
+  <div className="border-t bg-slate-50/50 mt-6 pt-6">
     <div className="flex items-center justify-between mb-4">
-      <div className="flex items-center gap-2">
-        <MessageCircle className="h-4 w-4" />
-        <span className="text-sm font-medium">Comments</span>
-        {comments.data && comments.data.length > 0 && (
-          <Badge variant="secondary" className="text-xs">
-            {comments.data.length}
-          </Badge>
-        )}
+      <div className="flex items-center gap-3">
+        <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">
+          <MessageCircle className="h-4 w-4 text-blue-600" />
+        </div>
+        <div>
+          <span className="text-sm font-semibold text-gray-900">Discussion</span>
+          {comments.data && comments.data.length > 0 && (
+            <Badge variant="secondary" className="ml-2 text-xs bg-blue-100 text-blue-800">
+              {comments.data.length} comment{comments.data.length !== 1 ? 's' : ''}
+            </Badge>
+          )}
+        </div>
       </div>
       <Button
         variant="ghost"
         size="sm"
         onClick={() => setShowComments(!showComments)}
+        className="text-gray-600 hover:text-gray-900"
       >
         {showComments ? "Hide" : "Show"} Comments
       </Button>
@@ -88,46 +93,42 @@ const CommentsSection = ({
 
     {showComments && (
       <div className="space-y-4">
-        {/* Comments List with CSS scroll area */}
-        <div className="custom-scroll-area">
+        <div className="max-h-60 overflow-y-auto space-y-3 bg-white rounded-lg border p-4">
           {comments.data && comments.data.length > 0 ? (
-            <div className="space-y-3">
-              {comments.data?.map((comment: any) => (
-                <div key={comment.id} className="flex gap-3 p-3 rounded-lg bg-muted/50">
-                  <div className="flex-shrink-0">
-                    <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
-                      <User className="h-4 w-4" />
-                    </div>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-sm font-medium">
-                        {comment.author ? comment.author.name : "Unknown User"}
-                      </span>
-                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <Clock className="h-3 w-3" />
-                        {comment.createdAt && format(new Date(comment.createdAt), "MMM dd, yyyy 'at' h:mm a")}
-                      </div>
-                    </div>
-                    <p className="text-sm text-foreground break-words">
-                      {comment.commentText}
-                    </p>
+            comments.data.map((comment: any) => (
+              <div key={comment.id} className="flex gap-3 p-3 rounded-lg bg-gray-50 border">
+                <div className="flex-shrink-0">
+                  <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+                    <User className="h-4 w-4 text-white" />
                   </div>
                 </div>
-              ))}
-            </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-sm font-medium text-gray-900">
+                      {comment.author ? comment.author.name : "Unknown User"}
+                    </span>
+                    <div className="flex items-center gap-1 text-xs text-gray-500">
+                      <Clock className="h-3 w-3" />
+                      {comment.createdAt && format(new Date(comment.createdAt), "MMM dd, yyyy 'at' h:mm a")}
+                    </div>
+                  </div>
+                  <p className="text-sm text-gray-700 leading-relaxed">
+                    {comment.commentText}
+                  </p>
+                </div>
+              </div>
+            ))
           ) : (
-            <div className="text-center text-muted-foreground py-8">
-              <MessageCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
-              <p className="text-sm">No comments yet. Be the first to add one!</p>
+            <div className="text-center text-gray-500 py-8">
+              <MessageCircle className="h-8 w-8 mx-auto mb-2 opacity-30" />
+              <p className="text-sm">No comments yet. Start the discussion!</p>
             </div>
           )}
         </div>
 
-        {/* Add Comment */}
         <div className="flex gap-2">
           <Input
-            placeholder="Add a comment..."
+            placeholder="Add your comment here..."
             value={newComment}
             onChange={(e) => setNewComment(e.target.value)}
             onKeyDown={(e) => {
@@ -137,11 +138,13 @@ const CommentsSection = ({
               }
             }}
             disabled={addComment.isPending}
+            className="flex-1"
           />
           <Button
             onClick={handleAddComment}
             disabled={!newComment.trim() || addComment.isPending}
             size="sm"
+            className="px-4"
           >
             <Send className="h-4 w-4" />
           </Button>
@@ -155,7 +158,7 @@ export default function SurveyDetailPage() {
   const params = useParams();
   const surveyId = Number((params as any).surveyId);
 
-  // Data
+  // Data - fetch residents for all template types
   const survey = api.survey.byId.useQuery({ id: surveyId });
   const residents = api.survey.listResidents.useQuery({ surveyId });
   const cases = api.survey.listCases.useQuery({ surveyId });
@@ -192,6 +195,7 @@ export default function SurveyDetailPage() {
     onError: (e) => toast.error((e as { message?: string })?.message ?? "Failed to unlock survey"),
   });
   const pocUpsert = api.poc.upsert.useMutation();
+  const docUpsert = api.doc.upsert.useMutation();
   const addComment = api.pocComment.create.useMutation({
     onSuccess: async () => {
       await utils.pocComment.list.invalidate({ surveyId, templateId: survey.data?.templateId ?? -1 });
@@ -206,6 +210,12 @@ export default function SurveyDetailPage() {
   const [combinedPOC, setCombinedPOC] = useState("");
   const [hasAnyPOC, setHasAnyPOC] = useState(false);
   const [pocMap, setPocMap] = useState<Map<string, string>>(new Map());
+  
+  // DOC state
+  const [combinedDOC, setCombinedDOC] = useState<Date | null>(null);
+  const [hasAnyDOC, setHasAnyDOC] = useState(false);
+  const [docMap, setDocMap] = useState<Map<string, Date>>(new Map());
+  
   const [allResponses, setAllResponses] = useState<
     Array<{ residentId: number; questionId: number; status: StatusVal | null; findings: string | null }>
   >([]);
@@ -306,6 +316,66 @@ export default function SurveyDetailPage() {
       cancelled = true;
     };
   }, [survey.data, residents.data, surveyId, utils.poc.list]);
+
+  // Fetch existing DOCs for the survey
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!survey.data || !residents.data || residents.data.length === 0) {
+        if (!cancelled) {
+          setHasAnyDOC(false);
+          setDocMap(new Map());
+          setCombinedDOC(null);
+        }
+        return;
+      }
+
+      try {
+        const residentIds = residents.data.map((r) => r.residentId);
+        const docResults = await Promise.all(
+          residentIds.map((rid) => utils.doc.list.fetch({ surveyId, residentId: rid }))
+        );
+
+        const newDocMap = new Map<string, Date>();
+        let foundAnyDOC = false;
+        let firstDocDate: Date | null = null;
+
+        // For each resident, collect DOC dates per question
+        for (let i = 0; i < residentIds.length; i++) {
+          const residentId = residentIds[i];
+          const docRows = docResults[i] ?? [];
+
+          for (const docRow of docRows) {
+            if (docRow.complianceDate) {
+              const key = `${residentId}-${docRow.questionId}`;
+              const docDate = new Date(docRow.complianceDate);
+              newDocMap.set(key, docDate);
+              foundAnyDOC = true;
+              if (!firstDocDate) {
+                firstDocDate = docDate;
+              }
+            }
+          }
+        }
+
+        if (!cancelled) {
+          setDocMap(newDocMap);
+          setHasAnyDOC(foundAnyDOC);
+          setCombinedDOC(firstDocDate);
+        }
+      } catch (error) {
+        console.error("Failed to fetch DOCs:", error);
+        if (!cancelled) {
+          setHasAnyDOC(false);
+          setDocMap(new Map());
+          setCombinedDOC(null);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [survey.data, residents.data, surveyId, utils.doc.list]);
 
   // When sheet opens, set the POC text from the map
   useEffect(() => {
@@ -524,6 +594,24 @@ export default function SurveyDetailPage() {
       doc.text(pocLines, 20, yPos);
       yPos += pocLines.length * 5 + 15;
 
+      // DOC SECTION TO PDF
+      if (hasAnyDOC && combinedDOC) {
+        if (yPos + 20 > 280) {
+          doc.addPage();
+          yPos = 20;
+        }
+
+        doc.setFontSize(16);
+        doc.setFont("helvetica", "bold");
+        doc.text("Date of Compliance", 20, yPos);
+        yPos += 10;
+
+        doc.setFontSize(11);
+        doc.setFont("helvetica", "normal");
+        doc.text(`Compliance Date: ${format(combinedDOC, "MMM dd, yyyy")}`, 20, yPos);
+        yPos += 15;
+      }
+
       // Comments Section
       if (comments.data && comments.data.length > 0) {
         // Check if we need a new page for comments
@@ -630,7 +718,7 @@ export default function SurveyDetailPage() {
     } finally {
       setIsGeneratingPDF(false);
     }
-  }, [survey.data, hasAnyPOC, surveyId, combinedPOC, comments.data, sheetBlocks]);
+  }, [survey.data, hasAnyPOC, surveyId, combinedPOC, comments.data, sheetBlocks, hasAnyDOC, combinedDOC]);
 
   // Save POC handler
   const handleSaveCombinedPOC = useCallback(async () => {
@@ -690,6 +778,64 @@ export default function SurveyDetailPage() {
       toast.error("Failed to save POC");
     }
   }, [survey.data, canOpenPOCSheet, combinedPOC, pocUpsert, utils.poc.list, surveyId, questions.data, residents.data, byResident, pocMap]);
+
+  // DOC save handler
+  const handleSaveCombinedDOC = useCallback(async () => {
+    if (!survey.data || !canOpenPOCSheet || !combinedDOC) return;
+    const templateId = survey.data.templateId;
+
+    try {
+      const updates: Array<{ residentId: number; questionId: number }> = [];
+      
+      for (const r of residents.data ?? []) {
+        const ansMap = byResident.get(r.residentId) ?? new Map<number, ResponseCell>();
+        for (const q of questions.data ?? []) {
+          const cell = ansMap.get(q.id);
+          if (cell?.status === "unmet") {
+            updates.push({ residentId: r.residentId, questionId: q.id });
+          }
+        }
+      }
+
+      if (updates.length === 0) {
+        toast.error("No questions with unmet answers found");
+        return;
+      }
+
+      if (!combinedDOC) return;
+      // Convert Date to YYYY-MM-DD string format
+      const complianceDateString = combinedDOC.toISOString().split('T')[0];
+      if (!complianceDateString) return;
+
+      await Promise.all(
+        updates.map((update) =>
+          docUpsert.mutateAsync({
+            surveyId,
+            residentId: update.residentId,
+            templateId,
+            questionId: update.questionId,
+            complianceDate: complianceDateString,
+          })
+        )
+      );
+
+      const newDocMap = new Map(docMap);
+      updates.forEach(update => {
+        const key = `${update.residentId}-${update.questionId}`;
+        newDocMap.set(key, combinedDOC);
+      });
+      setDocMap(newDocMap);
+      setHasAnyDOC(true);
+
+      const affectedResidents = Array.from(new Set(updates.map(u => u.residentId)));
+      await Promise.all(affectedResidents.map((rid) => utils.doc.list.invalidate({ surveyId, residentId: rid })));
+
+      toast.success("Date of Compliance updated for unmet questions successfully");
+    } catch (e) {
+      console.error("Save combined DOC failed", e);
+      toast.error("Failed to save Date of Compliance");
+    }
+  }, [survey.data, canOpenPOCSheet, combinedDOC, docUpsert, utils.doc.list, surveyId, questions.data, residents.data, byResident, docMap]);
 
   // Handle adding comment
   const handleAddComment = useCallback(async () => {
@@ -791,166 +937,279 @@ export default function SurveyDetailPage() {
     );
   };
 
-  // POC control component
+  // POC control component - REDESIGNED
   const renderPOCControl = () => {
     if (!isLocked) return null;
     if (!scoreAllowsPOC) {
-      return <div className="text-xs text-muted-foreground">POC available only when score is below 85%.</div>;
+      return (
+        <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded-lg border border-amber-200">
+          <AlertTriangle className="h-4 w-4" />
+          POC available when score is below 85%
+        </div>
+      );
     }
+    
     const label = hasAnyPOC ? "View POC" : "Generate POC";
+    const totalUnmetQuestions = sheetBlocks.length;
+    const totalUnmetResidents = Array.from(new Set(sheetBlocks.flatMap(block => block.items.map(item => item.residentId)))).length;
+    
     return (
-      <div className="relative group">
-        <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-          <SheetTrigger asChild>
-            <Button variant="default">{label}</Button>
-          </SheetTrigger>
+      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+        <SheetTrigger asChild>
+          <Button variant="default" className="bg-red-600 hover:bg-red-700">
+            <FileText className="mr-2 h-4 w-4" />
+            {label}
+            {totalUnmetQuestions > 0 && (
+              <Badge variant="secondary" className="ml-2 bg-red-100 text-red-800">
+                {totalUnmetQuestions}
+              </Badge>
+            )}
+          </Button>
+        </SheetTrigger>
 
-          <SheetContent className="w-full sm:max-w-4xl p-0">
-            <div className="flex h-full flex-col">
-              <SheetHeader className="px-4 pt-3 pb-1">
-                <SheetTitle className="text-base">{label}</SheetTitle>
-                <SheetDescription className="text-xs">
-                  {hasAnyPOC ? "View and update the Plan of Correction for unmet questions." : "Generate a Plan of Correction for questions with unmet answers."}
+        <SheetContent className="w-full sm:max-w-5xl p-0 flex flex-col">
+          <SheetHeader className="px-6 pt-6 pb-4 border-b bg-gradient-to-r from-red-50 to-orange-50">
+            <div className="flex items-start justify-between">
+              <div>
+                <SheetTitle className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                  <div className="h-8 w-8 rounded-lg bg-red-100 flex items-center justify-center">
+                    <FileText className="h-4 w-4 text-red-600" />
+                  </div>
+                  Plan of Correction
+                </SheetTitle>
+                <SheetDescription className="text-sm text-gray-600 mt-1">
+                  {hasAnyPOC ? "Review and update your Plan of Correction" : "Create a Plan of Correction for unmet questions"}
                 </SheetDescription>
-              </SheetHeader>
+              </div>
+              
+              {totalUnmetQuestions > 0 && (
+                <div className="flex gap-4 text-sm">
+                  <div className="text-center">
+                    <div className="font-semibold text-red-600">{totalUnmetQuestions}</div>
+                    <div className="text-gray-500">Questions</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="font-semibold text-red-600">{totalUnmetResidents}</div>
+                    <div className="text-gray-500">Residents</div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </SheetHeader>
 
-              <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-2">
-                {sheetBlocks.length === 0 ? (
-                  <div className="text-xs text-muted-foreground mt-2">No questions have unmet answers.</div>
-                ) : (
-                  sheetBlocks.map((blk) => (
-                    <Card key={blk.qid} className="rounded-md">
-                      <CardHeader className="py-2 px-3">
-                        <div className="flex items-center justify-between">
-                          <CardTitle className="text-sm leading-5">{blk.text}</CardTitle>
-                          <div className="text-[11px] text-muted-foreground">Strength: {blk.strengthPct}%</div>
+          <div className="flex-1 overflow-y-auto">
+            <div className="px-6 py-4">
+              {sheetBlocks.length === 0 ? (
+                <div className="text-center py-12 bg-green-50 rounded-lg border-2 border-dashed border-green-200">
+                  <div className="h-12 w-12 rounded-full bg-green-100 mx-auto mb-4 flex items-center justify-center">
+                    <FileText className="h-6 w-6 text-green-600" />
+                  </div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-1">All Good!</h3>
+                  <p className="text-gray-500">No questions have unmet answers that require a Plan of Correction.</p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Summary Card */}
+                  <Card className="border-l-4 border-l-red-500 bg-red-50/50">
+                    <CardContent className="p-4">
+                      <div className="flex items-start gap-4">
+                        <div className="h-10 w-10 rounded-lg bg-red-100 flex items-center justify-center flex-shrink-0">
+                          <AlertTriangle className="h-5 w-5 text-red-600" />
                         </div>
-                        {blk.ftags.length > 0 && <div className="text-[11px] text-muted-foreground pt-0.5">F‑Tags: {blk.ftags.join(", ")}</div>}
-                      </CardHeader>
-                      <CardContent className="pt-0 px-3 pb-2">
-                        <div className="text-[12px] font-medium mb-1">Residents with unmet:</div>
-                        <div className="grid gap-1">
-                          {blk.items.map((it) => (
-                            <div key={`${blk.qid}-${it.residentId}`} className="border rounded-md px-2 py-1 text-[12px] leading-5">
-                              <div className="font-medium">Resident {it.residentId}</div>
-                              {it.findings && (
-                                <div className="text-[11px] leading-4">
-                                  <span className="text-muted-foreground">Findings:</span> {it.findings}
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-gray-900 mb-1">Questions Requiring Attention</h3>
+                          <p className="text-sm text-gray-600 leading-relaxed">
+                            The following {totalUnmetQuestions} question{totalUnmetQuestions !== 1 ? 's' : ''} 
+                            {totalUnmetQuestions === 1 ? ' has' : ' have'} unmet requirements across {totalUnmetResidents} resident{totalUnmetResidents !== 1 ? 's' : ''}. 
+                            Please review each question and provide a comprehensive Plan of Correction.
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Questions List */}
+                  <div className="space-y-4">
+                    {sheetBlocks.map((block, index) => (
+                      <Card key={block.qid} className="overflow-hidden border shadow-sm hover:shadow-md transition-shadow">
+                        <CardHeader className="bg-gray-50/50 border-b">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <Badge variant="outline" className="bg-red-100 text-red-800 border-red-200">
+                                  Question {index + 1}
+                                </Badge>
+                                <Badge 
+                                  variant="secondary" 
+                                  className={cn(
+                                    "text-xs",
+                                    block.strengthPct < 50 ? "bg-red-100 text-red-800" :
+                                    block.strengthPct < 75 ? "bg-yellow-100 text-yellow-800" :
+                                    "bg-green-100 text-green-800"
+                                  )}
+                                >
+                                  {block.strengthPct}% Strength
+                                </Badge>
+                              </div>
+                              <CardTitle className="text-base font-medium text-gray-900 leading-relaxed">
+                                {block.text}
+                              </CardTitle>
+                              {block.ftags.length > 0 && (
+                                <div className="flex items-center gap-1 mt-2">
+                                  <Tag className="h-3 w-3 text-gray-400" />
+                                  <span className="text-xs text-gray-500">
+                                    F-Tags: {block.ftags.join(", ")}
+                                  </span>
                                 </div>
                               )}
                             </div>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))
-                )}
-              </div>
-
-              {/* Comments Section in POC Sheet */}
-              {hasAnyPOC && (
-                <div className="px-4">
-                  <CommentsSection
-                    comments={comments}
-                    showComments={showComments}
-                    setShowComments={setShowComments}
-                    newComment={newComment}
-                    setNewComment={setNewComment}
-                    handleAddComment={handleAddComment}
-                    addComment={addComment}
-                  />
+                          </div>
+                        </CardHeader>
+                        
+                        <CardContent className="p-4">
+                          <div className="flex items-center gap-2 mb-3">
+                            <Users className="h-4 w-4 text-gray-500" />
+                            <span className="text-sm font-medium text-gray-700">
+                              Affected Residents ({block.items.length})
+                            </span>
+                          </div>
+                          
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            {block.items.map((item) => (
+                              <div 
+                                key={`${block.qid}-${item.residentId}`} 
+                                className="bg-gray-50 rounded-lg p-3 border"
+                              >
+                                <div className="flex items-center gap-2 mb-1">
+                                  <div className="h-6 w-6 rounded-full bg-blue-100 flex items-center justify-center">
+                                    <User className="h-3 w-3 text-blue-600" />
+                                  </div>
+                                  <span className="text-sm font-medium text-gray-900">
+                                    Resident {item.residentId}
+                                  </span>
+                                </div>
+                                {item.findings && (
+                                  <div className="mt-2 p-2 bg-white rounded border-l-2 border-l-orange-300">
+                                    <div className="text-xs text-gray-500 mb-1">Findings:</div>
+                                    <p className="text-sm text-gray-700 leading-relaxed">
+                                      {item.findings}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
                 </div>
               )}
+            </div>
 
-              <div className="border-t">
-                <div className="px-4 py-3">
-                  <div className="text-xs text-muted-foreground mb-2">
-                    This Plan of Correction will be applied only to questions with "unmet" status.
-                  </div>
+            {/* Comments Section */}
+            {hasAnyPOC && (
+              <div className="px-6">
+                <CommentsSection
+                  comments={comments}
+                  showComments={showComments}
+                  setShowComments={setShowComments}
+                  newComment={newComment}
+                  setNewComment={setNewComment}
+                  handleAddComment={handleAddComment}
+                  addComment={addComment}
+                />
+              </div>
+            )}
+
+            {/* POC Input Section */}
+            <div className="px-6 py-6 bg-gray-50/50 border-t">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-900 mb-2">
+                    Plan of Correction
+                  </label>
+                  <p className="text-xs text-gray-600 mb-3">
+                    Describe the specific actions that will be taken to address the unmet requirements above. 
+                    This plan will be applied to all questions with "unmet" status.
+                  </p>
                   <Textarea
-                    placeholder="Enter Plan of Correction"
+                    placeholder="Enter your comprehensive Plan of Correction here..."
                     value={combinedPOC}
                     onChange={(e) => setCombinedPOC(e.target.value)}
-                    rows={4}
-                    className="resize-y text-sm"
+                    rows={5}
+                    className="resize-none text-sm leading-relaxed"
                   />
                 </div>
 
-                <SheetFooter className="px-4 py-3 flex items-center justify-between">
-                  <div>
-                    {hasAnyPOC && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleDownloadPDF}
-                        disabled={isGeneratingPDF}
-                        className="flex items-center gap-2"
-                      >
-                        <Download className="h-4 w-4" />
-                        {isGeneratingPDF ? "Generating PDF..." : "Download PDF"}
-                      </Button>
-                    )}
+                {/* Date of Compliance */}
+                <div className="flex flex-wrap items-end gap-4 pt-4 border-t">
+                  <div className="flex-1 min-w-48">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Date of Compliance
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-gray-500" />
+                      <input
+                        type="date"
+                        value={combinedDOC ? combinedDOC.toISOString().split('T')[0] : ''}
+                        onChange={(e) => setCombinedDOC(e.target.value ? new Date(e.target.value) : null)}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <SheetClose asChild>
-                      <Button variant="ghost" size="sm">
-                        Close
-                      </Button>
-                    </SheetClose>
-                    <Button
-                      size="sm"
-                      onClick={handleSaveCombinedPOC}
-                      disabled={pocUpsert.isPending || !combinedPOC.trim()}
-                    >
-                      {pocUpsert.isPending ? "Saving..." : hasAnyPOC ? "Update POC" : "Save POC"}
-                    </Button>
-                  </div>
-                </SheetFooter>
+                  <Button
+                    variant="outline"
+                    onClick={handleSaveCombinedDOC}
+                    disabled={docUpsert.isPending || !combinedDOC}
+                    className="min-w-32"
+                  >
+                    {docUpsert.isPending ? "Saving..." : hasAnyDOC ? "Update DOC" : "Set DOC"}
+                  </Button>
+                </div>
               </div>
             </div>
-          </SheetContent>
-        </Sheet>
-      </div>
+          </div>
+
+          {/* Footer Actions */}
+          <SheetFooter className="px-6 py-4 border-t bg-white flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              {hasAnyPOC && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDownloadPDF}
+                  disabled={isGeneratingPDF}
+                  className="flex items-center gap-2"
+                >
+                  <Download className="h-4 w-4" />
+                  {isGeneratingPDF ? "Generating..." : "Download PDF"}
+                </Button>
+              )}
+            </div>
+            
+            <div className="flex items-center gap-3">
+              <SheetClose asChild>
+                <Button variant="ghost" size="sm">
+                  Cancel
+                </Button>
+              </SheetClose>
+              <Button
+                onClick={handleSaveCombinedPOC}
+                disabled={pocUpsert.isPending || !combinedPOC.trim()}
+                className="bg-red-600 hover:bg-red-700 min-w-32"
+              >
+                {pocUpsert.isPending ? "Saving..." : hasAnyPOC ? "Update POC" : "Save POC"}
+              </Button>
+            </div>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
     );
   };
 
   return (
     <>
-      <style jsx>{`
-        .custom-scroll-area {
-          height: 240px;
-          width: 100%;
-          overflow-y: auto;
-          border-radius: 0.375rem;
-          border: 1px solid #e5e7eb;
-          padding: 1rem;
-        }
-
-        .custom-scroll-area::-webkit-scrollbar {
-          width: 8px;
-        }
-
-        .custom-scroll-area::-webkit-scrollbar-track {
-          background: #f1f5f9;
-          border-radius: 4px;
-        }
-
-        .custom-scroll-area::-webkit-scrollbar-thumb {
-          background: #cbd5e1;
-          border-radius: 4px;
-        }
-
-        .custom-scroll-area::-webkit-scrollbar-thumb:hover {
-          background: #94a3b8;
-        }
-
-        /* Firefox scrollbar styling */
-        .custom-scroll-area {
-          scrollbar-width: thin;
-          scrollbar-color: #cbd5e1 #f1f5f9;
-        }
-      `}</style>
-
       <QISVHeader
         crumbs={[
           { label: "Surveys", href: "/qisv/surveys" },

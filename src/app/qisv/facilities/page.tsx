@@ -9,6 +9,7 @@ import {
   ChevronRightIcon,
   ChevronsRightIcon,
   ChevronsLeftIcon,
+  TrashIcon,
 } from "lucide-react";
 import {
   Table,
@@ -29,6 +30,17 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Select } from "@radix-ui/react-select";
 import {
@@ -39,6 +51,7 @@ import {
 } from "@/components/ui/select";
 import { useQuery } from "@tanstack/react-query";
 import { authClient } from "@/components/providers/auth-client";
+import { toast } from "sonner";
 
 const PAGE_SIZES = [10, 50, 100];
 
@@ -50,9 +63,26 @@ export default function () {
   const pageSize = Number(searchParams.get("pageSize") ?? PAGE_SIZES[0]);
 
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [facilityToDelete, setFacilityToDelete] = useState<{
+    id: number;
+    name: string;
+  } | null>(null);
+
   const facilities = api.facility.list.useQuery({
     page,
     pageSize,
+  });
+
+  const deleteFacility = api.facility.delete.useMutation({
+    onSuccess: () => {
+      toast.success("Facility deleted successfully");
+      facilities.refetch();
+      setFacilityToDelete(null);
+    },
+    onError: (error) => {
+      toast.error(`Failed to delete facility: ${error.message}`);
+      setFacilityToDelete(null);
+    },
   });
 
   function handlePageSize(pageSize: number) {
@@ -75,6 +105,15 @@ export default function () {
         })
       ).data?.success ?? false,
   });
+  const hasDeleteFacilityPermission = useQuery({
+    queryKey: [],
+    queryFn: async () =>
+      (
+        await authClient.organization.hasPermission({
+          permissions: { organization: ["delete"] },
+        })
+      ).data?.success ?? false,
+  });
 
   return (
     <>
@@ -85,7 +124,6 @@ export default function () {
             <h1 className="text-2xl font-bold tracking-tight">Facilities</h1>
             <p className="text-muted-foreground">Manage facilities</p>
           </div>
-
           {hasNewFacilityPermission.data && (
             <Dialog open={isSheetOpen} onOpenChange={setIsSheetOpen}>
               <DialogTrigger asChild>
@@ -103,7 +141,6 @@ export default function () {
             </Dialog>
           )}
         </div>
-
         <div className="rounded-lg border">
           <Table>
             <TableHeader>
@@ -111,6 +148,9 @@ export default function () {
                 <TableHead className="w-[80px] text-right">ID</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Address</TableHead>
+                {hasDeleteFacilityPermission.data && (
+                  <TableHead className="w-[100px]">Actions</TableHead>
+                )}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -125,15 +165,19 @@ export default function () {
                         <Skeleton className="h-6" />
                       </TableCell>
                     ))}
+                    {hasDeleteFacilityPermission.data && (
+                      <TableCell>
+                        <Skeleton className="h-8 w-8" />
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
-
               {!facilities.isPending &&
                 facilities.data &&
                 facilities.data.data.length === 0 && (
                   <TableRow>
                     <TableCell
-                      colSpan={5}
+                      colSpan={hasDeleteFacilityPermission.data ? 4 : 3}
                       className="text-muted-foreground py-8 text-center"
                     >
                       No facilities found. Add your first facility to get
@@ -141,7 +185,6 @@ export default function () {
                     </TableCell>
                   </TableRow>
                 )}
-
               {!facilities.isPending &&
                 facilities.data &&
                 facilities.data.data.map((facility) => (
@@ -153,12 +196,72 @@ export default function () {
                       {facility.name}
                     </TableCell>
                     <TableCell>{facility.address}</TableCell>
+                    {hasDeleteFacilityPermission.data && (
+                      <TableCell>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            {/* The button opens the dialog, and we set facilityToDelete state HERE */}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-destructive hover:text-destructive"
+                              onClick={() =>
+                                setFacilityToDelete({
+                                  id: facility.id,
+                                  name: facility.name,
+                                })
+                              }
+                              disabled={deleteFacility.isPending}
+                            >
+                              <TrashIcon className="h-4 w-4" />
+                              <span className="sr-only">Delete facility</span>
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>
+                                Are you absolutely sure?
+                              </AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This action cannot be undone. This will
+                                permanently delete the facility "
+                                {facilityToDelete?.id === facility.id
+                                  ? facilityToDelete?.name
+                                  : facility.name}
+                                " and remove all data from our servers.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel
+                                onClick={() => setFacilityToDelete(null)}
+                                disabled={deleteFacility.isPending}
+                              >
+                                Cancel
+                              </AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => {
+                                  setFacilityToDelete(null);
+                                  deleteFacility.mutate({ id: facility.id });
+                                }}
+                                className="px-6 py-2 rounded-lg bg-destructive text-white 
+             font-semibold transition-colors duration-150
+             hover:bg-red-700 active:bg-red-800 focus:outline-none
+             focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                                disabled={deleteFacility.isPending}
+                              >
+                                {deleteFacility.isPending ? "Deleting..." : "Delete"}
+                              </AlertDialogAction>
+
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
             </TableBody>
           </Table>
         </div>
-
         {/* Footer */}
         <div className="mt-4 flex items-center justify-between px-4">
           <div className="text-muted-foreground hidden flex-1 text-sm lg:flex"></div>

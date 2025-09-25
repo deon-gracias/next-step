@@ -11,6 +11,7 @@ import { dietarySurveyRouter } from "./routers/dietary-survey";
 import { casesRouter } from "./routers/case";
 import { pocRouter } from "./routers/poc";
 import { pocCommentRouter } from "./routers/poc-comments";
+import { docRouter } from "./routers/doc";
 
 /**
  * This is the primary router for your server.
@@ -30,6 +31,7 @@ export const appRouter = createTRPCRouter({
   dietarySurvey: dietarySurveyRouter,
   poc: pocRouter,
   pocComment: pocCommentRouter,
+  doc: docRouter,
 });
 
 // export type definition of API

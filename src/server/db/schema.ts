@@ -340,6 +340,58 @@ export const pocComment = pgTable("poc_comment", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const surveyDOC = pgTable(
+  "survey_doc",
+  {
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+
+    // Context keys (all required) - same structure as POC
+    surveyId: integer("survey_id")
+      .notNull()
+      .references(() => survey.id, { onDelete: "cascade" }),
+
+    residentId: integer("resident_id")
+      .notNull()
+      .references(() => resident.id, { onDelete: "cascade" }),
+
+    templateId: integer("template_id")
+      .notNull()
+      .references(() => template.id, { onDelete: "cascade" }),
+
+    questionId: integer("question_id")
+      .notNull()
+      .references(() => question.id, { onDelete: "cascade" }),
+
+    // Optional: link to survey_response row for easier joins/validation
+    surveyResponseId: integer("survey_response_id").references(
+      () => surveyResponse.id,
+      { onDelete: "set null" }
+    ),
+
+    // Content - compliance date instead of POC text
+    complianceDate: date("compliance_date").notNull(),
+
+    // Auditing (same as POC)
+    createdByUserId: text("created_by_user_id").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    updatedByUserId: text("updated_by_user_id").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    // One DOC per survey+resident+template+question (same as POC)
+    unique().on(
+      table.surveyId,
+      table.residentId,
+      table.templateId,
+      table.questionId
+    ),
+  ]
+);
+
 export const dietarySurveys = pgTable("dietary_surveys", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -508,3 +560,14 @@ export type PocCommentInsertType = z.infer<typeof pocCommentInsertSchema>;
 
 export const pocCommentSelectSchema = createSelectSchema(pocComment);
 export type PocCommentSelectType = z.infer<typeof pocCommentSelectSchema>;
+
+export const surveyDOCInsertSchema = createInsertSchema(surveyDOC, {
+  complianceDate: (schema) => schema.refine(
+    (date) => date !== null,
+    "Compliance date is required"
+  ),
+});
+export type SurveyDOCInsertType = z.infer<typeof surveyDOCInsertSchema>;
+
+export const surveyDOCSelectSchema = createSelectSchema(surveyDOC);
+export type SurveyDOCSelectType = z.infer<typeof surveyDOCSelectSchema>;
