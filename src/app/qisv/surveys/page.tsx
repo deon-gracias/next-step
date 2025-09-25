@@ -73,7 +73,7 @@ export default function SurveysPage() {
 
 
   const page = Number(searchParams.get("page") ?? 1);
-  const pageSize = Number(searchParams.get("pageSize") ?? PAGE_SIZES[0]);
+  const pageSize = Number(searchParams.get("pageSize") ?? 100); 
 
 
   // Get all surveys
