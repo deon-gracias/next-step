@@ -47,7 +47,6 @@ export function FtagComboBox({
 
   const debouncedInput = useDebounce(input, 300);
   const handleOnSearchChange = (e: string) => setInput(e);
-  // (e === "" && fetchItems(e)) || debouncedFetchItems(e);
 
   const items = api.ftag.list.useQuery({ code: debouncedInput });
 
@@ -69,7 +68,7 @@ export function FtagComboBox({
           disabled={disabled}
         >
           <span className="flex items-center truncate">
-            {(items.data && items.data?.find((e) => e.id === selectedItem))
+            {(items.data && items.data.data?.find((e) => e.id === selectedItem))
               ?.code || "Select an item"}
           </span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -101,7 +100,7 @@ export function FtagComboBox({
             <CommandGroup>
               {!items.isPending &&
                 items.data &&
-                items.data.map((item) => {
+                items.data.data.map((item) => {
                   if (!item.code) {
                     return null;
                   }
@@ -178,8 +177,8 @@ export function FtagMultiSelectComboBox({
   };
 
   React.useEffect(() => {
-    if (items.data) {
-      const newlyVisible = items.data.filter(
+    if (items.data?.data) {
+      const newlyVisible = items.data.data.filter(
         (item) => selectedItems.includes(item.id) && !selectedMap[item.id],
       );
       if (newlyVisible.length > 0) {
@@ -245,7 +244,7 @@ export function FtagMultiSelectComboBox({
             )}
 
             <CommandGroup>
-              {items.data?.map((item) => {
+              {items.data?.data?.map((item) => {
                 const isSelected = selectedItems.includes(item.id);
                 return (
                   <CommandItem

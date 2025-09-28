@@ -26,7 +26,13 @@ export function NewFtagForm({ ...props }: React.ComponentProps<"form">) {
   });
 
   function onSubmit(values: FTagInsertType) {
-    toast.promise(ftagMutation.mutateAsync(values), {
+    // Ensure description is a string (handle null/undefined cases)
+    const sanitizedValues = {
+      code: values.code,
+      description: values.description || "", // Convert null/undefined to empty string
+    };
+
+    toast.promise(ftagMutation.mutateAsync(sanitizedValues), {
       loading: <>Creating F-Tag...</>,
       success: () => {
         form.reset();
@@ -66,6 +72,7 @@ export function NewFtagForm({ ...props }: React.ComponentProps<"form">) {
                 <Input
                   {...field}
                   placeholder="Short summary of the regulation"
+                  value={field.value || ""} // Ensure value is never null/undefined
                 />
               </FormControl>
               <FormMessage />
@@ -73,7 +80,9 @@ export function NewFtagForm({ ...props }: React.ComponentProps<"form">) {
           )}
         />
 
-        <Button type="submit">Submit</Button>
+        <Button type="submit" disabled={ftagMutation.isPending}>
+          {ftagMutation.isPending ? "Creating..." : "Submit"}
+        </Button>
       </form>
     </Form>
   );
