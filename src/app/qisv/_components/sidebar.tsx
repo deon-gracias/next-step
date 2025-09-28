@@ -6,6 +6,7 @@ import {
   FileSearchIcon,
   LayoutDashboardIcon,
   LayoutListIcon,
+  TagsIcon,
   UsersIcon,
 } from "lucide-react";
 
@@ -34,6 +35,18 @@ const navItems = [
     resource: null, // no permission needed
   },
   {
+    name: "Surveys",
+    href: "/qisv/surveys",
+    icon: FileSearchIcon,
+    resource: "survey",
+  },
+  {
+    name: "Templates",
+    href: "/qisv/templates",
+    icon: LayoutListIcon,
+    resource: "template",
+  },
+  {
     name: "Residents",
     href: "/qisv/residents",
     icon: UsersIcon,
@@ -46,17 +59,12 @@ const navItems = [
     resource: "facility",
   },
   {
-    name: "Templates",
-    href: "/qisv/templates",
-    icon: LayoutListIcon,
-    resource: "template",
+    name: "F-Tags",
+    href: "/qisv/ftags",
+    icon: TagsIcon,
+    resource: null,
   },
-  {
-    name: "Surveys",
-    href: "/qisv/surveys",
-    icon: FileSearchIcon,
-    resource: "survey",
-  },
+  
 ];
 
 export function QISVSidebar(props: React.ComponentProps<typeof Sidebar>) {

@@ -145,7 +145,7 @@ export default function () {
           <Table>
             <TableHeader>
               <TableRow className="bg-secondary text-secondary-foreground">
-                <TableHead className="w-[80px] text-right">ID</TableHead>
+                <TableHead className="w-[80px] text-right">System ID</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Address</TableHead>
                 {hasDeleteFacilityPermission.data && (

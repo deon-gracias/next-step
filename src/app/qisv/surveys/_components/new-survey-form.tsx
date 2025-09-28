@@ -1015,7 +1015,7 @@ function SurveyorField({
                             <TableHead className="text-teal-700">Name</TableHead>
                             <TableHead className="text-teal-700">Facility</TableHead>
                             <TableHead className="text-teal-700">Room</TableHead>
-                            <TableHead className="text-teal-700">PCCI ID</TableHead>
+                            <TableHead className="text-teal-700">PCC ID</TableHead>
                             <TableHead className="text-teal-700"></TableHead>
                           </TableRow>
                         </TableHeader>
@@ -1123,7 +1123,7 @@ function ResidentRowById({
           onClick={async () => {
             if (resident.data)
               toast("Delete resident?", {
-                description: `This will permanently delete ${resident.data.name} (PCCI ID: ${resident.data.pcciId})`,
+                description: `This will permanently delete ${resident.data.name} (PCC ID: ${resident.data.pcciId})`,
                 closeButton: true,
                 action: {
                   label: "Yes",
@@ -1168,57 +1168,69 @@ function AddResidentInput({
   facilityId: number;
 }) {
   const apiUtils = api.useUtils();
-  const [isSearching, setIsSearching] = useState(false);
+  const [searchedResident, setSearchedResident] = useState<any>(null);
   
   const form = useForm({
     resolver: zodResolver(residentInsertSchema),
     defaultValues: { name: "", pcciId: "", roomId: "", facilityId: 0 },
   });
 
-  const pcciIdDebounce = useDebounce(form.watch("pcciId"), 800);
+  const residentMutation = api.resident.create.useMutation();
 
-  const resident = api.resident.list.useQuery(
-    {
-      pcciId: pcciIdDebounce,
-      pageSize: 1,
-    },
-    {
-      enabled: !!pcciIdDebounce && pcciIdDebounce.length > 0,
-      select: (response) =>
-        response.data?.find((e) => e.pcciId === pcciIdDebounce),
-    },
-  );
-
-  // Auto-fill resident data when found
-  useEffect(() => {
-    if (resident.data) {
-      form.setValue("name", resident.data.name || "");
-      form.setValue("roomId", resident.data.roomId || "");
-      form.setValue("facilityId", resident.data.facilityId);
-      setIsSearching(false);
-      toast.success("Resident details loaded!");
+  // Manual search function - CORRECTED
+  const handleSearchResident = async () => {
+    const pcciId = form.getValues("pcciId");
+    
+    if (!pcciId || pcciId.trim().length === 0) {
+      toast.error("Please enter a PCC ID to search");
       return;
     }
 
-    // Only clear if we were searching and no result found
-    if (pcciIdDebounce && pcciIdDebounce.length > 0 && !resident.isLoading && !resident.data) {
-      form.setValue("name", "");
-      form.setValue("roomId", "");
-      setIsSearching(false);
-    }
-  }, [resident.data, pcciIdDebounce, resident.isLoading, form]);
+    try {
+      // Use apiUtils.client to call the tRPC procedure correctly
+      const response = await apiUtils.client.resident.list.query({
+        pcciId: pcciId.trim(),
+        pageSize: 10,
+        page: 1,
+        facilityId: facilityId, // Add facility filter to search
+      });
 
-  // Show searching state
-  useEffect(() => {
-    if (pcciIdDebounce && pcciIdDebounce.length > 0 && resident.isLoading) {
-      setIsSearching(true);
-    }
-  }, [pcciIdDebounce, resident.isLoading]);
+      const foundResident = response.data?.find((e) => e.pcciId === pcciId.trim());
+      
+      if (foundResident) {
+        // Check if resident belongs to the selected facility
+        if (foundResident.facilityId !== facilityId) {
+          form.setError("pcciId", {
+            message: `Resident belongs to different facility (Facility ID: ${foundResident.facilityId})`,
+          });
+          setSearchedResident(null);
+          return;
+        }
 
-  const residentMutation = api.resident.create.useMutation();
+        // Fill the form with found resident details
+        form.setValue("name", foundResident.name || "");
+        form.setValue("roomId", foundResident.roomId || "");
+        form.setValue("facilityId", foundResident.facilityId);
+        form.clearErrors("pcciId");
+        setSearchedResident(foundResident);
+        toast.success(`Found resident: ${foundResident.name}`);
+      } else {
+        // Clear form if no resident found
+        form.setValue("name", "");
+        form.setValue("roomId", "");
+        form.setValue("facilityId", facilityId);
+        setSearchedResident(null);
+        toast.info("No resident found with this PCC ID. You can create a new one.");
+      }
+    } catch (error) {
+      console.error("Error searching for resident:", error);
+      toast.error("Error searching for resident. Please try again.");
+      setSearchedResident(null);
+    }
+  };
 
   function onSubmit(values: Omit<ResidentInsertType, "facilityId">) {
-    if (!resident.data) {
+    if (!searchedResident) {
       // Create new resident
       toast.promise(residentMutation.mutateAsync({ ...values, facilityId }), {
         loading: "Creating resident...",
@@ -1226,6 +1238,7 @@ function AddResidentInput({
           if (response[0]) onChange([...value, response[0].id]);
           void apiUtils.resident.invalidate();
           form.reset({});
+          setSearchedResident(null);
           return `Successfully created resident ${values.name}`;
         },
         error: () => {
@@ -1235,29 +1248,28 @@ function AddResidentInput({
       return;
     }
 
-    // Validate facility match for existing resident
-    if (resident.data.facilityId !== facilityId) {
-      form.setError(
-        "pcciId",
-        {
-          message: `Resident belongs to different facility (Facility ID: ${resident.data.facilityId})`,
-        },
-        { shouldFocus: true },
-      );
-      return;
-    }
-
     // Check if resident already added
-    if (value.includes(resident.data.id)) {
+    if (value.includes(searchedResident.id)) {
       toast.error("This resident is already added");
       return;
     }
 
     // Add existing resident
-    onChange([...value, resident.data.id]);
+    onChange([...value, searchedResident.id]);
     form.reset({});
-    toast.success(`Added ${resident.data.name} to the survey`);
+    setSearchedResident(null);
+    toast.success(`Added ${searchedResident.name} to the survey`);
   }
+
+  // Clear searched resident when PCC ID changes
+  const handlePcciIdChange = (value: string) => {
+    form.setValue("pcciId", value);
+    if (searchedResident && searchedResident.pcciId !== value) {
+      setSearchedResident(null);
+      form.setValue("name", "");
+      form.setValue("roomId", "");
+    }
+  };
 
   return (
     <Card className="border border-indigo-200 bg-gradient-to-r from-indigo-50/50 to-blue-50/50">
@@ -1276,22 +1288,31 @@ function AddResidentInput({
               name="pcciId"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>PCCI ID</FormLabel>
+                  <FormLabel>PCC ID</FormLabel>
                   <FormControl>
-                    <div className="relative">
-                      <Input {...field} className="bg-white" placeholder="Enter PCCI ID" />
-                      {isSearching && (
-                        <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600"></div>
-                        </div>
-                      )}
+                    <div className="flex gap-2">
+                      <Input 
+                        {...field}
+                        onChange={(e) => handlePcciIdChange(e.target.value)}
+                        className="bg-white" 
+                        placeholder="Enter PCC ID" 
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleSearchResident}
+                        disabled={!field.value || field.value.trim().length === 0}
+                        className="min-w-[100px] bg-blue-50 hover:bg-blue-100 border-blue-200"
+                      >
+                        <SearchIcon className="mr-2 h-4 w-4" />
+                        Search
+                      </Button>
                     </div>
                   </FormControl>
-                  {isSearching && (
-                    <p className="text-xs text-muted-foreground">Searching for resident...</p>
-                  )}
-                  {resident.data && (
-                    <p className="text-xs text-green-600">✓ Resident found and details loaded</p>
+                  {searchedResident && (
+                    <p className="text-xs text-green-600">
+                      ✓ Resident found: {searchedResident.name} (Room: {searchedResident.roomId})
+                    </p>
                   )}
                   <FormMessage />
                 </FormItem>
@@ -1307,7 +1328,7 @@ function AddResidentInput({
                     <FormControl>
                       <Input 
                         {...field} 
-                        disabled={!!resident.data} 
+                        disabled={!!searchedResident} 
                         className="bg-white disabled:bg-gray-50" 
                         placeholder="Resident name"
                       />
@@ -1325,7 +1346,7 @@ function AddResidentInput({
                     <FormControl>
                       <Input 
                         {...field} 
-                        disabled={!!resident.data} 
+                        disabled={!!searchedResident} 
                         className="bg-white disabled:bg-gray-50" 
                         placeholder="Room number"
                       />
@@ -1343,13 +1364,12 @@ function AddResidentInput({
               className="w-full bg-indigo-600 hover:bg-indigo-700"
               disabled={
                 !form.watch("pcciId") || 
-                !form.watch("name") || 
-                isSearching ||
-                resident.isLoading
+                !form.watch("name") ||
+                residentMutation.isPending
               }
             >
               <PlusIcon className="mr-2 h-4 w-4" />
-              {resident.data ? "Add Existing Resident" : "Create & Add Resident"}
+              {searchedResident ? "Add Existing Resident" : "Create & Add Resident"}
             </Button>
           </form>
         </Form>

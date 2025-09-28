@@ -127,7 +127,11 @@ export const resident = pgTable("resident", {
   facilityId: integer("facility_id")
     .references(() => facility.id)
     .notNull(),
+  createdAt: timestamp("created_at", { mode: "date" })
+    .defaultNow()
+    .notNull(),
 });
+
 
 export const facility = pgTable("facility", {
   id: integer().primaryKey().generatedAlwaysAsIdentity(),
@@ -193,9 +197,11 @@ export const survey = pgTable("survey", {
     .references(() => template.id)
     .notNull(),
   isLocked: boolean("is_locked").default(false).notNull(),
+  pocGenerated: boolean("poc_generated").default(false).notNull(), // ADD THIS LINE
   surveyDate: date("survey_date").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
+
 
 export const surveyResident = pgTable(
   "survey_resident",

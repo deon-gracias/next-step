@@ -16,6 +16,7 @@ import {
   like,
   or,
   sql,
+  inArray,
 } from "drizzle-orm";
 import {
   matchTypeOption,
@@ -59,6 +60,20 @@ export const residentRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       await ctx.db.delete(resident).where(eq(resident.id, input.id));
     }),
+
+  bulkDelete: protectedProcedure
+  .input(
+    z.object({
+      ids: z.array(z.number().int().positive()).min(1, "At least one ID is required"),
+    }),
+  )
+  .mutation(async ({ ctx, input }) => {
+    // Perform the bulk delete without permission checks
+    await ctx.db.delete(resident).where(inArray(resident.id, input.ids));
+    
+    return { count: input.ids.length };
+  }),
+
 
   byId: protectedProcedure
     .input(z.object({ id: residentSelectSchema.shape.id }))

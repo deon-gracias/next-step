@@ -51,6 +51,34 @@ export async function getAllowedFacilities(ctx: { session: { user: { id: string;
 }
 
 export const userRouter = createTRPCRouter({
+  // Add the byId procedure
+  byId: protectedProcedure
+    .input(
+      z.object({
+        id: z.string().min(1, "User ID is required"),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const [userRecord] = await ctx.db
+        .select({
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          image: user.image,
+          createdAt: user.createdAt,
+          updatedAt: user.updatedAt,
+        })
+        .from(user)
+        .where(eq(user.id, input.id))
+        .limit(1);
+
+      if (!userRecord) {
+        throw new Error("User not found");
+      }
+
+      return userRecord;
+    }),
+
   listInOrg: protectedProcedure
     .input(
       z.object({

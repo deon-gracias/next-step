@@ -67,10 +67,10 @@ export function NewResidentForm({ ...props }: React.ComponentProps<"form">) {
         />
 
         <FormField
-          name={"pcciId"}
+          name={"roomId"}
           render={({ field }) => (
             <FormItem>
-              <FormLabel>PCCI ID</FormLabel>
+              <FormLabel>Room No</FormLabel>
               <FormControl>
                 <Input {...field} />
               </FormControl>
@@ -80,10 +80,10 @@ export function NewResidentForm({ ...props }: React.ComponentProps<"form">) {
         />
 
         <FormField
-          name={"roomId"}
+          name={"pcciId"}
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Room ID</FormLabel>
+              <FormLabel>PCC ID</FormLabel>
               <FormControl>
                 <Input {...field} />
               </FormControl>
@@ -96,7 +96,7 @@ export function NewResidentForm({ ...props }: React.ComponentProps<"form">) {
           name={"facilityId"}
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Assessment</FormLabel>
+              <FormLabel>Facility</FormLabel>
               <FormControl>{/* <Input {...field} /> */}</FormControl>
               <FacilityComboBox
                 selectedItem={field.value}

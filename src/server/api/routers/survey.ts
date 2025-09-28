@@ -205,6 +205,82 @@ export const surveyRouter = createTRPCRouter({
       return rows;
     }),
 
+markPocGenerated: protectedProcedure
+  .input(z.object({ surveyId: z.number() }))
+  .mutation(async ({ ctx, input }) => {
+    const [updated] = await ctx.db
+      .update(survey)
+      .set({ pocGenerated: true })
+      .where(eq(survey.id, input.surveyId))
+      .returning();
+    
+    if (!updated) throw new Error("Survey not found");
+    return updated;
+  }),
+
+  // Add this to your surveyRouter object, before the closing });
+
+checkCompletion: protectedProcedure
+  .input(z.object({ surveyId: z.number() }))
+  .query(async ({ ctx, input }) => {
+    // Get the survey and its template
+    const surveyData = await ctx.db
+      .select({
+        id: survey.id,
+        templateId: survey.templateId
+      })
+      .from(survey)
+      .where(eq(survey.id, input.surveyId))
+      .limit(1);
+
+    if (!surveyData[0]) throw new Error("Survey not found");
+
+    // Get all residents for this survey
+    const residents = await ctx.db
+      .select()
+      .from(surveyResident)
+      .where(eq(surveyResident.surveyId, input.surveyId));
+
+    // Get all questions for this template
+    const questions = await ctx.db
+      .select()
+      .from(question)
+      .where(eq(question.templateId, surveyData[0].templateId));
+
+    // Get all responses for this survey that have valid statuses
+    const responses = await ctx.db
+      .select()
+      .from(surveyResponse)
+      .where(
+        and(
+          eq(surveyResponse.surveyId, input.surveyId),
+          inArray(surveyResponse.requirementsMetOrUnmet, ["met", "unmet", "not_applicable"])
+        )
+      );
+
+    const totalRequired = residents.length * questions.length;
+    const totalAnswered = responses.length;
+    const isComplete = totalAnswered === totalRequired && totalRequired > 0;
+
+    console.log(`Survey ${input.surveyId} completion check:`, {
+      residents: residents.length,
+      questions: questions.length,
+      totalRequired,
+      totalAnswered,
+      isComplete
+    });
+
+    return {
+      totalRequired,
+      totalAnswered,
+      isComplete,
+      residents: residents.length,
+      questions: questions.length,
+      completionPercentage: totalRequired > 0 ? Math.round((totalAnswered / totalRequired) * 100) : 0
+    };
+  }),
+
+
   // Save resident-level responses and delete POCs for unmet -> met transitions
   createResponse: protectedProcedure
     .input(saveResponsesInput)
