@@ -51,7 +51,13 @@ type GroupedSurvey = {
   facilityId: number;
   facilityName: string;
   facility: any;
-  surveys: any[];
+  dates: Map<string, {
+    date: string;
+    surveys: any[];
+    totalTemplates: number;
+    completedSurveys: number;
+    pocCount: number;
+  }>;
   totalTemplates: number;
   completedSurveys: number;
   pocCount: number;
@@ -107,12 +113,17 @@ export default function SurveysPage() {
   const [closedFacilityFilter, setClosedFacilityFilter] = React.useState<string>("all");
   const [pendingFacilityFilter, setPendingFacilityFilter] = React.useState<string>("all");
 
-  // Expanded states for facility groups
-  const [expandedClosed, setExpandedClosed] = React.useState<Set<number>>(new Set());
-  const [expandedPending, setExpandedPending] = React.useState<Set<number>>(new Set());
+  // Expanded states for facility, date, and template groups
+  const [expandedClosedFacilities, setExpandedClosedFacilities] = React.useState<Set<number>>(new Set());
+  const [expandedPendingFacilities, setExpandedPendingFacilities] = React.useState<Set<number>>(new Set());
+  const [expandedClosedDates, setExpandedClosedDates] = React.useState<Set<string>>(new Set());
+  const [expandedPendingDates, setExpandedPendingDates] = React.useState<Set<string>>(new Set());
 
   // State to store survey scores
   const [surveyScores, setSurveyScores] = React.useState<Map<number, { score: number; totalPossible: number }>>(new Map());
+
+  // State to store POC existence for each survey from survey_poc table (for display only)
+  const [surveyPocExists, setSurveyPocExists] = React.useState<Map<number, boolean>>(new Map());
 
   // DELETE FUNCTIONALITY
   const [surveyToDelete, setSurveyToDelete] = useState<{ id: number; name: string } | null>(null);
@@ -219,6 +230,63 @@ export default function SurveysPage() {
     };
   }, [surveys.data, utils]);
 
+  // Fetch actual POC existence from survey_poc table (FOR DISPLAY STATUS ONLY)
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!surveys.data || surveys.data.length === 0) return;
+
+      try {
+        const pocExistsMap = new Map<number, boolean>();
+        
+        // Check each survey for actual POC existence in survey_poc table
+        await Promise.all(
+          surveys.data.map(async (survey) => {
+            try {
+              // Get residents for this survey
+              const residents = await utils.survey.listResidents.fetch({ surveyId: survey.id });
+              if (!residents || residents.length === 0) {
+                pocExistsMap.set(survey.id, false);
+                return;
+              }
+
+              // Check if any resident has POC entries for this survey in survey_poc table
+              const pocResults = await Promise.all(
+                residents.map(r => utils.poc.list.fetch({ surveyId: survey.id, residentId: r.residentId }))
+              );
+
+              let hasPOC = false;
+              outer: for (const pocRows of pocResults) {
+                for (const pocRow of pocRows ?? []) {
+                  // Check if POC exists with actual content for this survey's template
+                  if (pocRow.pocText && pocRow.pocText.trim() && pocRow.templateId === survey.templateId) {
+                    hasPOC = true;
+                    break outer;
+                  }
+                }
+              }
+
+              pocExistsMap.set(survey.id, hasPOC);
+            } catch (error) {
+              console.error(`Failed to check POC for survey ${survey.id}:`, error);
+              pocExistsMap.set(survey.id, false);
+            }
+          })
+        );
+
+        if (!cancelled) {
+          setSurveyPocExists(pocExistsMap);
+        }
+      } catch (error) {
+        console.error("Failed to fetch POC existence:", error);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [surveys.data, utils]);
+
   // DELETE FUNCTIONALITY
   const deleteSurvey = api.survey.delete.useMutation({
     onSuccess: () => {
@@ -305,7 +373,7 @@ export default function SurveysPage() {
     return filtered;
   }, [selectedDate, dateSortOrder]);
 
-  // UPDATED: Helper function to determine survey category
+  // Helper function to determine survey category - BACK TO USING pocGenerated FLAG for grouping
   const getSurveyCategory = (survey: any, scoreData: { score: number; totalPossible: number } | undefined) => {
     // If survey is not locked, it goes to pending regardless of score/POC
     if (!survey.isLocked) {
@@ -322,14 +390,14 @@ export default function SurveysPage() {
     return (scorePercentage >= 75 || survey.pocGenerated) ? 'completed' : 'pending';
   };
 
-  // UPDATED: Group surveys by facility with MIXED GROUPING LOGIC
+  // Group surveys by facility → date → template hierarchy
   const groupedSurveys = React.useMemo(() => {
     if (!surveys.data) return { closed: [], pending: [] };
 
     // Apply date filters to all surveys first
     const filteredSurveys = filterAndSortSurveys(surveys.data);
 
-    // Separate into completed and pending based on the new logic
+    // Separate into completed and pending based on the logic
     const completedSurveys: any[] = [];
     const pendingSurveys: any[] = [];
 
@@ -345,26 +413,52 @@ export default function SurveysPage() {
     });
 
     // Debug logging
-    console.log('Survey categorization:', {
+    console.log('Survey categorization (using pocGenerated for grouping, survey_poc for display):', {
       total: filteredSurveys.length,
       completed: completedSurveys.length,
       pending: pendingSurveys.length,
-      completedSurveys: completedSurveys.map(s => ({ id: s.id, isLocked: s.isLocked, pocGenerated: s.pocGenerated })),
-      pendingSurveys: pendingSurveys.map(s => ({ id: s.id, isLocked: s.isLocked, pocGenerated: s.pocGenerated }))
+      completedSurveys: completedSurveys.map(s => ({ 
+        id: s.id, 
+        isLocked: s.isLocked, 
+        pocGenerated: s.pocGenerated, // Used for grouping
+        actualPocExists: surveyPocExists.get(s.id) // Used for display
+      })),
+      pendingSurveys: pendingSurveys.map(s => ({ 
+        id: s.id, 
+        isLocked: s.isLocked, 
+        pocGenerated: s.pocGenerated, // Used for grouping
+        actualPocExists: surveyPocExists.get(s.id) // Used for display
+      }))
     });
 
-    const groupByFacility = (surveyList: any[]) => {
+    const groupByFacilityAndDate = (surveyList: any[]) => {
       const facilityMap = new Map<number, GroupedSurvey>();
 
       surveyList.forEach((survey) => {
         const facilityId = survey.facilityId;
         const facilityName = survey.facility?.name || `Facility ${facilityId}`;
+        const surveyDate = survey.surveyDate ? new Date(survey.surveyDate) : null;
+        const dateKey = surveyDate && !isNaN(surveyDate.getTime()) ? format(surveyDate, "yyyy-MM-dd") : "No date";
 
+        // Get or create facility group
         if (!facilityMap.has(facilityId)) {
           facilityMap.set(facilityId, {
             facilityId,
             facilityName,
             facility: survey.facility,
+            dates: new Map(),
+            totalTemplates: 0,
+            completedSurveys: 0,
+            pocCount: 0,
+          });
+        }
+
+        const facilityGroup = facilityMap.get(facilityId)!;
+        
+        // Get or create date group within facility
+        if (!facilityGroup.dates.has(dateKey)) {
+          facilityGroup.dates.set(dateKey, {
+            date: dateKey,
             surveys: [],
             totalTemplates: 0,
             completedSurveys: 0,
@@ -372,55 +466,62 @@ export default function SurveysPage() {
           });
         }
 
-        const group = facilityMap.get(facilityId)!;
-        group.surveys.push(survey);
-        group.totalTemplates++;
-
-        // Count completion based on survey type
-        if (survey.isLocked) {
-          const scoreData = surveyScores.get(survey.id);
-          const scorePercentage = scoreData && scoreData.totalPossible > 0 
-            ? Math.round((scoreData.score / scoreData.totalPossible) * 100)
-            : 0;
-
-          if (scorePercentage >= 75) {
-            group.completedSurveys++; // High score surveys
-          } else if (survey.pocGenerated) {
-            group.pocCount++; // Low score but POC completed
-          }
-        } else {
-          // For unlocked surveys, check if they have responses
-          const isCompleted = survey.responses && survey.responses.length > 0;
-          if (isCompleted) group.completedSurveys++;
-        }
+        const dateGroup = facilityGroup.dates.get(dateKey)!;
+        
+        // Add survey to date group
+        dateGroup.surveys.push(survey);
+        dateGroup.totalTemplates++;
+        facilityGroup.totalTemplates++;
       });
 
       return Array.from(facilityMap.values());
     };
 
     return {
-      closed: groupByFacility(completedSurveys), // "Completed" surveys
-      pending: groupByFacility(pendingSurveys),   // "Pending" surveys
+      closed: groupByFacilityAndDate(completedSurveys), // "Completed" surveys
+      pending: groupByFacilityAndDate(pendingSurveys),   // "Pending" surveys
     };
-  }, [surveys.data, filterAndSortSurveys, surveyScores]);
+  }, [surveys.data, filterAndSortSurveys, surveyScores, surveyPocExists]);
 
-  const toggleExpanded = (facilityId: number, type: 'closed' | 'pending') => {
+  // Toggle functions for hierarchical expansion
+  const toggleFacilityExpanded = (facilityId: number, type: 'closed' | 'pending') => {
     if (type === 'closed') {
-      const newExpanded = new Set(expandedClosed);
+      const newExpanded = new Set(expandedClosedFacilities);
       if (newExpanded.has(facilityId)) {
         newExpanded.delete(facilityId);
       } else {
         newExpanded.add(facilityId);
       }
-      setExpandedClosed(newExpanded);
+      setExpandedClosedFacilities(newExpanded);
     } else {
-      const newExpanded = new Set(expandedPending);
+      const newExpanded = new Set(expandedPendingFacilities);
       if (newExpanded.has(facilityId)) {
         newExpanded.delete(facilityId);
       } else {
         newExpanded.add(facilityId);
       }
-      setExpandedPending(newExpanded);
+      setExpandedPendingFacilities(newExpanded);
+    }
+  };
+
+  const toggleDateExpanded = (facilityId: number, dateKey: string, type: 'closed' | 'pending') => {
+    const expandKey = `${facilityId}-${dateKey}`;
+    if (type === 'closed') {
+      const newExpanded = new Set(expandedClosedDates);
+      if (newExpanded.has(expandKey)) {
+        newExpanded.delete(expandKey);
+      } else {
+        newExpanded.add(expandKey);
+      }
+      setExpandedClosedDates(newExpanded);
+    } else {
+      const newExpanded = new Set(expandedPendingDates);
+      if (newExpanded.has(expandKey)) {
+        newExpanded.delete(expandKey);
+      } else {
+        newExpanded.add(expandKey);
+      }
+      setExpandedPendingDates(newExpanded);
     }
   };
 
@@ -465,7 +566,7 @@ export default function SurveysPage() {
   // Check if any filters are active
   const hasActiveFilters = selectedDate || dateSortOrder || closedFacilityFilter !== "all" || pendingFacilityFilter !== "all";
 
-  // Helper function to get POC status based on score
+  // Helper function to get POC status - USES survey_poc table for display status
   const getPocStatus = (survey: any, scoreData: { score: number; totalPossible: number } | undefined) => {
     // For unlocked surveys
     if (!survey.isLocked) {
@@ -491,8 +592,9 @@ export default function SurveysPage() {
       };
     }
 
-    // If score < 75%, check pocGenerated flag
-    if (survey.pocGenerated) {
+    // If score < 75%, check if actual POC exists in survey_poc table (for display only)
+    const pocExists = surveyPocExists.get(survey.id) || false;
+    if (pocExists) {
       return {
         status: "POC Completed",
         variant: "default" as const,
@@ -507,6 +609,7 @@ export default function SurveysPage() {
     }
   };
 
+  // SIMPLIFIED: Clean hierarchical row components
   const FacilityGroupRow = ({ 
     group, 
     type, 
@@ -519,6 +622,7 @@ export default function SurveysPage() {
     onToggle: () => void;
   }) => (
     <>
+      {/* LEVEL 1: FACILITY ROW - Simple and Clean */}
       <TableRow 
         className="bg-muted/50 hover:bg-muted/70 cursor-pointer font-medium"
         onClick={onToggle}
@@ -530,16 +634,14 @@ export default function SurveysPage() {
         </TableCell>
         <TableCell colSpan={3}>
           <div className="flex items-center gap-2">
-            {group.facility && <FacilityHoverCard facility={group.facility} />}
+            🏢 {group.facility && <FacilityHoverCard facility={group.facility} />}
             <Badge variant="outline" className="ml-2">
-              {group.surveys.length} survey{group.surveys.length !== 1 ? 's' : ''}
+              {group.totalTemplates} survey{group.totalTemplates !== 1 ? 's' : ''}
             </Badge>
           </div>
         </TableCell>
-        <TableCell>
-          
-        </TableCell>
-        <TableCell>-</TableCell> {/* Score column for group row */}
+        <TableCell></TableCell>
+        <TableCell>-</TableCell>
         <TableCell className="text-right">
           <Badge variant="outline">
             {isExpanded ? 'Collapse' : 'Expand'}
@@ -547,127 +649,162 @@ export default function SurveysPage() {
         </TableCell>
       </TableRow>
       
-      {isExpanded && group.surveys.map((survey) => {
-        const surveyDate = survey.surveyDate ? new Date(survey.surveyDate) : null;
-        const formattedDate = surveyDate && !isNaN(surveyDate.getTime()) ? format(surveyDate, "yyyy-MM-dd") : "No date";
-        
-        // Get survey score
-        const scoreData = surveyScores.get(survey.id);
-        const scorePercentage = scoreData && scoreData.totalPossible > 0 
-          ? Math.round((scoreData.score / scoreData.totalPossible) * 100)
-          : 0;
-
-        // Get POC status based on score and pocGenerated flag
-        const pocStatus = getPocStatus(survey, scoreData);
+      {/* LEVEL 2: DATE GROUPS - Slightly Indented */}
+      {isExpanded && Array.from(group.dates.entries()).map(([dateKey, dateGroup]) => {
+        const expandKey = `${group.facilityId}-${dateKey}`;
+        const isDateExpanded = type === 'closed' 
+          ? expandedClosedDates.has(expandKey) 
+          : expandedPendingDates.has(expandKey);
         
         return (
-          <TableRow key={`${type}-survey-${survey.id}`} className="bg-background">
-            <TableCell className="text-right font-mono tabular-nums pl-8">
-              {survey.id}
-            </TableCell>
-            <TableCell>
-              <Badge variant="secondary">{formattedDate}</Badge>
-            </TableCell>
-            <TableCell>
-              <div className="flex items-center gap-2">
-                {survey.surveyor ? (
-                  <>
-                    <span>{survey.surveyor.name}</span>
-                    <Badge variant="outline" className="text-xs">{survey.surveyor.email}</Badge>
-                  </>
-                ) : (
-                  "-"
-                )}
-              </div>
-            </TableCell>
-            <TableCell>
-              {survey.template && <TemplateHoverCard template={survey.template} />}
-            </TableCell>
-            <TableCell>
-              <Badge variant={pocStatus.variant} className={pocStatus.className}>
-                {pocStatus.status}
-              </Badge>
-            </TableCell>
-            <TableCell>
-              <div className="flex items-center gap-2">
-                {scoreData ? (
-                  <div className="flex flex-col items-center">
-                    <Badge 
-                      variant="outline" 
-                      className={cn(
-                        "font-mono",
-                        scorePercentage >= 80 ? "bg-green-100 text-green-800 border-green-300" :
-                        scorePercentage >= 60 ? "bg-yellow-100 text-yellow-800 border-yellow-300" :
-                        "bg-red-100 text-red-800 border-red-300"
+          <React.Fragment key={dateKey}>
+            <TableRow 
+              className="bg-muted/30 hover:bg-muted/50 cursor-pointer"
+              onClick={() => toggleDateExpanded(group.facilityId, dateKey, type)}
+            >
+              <TableCell className="text-right font-mono pl-8">
+                <Button variant="ghost" size="sm" className="p-0 h-auto">
+                  {isDateExpanded ? <ChevronDownIcon className="h-4 w-4" /> : <ChevronRightIcon className="h-4 w-4" />}
+                </Button>
+              </TableCell>
+              <TableCell colSpan={2}>
+                <div className="flex items-center gap-2">
+                  📅 <Badge variant="secondary">{dateKey}</Badge>
+                </div>
+              </TableCell>
+              <TableCell>
+                <Badge variant="outline" className="text-xs">
+                  {dateGroup.surveys.length} survey{dateGroup.surveys.length !== 1 ? 's' : ''}
+                </Badge>
+              </TableCell>
+              <TableCell></TableCell>
+              <TableCell>-</TableCell>
+              <TableCell className="text-right">
+                <Badge variant="outline" className="text-xs">
+                  {isDateExpanded ? 'Collapse' : 'Expand'}
+                </Badge>
+              </TableCell>
+            </TableRow>
+            
+            {/* LEVEL 3: SURVEY ROWS - More Indented */}
+            {isDateExpanded && dateGroup.surveys.map((survey) => {
+              const scoreData = surveyScores.get(survey.id);
+              const scorePercentage = scoreData && scoreData.totalPossible > 0 
+                ? Math.round((scoreData.score / scoreData.totalPossible) * 100)
+                : 0;
+              const pocStatus = getPocStatus(survey, scoreData);
+              
+              return (
+                <TableRow key={`${type}-survey-${survey.id}`} className="bg-background">
+                  <TableCell className="text-right font-mono tabular-nums pl-12">
+                    {survey.id}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="secondary">{dateKey}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      {survey.surveyor ? (
+                        <>
+                          <span>{survey.surveyor.name}</span>
+                          <Badge variant="outline" className="text-xs">{survey.surveyor.email}</Badge>
+                        </>
+                      ) : (
+                        "-"
                       )}
-                    >
-                      {scoreData.score}/{scoreData.totalPossible}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    {survey.template && <TemplateHoverCard template={survey.template} />}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={pocStatus.variant} className={pocStatus.className}>
+                      {pocStatus.status}
                     </Badge>
-                  </div>
-                ) : (
-                  <Skeleton className="h-6 w-12" />
-                )}
-              </div>
-            </TableCell>
-            <TableCell className="text-right">
-              <Link
-                href={`/qisv/surveys/${survey.id}`}
-                className={cn(buttonVariants({ variant: "outline", size: "icon" }), "size-6")}
-              >
-                <ExternalLinkIcon className="h-3 w-3" />
-              </Link>
-
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="ml-2 h-6 w-6 text-destructive hover:text-destructive"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSurveyToDelete({
-                        id: survey.id,
-                        name: survey.template?.name ?? `Survey ${survey.id}`,
-                      });
-                    }}
-                    disabled={deleteSurvey.isPending}
-                  >
-                    <TrashIcon className="h-4 w-4" />
-                    <span className="sr-only">Delete survey</span>
-                  </Button>
-                </AlertDialogTrigger>
-
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Delete Survey</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Are you sure you want to delete the survey "
-                      {surveyToDelete?.id === survey.id ? surveyToDelete?.id : survey.template?.name ?? `Survey ${survey.id}`}
-                      "? This action cannot be undone and will delete all associated data.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel
-                      onClick={() => setSurveyToDelete(null)}
-                      disabled={deleteSurvey.isPending}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      {scoreData ? (
+                        <div className="flex flex-col items-center">
+                          <Badge 
+                            variant="outline" 
+                            className={cn(
+                              "font-mono",
+                              scorePercentage >= 80 ? "bg-green-100 text-green-800 border-green-300" :
+                              scorePercentage >= 60 ? "bg-yellow-100 text-yellow-800 border-yellow-300" :
+                              "bg-red-100 text-red-800 border-red-300"
+                            )}
+                          >
+                            {scoreData.score}/{scoreData.totalPossible}
+                          </Badge>
+                        </div>
+                      ) : (
+                        <Skeleton className="h-6 w-12" />
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Link
+                      href={`/qisv/surveys/${survey.id}`}
+                      className={cn(buttonVariants({ variant: "outline", size: "icon" }), "size-6")}
                     >
-                      Cancel
-                    </AlertDialogCancel>
-                    <AlertDialogAction
-                      className="px-4 py-2 rounded-lg bg-destructive text-white hover:bg-red-700 active:bg-red-800 focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors duration-150"
-                      onClick={() => {
-                        setSurveyToDelete(null);
-                        deleteSurvey.mutate({ id: survey.id });
-                      }}
-                      disabled={deleteSurvey.isPending}
-                    >
-                      {deleteSurvey.isPending ? "Deleting..." : "Delete"}
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            </TableCell>
-          </TableRow>
+                      <ExternalLinkIcon className="h-3 w-3" />
+                    </Link>
+
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="ml-2 h-6 w-6 text-destructive hover:text-destructive"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSurveyToDelete({
+                              id: survey.id,
+                              name: survey.template?.name ?? `Survey ${survey.id}`,
+                            });
+                          }}
+                          disabled={deleteSurvey.isPending}
+                        >
+                          <TrashIcon className="h-4 w-4" />
+                          <span className="sr-only">Delete survey</span>
+                        </Button>
+                      </AlertDialogTrigger>
+
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Delete Survey</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Are you sure you want to delete the survey "
+                            {surveyToDelete?.id === survey.id ? surveyToDelete?.id : survey.template?.name ?? `Survey ${survey.id}`}
+                            "? This action cannot be undone and will delete all associated data.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel
+                            onClick={() => setSurveyToDelete(null)}
+                            disabled={deleteSurvey.isPending}
+                          >
+                            Cancel
+                          </AlertDialogCancel>
+                          <AlertDialogAction
+                            className="px-4 py-2 rounded-lg bg-destructive text-white hover:bg-red-700 active:bg-red-800 focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors duration-150"
+                            onClick={() => {
+                              setSurveyToDelete(null);
+                              deleteSurvey.mutate({ id: survey.id });
+                            }}
+                            disabled={deleteSurvey.isPending}
+                          >
+                            {deleteSurvey.isPending ? "Deleting..." : "Delete"}
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </React.Fragment>
         );
       })}
     </>
@@ -857,8 +994,8 @@ export default function SurveysPage() {
                         key={`closed-group-${group.facilityId}`}
                         group={group}
                         type="closed"
-                        isExpanded={expandedClosed.has(group.facilityId)}
-                        onToggle={() => toggleExpanded(group.facilityId, 'closed')}
+                        isExpanded={expandedClosedFacilities.has(group.facilityId)}
+                        onToggle={() => toggleFacilityExpanded(group.facilityId, 'closed')}
                       />
                     ))
                   )}
@@ -931,8 +1068,8 @@ export default function SurveysPage() {
                         key={`pending-group-${group.facilityId}`}
                         group={group}
                         type="pending"
-                        isExpanded={expandedPending.has(group.facilityId)}
-                        onToggle={() => toggleExpanded(group.facilityId, 'pending')}
+                        isExpanded={expandedPendingFacilities.has(group.facilityId)}
+                        onToggle={() => toggleFacilityExpanded(group.facilityId, 'pending')}
                       />
                     ))
                   )}

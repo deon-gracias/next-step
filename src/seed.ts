@@ -44,6 +44,18 @@ async function main() {
     })
     .onConflictDoNothing();
 
+  await db
+    .insert(schema.user)
+    .values({
+      id: "jWAs08rV8ZXSD6q8drXDrLXPNHlRQ5RG",
+      name: "Soham",
+      email: "sohamparab69@gmail.com",
+      emailVerified: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .onConflictDoNothing();
+
   // 2) Accounts ---------------------------------------------------------------
   await db
     .insert(schema.account)
