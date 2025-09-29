@@ -295,8 +295,15 @@ export default function SurveyDetailPage() {
   const [hasAnyDOC, setHasAnyDOC] = useState(false);
   const [docMap, setDocMap] = useState<Map<string, Date>>(new Map());
 
+  // ✅ Updated to include both resident and case responses
   const [allResponses, setAllResponses] = useState<
-    Array<{ residentId: number; questionId: number; status: StatusVal | null; findings: string | null }>
+    Array<{ 
+      residentId: number | null; 
+      surveyCaseId: number | null;
+      questionId: number; 
+      status: StatusVal | null; 
+      findings: string | null 
+    }>
   >([]);
   const [showComments, setShowComments] = useState(false);
   const [newComment, setNewComment] = useState("");
@@ -305,26 +312,62 @@ export default function SurveyDetailPage() {
   // PDF ref for hidden content
   const pdfContentRef = useRef<HTMLDivElement>(null);
 
-  // Fetch all responses across residents
+  // ✅ Updated: Fetch all responses across residents AND cases
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      if (!survey.data || !residents.data) return;
+      if (!survey.data) return;
       try {
-        const arr: Array<{ residentId: number; questionId: number; status: StatusVal | null; findings: string | null }> = [];
-        await Promise.all(
-          residents.data.map(async (r) => {
-            const rows = await utils.survey.listResponses.fetch({ surveyId, residentId: r.residentId });
-            for (const rr of rows ?? []) {
-              arr.push({
-                residentId: r.residentId,
-                questionId: rr.questionId,
-                status: (rr.requirementsMetOrUnmet as StatusVal) ?? null,
-                findings: rr.findings ?? null,
+        const arr: Array<{ 
+          residentId: number | null; 
+          surveyCaseId: number | null;
+          questionId: number; 
+          status: StatusVal | null; 
+          findings: string | null 
+        }> = [];
+
+        // Fetch resident responses
+        if (residents.data) {
+          await Promise.all(
+            residents.data.map(async (r) => {
+              const rows = await utils.survey.listResponses.fetch({ 
+                surveyId, 
+                residentId: r.residentId 
               });
-            }
-          })
-        );
+              for (const rr of rows ?? []) {
+                arr.push({
+                  residentId: r.residentId,
+                  surveyCaseId: null,
+                  questionId: rr.questionId,
+                  status: (rr.requirementsMetOrUnmet as StatusVal) ?? null,
+                  findings: rr.findings ?? null,
+                });
+              }
+            })
+          );
+        }
+
+        // ✅ NEW: Fetch case responses
+        if (cases.data) {
+          await Promise.all(
+            cases.data.map(async (c) => {
+              const rows = await utils.survey.listResponses.fetch({ 
+                surveyId, 
+                surveyCaseId: c.id 
+              });
+              for (const rr of rows ?? []) {
+                arr.push({
+                  residentId: null,
+                  surveyCaseId: c.id,
+                  questionId: rr.questionId,
+                  status: (rr.requirementsMetOrUnmet as StatusVal) ?? null,
+                  findings: rr.findings ?? null,
+                });
+              }
+            })
+          );
+        }
+
         if (!cancelled) {
           setAllResponses(arr);
         }
@@ -335,7 +378,7 @@ export default function SurveyDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [survey.data, residents.data, surveyId, utils.survey.listResponses]);
+  }, [survey.data, residents.data, cases.data, surveyId, utils.survey.listResponses]); // ✅ Added cases.data
 
   // Fetch existing POCs for the survey
   useEffect(() => {
@@ -469,32 +512,51 @@ export default function SurveyDetailPage() {
     return (questions.data ?? []).map((q) => q.id);
   }, [questions.data]);
 
-  // Map responses by resident and question
-  const byResident = useMemo(() => {
-    const m = new Map<number, Map<number, ResponseCell>>();
+  // ✅ Updated: Map responses by resident AND case
+  const byEntity = useMemo(() => {
+    const m = new Map<string, Map<number, ResponseCell>>();
     for (const r of allResponses) {
-      const inner = m.get(r.residentId) ?? new Map<number, ResponseCell>();
+      // Create unique key for resident or case
+      const entityKey = r.residentId ? `resident-${r.residentId}` : `case-${r.surveyCaseId}`;
+      const inner = m.get(entityKey) ?? new Map<number, ResponseCell>();
       inner.set(r.questionId, { status: r.status, findings: r.findings });
-      m.set(r.residentId, inner);
+      m.set(entityKey, inner);
     }
     return m;
   }, [allResponses]);
 
-  // Question strengths calculation
+  // Keep original byResident for backward compatibility
+  const byResident = useMemo(() => {
+    const m = new Map<number, Map<number, ResponseCell>>();
+    for (const r of allResponses) {
+      if (r.residentId) {
+        const inner = m.get(r.residentId) ?? new Map<number, ResponseCell>();
+        inner.set(r.questionId, { status: r.status, findings: r.findings });
+        m.set(r.residentId, inner);
+      }
+    }
+    return m;
+  }, [allResponses]);
+
+  // ✅ Updated: Question strengths calculation including case responses
   const questionStrengths: QuestionStrength[] = useMemo(() => {
     const qrows: QuestionRow[] = (questions.data ?? []) as QuestionRow[];
     if (qrows.length === 0) return [];
+    
     const metByQ = new Map<number, number>();
     const unmetByQ = new Map<number, number>();
+    
     for (const q of qrows) {
       metByQ.set(q.id, 0);
       unmetByQ.set(q.id, 0);
     }
+    
     for (const r of allResponses) {
       if (!metByQ.has(r.questionId)) continue;
       if (r.status === "met") metByQ.set(r.questionId, (metByQ.get(r.questionId) ?? 0) + 1);
       else if (r.status === "unmet") unmetByQ.set(r.questionId, (unmetByQ.get(r.questionId) ?? 0) + 1);
     }
+    
     const out: QuestionStrength[] = [];
     for (const q of qrows) {
       const met = metByQ.get(q.id) ?? 0;
@@ -534,15 +596,18 @@ export default function SurveyDetailPage() {
     return map;
   }, [residents.data, allQuestionIds, byResident]);
 
-  // Score calculation
+  // ✅ Updated: Score calculation including both residents and cases
   const { overallScore, maxTemplatePoints, overallPercent } = useMemo(() => {
     const qs: QuestionRow[] = (questions.data ?? []) as QuestionRow[];
     let awarded = 0;
+    
     for (const q of qs) {
       let anyUnmetOrUnanswered = false;
       let anyMet = false;
+      
+      // Check resident responses
       for (const r of residents.data ?? []) {
-        const cell = byResident.get(r.residentId)?.get(q.id);
+        const cell = byEntity.get(`resident-${r.residentId}`)?.get(q.id);
         if (!cell?.status) {
           anyUnmetOrUnanswered = true;
           break;
@@ -553,12 +618,30 @@ export default function SurveyDetailPage() {
         }
         if (cell.status === "met") anyMet = true;
       }
+      
+      // ✅ NEW: Check case responses
+      if (!anyUnmetOrUnanswered) {
+        for (const c of cases.data ?? []) {
+          const cell = byEntity.get(`case-${c.id}`)?.get(q.id);
+          if (!cell?.status) {
+            anyUnmetOrUnanswered = true;
+            break;
+          }
+          if (cell.status === "unmet") {
+            anyUnmetOrUnanswered = true;
+            break;
+          }
+          if (cell.status === "met") anyMet = true;
+        }
+      }
+      
       if (!anyUnmetOrUnanswered && anyMet) awarded += q.points ?? 0;
     }
+    
     const max = qs.reduce((s, q) => s + (q.points ?? 0), 0);
     const pct = max > 0 ? Math.round((awarded / max) * 100) : 0;
     return { overallScore: awarded, maxTemplatePoints: max, overallPercent: pct };
-  }, [questions.data, byResident, residents.data]);
+  }, [questions.data, byEntity, residents.data, cases.data]); // ✅ Updated dependencies
 
   // POC availability - UPDATED LOGIC
   const isLocked = Boolean(survey.data?.isLocked);

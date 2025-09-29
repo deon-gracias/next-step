@@ -131,7 +131,7 @@ export default function SurveysPage() {
   // Access utils for API calls
   const utils = api.useUtils();
 
-  // Fetch survey scores using the EXACT same logic as the detail page
+  // ✅ UPDATED: Fetch survey scores including CASE responses
   React.useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -140,61 +140,116 @@ export default function SurveysPage() {
       try {
         const scoresMap = new Map<number, { score: number; totalPossible: number }>();
         
-        // Calculate score for each survey using the EXACT same logic
+        // Calculate score for each survey using UPDATED logic to include case responses
         await Promise.all(
           surveys.data.map(async (survey) => {
             try {
-              // Get residents and questions
+              // Get residents, cases, and questions
               const residents = await utils.survey.listResidents.fetch({ surveyId: survey.id });
+              const cases = await utils.survey.listCases.fetch({ surveyId: survey.id }); // ✅ NEW: Fetch cases
               const questions = await utils.question.list.fetch({ templateId: survey.templateId });
 
-              if (!residents || !questions || residents.length === 0 || questions.length === 0) {
+              if (!questions || questions.length === 0) {
                 scoresMap.set(survey.id, { score: 0, totalPossible: 0 });
                 return;
               }
 
-              // Fetch all responses for this survey (same as detail page)
-              const allResponses: Array<{ residentId: number; questionId: number; status: string | null; findings: string | null }> = [];
+              // ✅ UPDATED: Fetch responses for BOTH residents AND cases
+              const allResponses: Array<{ 
+                residentId: number | null; 
+                surveyCaseId: number | null;
+                questionId: number; 
+                status: string | null; 
+                findings: string | null 
+              }> = [];
               
-              await Promise.all(
-                residents.map(async (r) => {
-                  const rows = await utils.survey.listResponses.fetch({ surveyId: survey.id, residentId: r.residentId });
-                  for (const rr of rows ?? []) {
-                    allResponses.push({
-                      residentId: r.residentId,
-                      questionId: rr.questionId,
-                      status: rr.requirementsMetOrUnmet ?? null,
-                      findings: rr.findings ?? null,
+              // Fetch resident responses
+              if (residents && residents.length > 0) {
+                await Promise.all(
+                  residents.map(async (r) => {
+                    const rows = await utils.survey.listResponses.fetch({ 
+                      surveyId: survey.id, 
+                      residentId: r.residentId 
                     });
-                  }
-                })
-              );
-
-              // Create byResident map (same as detail page)
-              const byResident = new Map<number, Map<number, { status: string | null; findings: string | null }>>();
-              for (const r of allResponses) {
-                const inner = byResident.get(r.residentId) ?? new Map();
-                inner.set(r.questionId, { status: r.status, findings: r.findings });
-                byResident.set(r.residentId, inner);
+                    for (const rr of rows ?? []) {
+                      allResponses.push({
+                        residentId: r.residentId,
+                        surveyCaseId: null,
+                        questionId: rr.questionId,
+                        status: rr.requirementsMetOrUnmet ?? null,
+                        findings: rr.findings ?? null,
+                      });
+                    }
+                  })
+                );
               }
 
-              // Score calculation - EXACT same logic as detail page
+              // ✅ NEW: Fetch case responses
+              if (cases && cases.length > 0) {
+                await Promise.all(
+                  cases.map(async (c) => {
+                    const rows = await utils.survey.listResponses.fetch({ 
+                      surveyId: survey.id, 
+                      surveyCaseId: c.id 
+                    });
+                    for (const rr of rows ?? []) {
+                      allResponses.push({
+                        residentId: null,
+                        surveyCaseId: c.id,
+                        questionId: rr.questionId,
+                        status: rr.requirementsMetOrUnmet ?? null,
+                        findings: rr.findings ?? null,
+                      });
+                    }
+                  })
+                );
+              }
+
+              // ✅ UPDATED: Create byEntity map to handle both residents and cases
+              const byEntity = new Map<string, Map<number, { status: string | null; findings: string | null }>>();
+              for (const r of allResponses) {
+                const entityKey = r.residentId ? `resident-${r.residentId}` : `case-${r.surveyCaseId}`;
+                const inner = byEntity.get(entityKey) ?? new Map();
+                inner.set(r.questionId, { status: r.status, findings: r.findings });
+                byEntity.set(entityKey, inner);
+              }
+
+              // ✅ UPDATED: Score calculation - SAME logic as detail page but for both residents and cases
               let awarded = 0;
               for (const q of questions) {
                 let anyUnmetOrUnanswered = false;
                 let anyMet = false;
                 
-                for (const r of residents) {
-                  const cell = byResident.get(r.residentId)?.get(q.id);
-                  if (!cell?.status) {
-                    anyUnmetOrUnanswered = true;
-                    break;
+                // Check resident responses
+                if (residents && residents.length > 0) {
+                  for (const r of residents) {
+                    const cell = byEntity.get(`resident-${r.residentId}`)?.get(q.id);
+                    if (!cell?.status) {
+                      anyUnmetOrUnanswered = true;
+                      break;
+                    }
+                    if (cell.status === "unmet") {
+                      anyUnmetOrUnanswered = true;
+                      break;
+                    }
+                    if (cell.status === "met") anyMet = true;
                   }
-                  if (cell.status === "unmet") {
-                    anyUnmetOrUnanswered = true;
-                    break;
+                }
+                
+                // ✅ NEW: Check case responses
+                if (!anyUnmetOrUnanswered && cases && cases.length > 0) {
+                  for (const c of cases) {
+                    const cell = byEntity.get(`case-${c.id}`)?.get(q.id);
+                    if (!cell?.status) {
+                      anyUnmetOrUnanswered = true;
+                      break;
+                    }
+                    if (cell.status === "unmet") {
+                      anyUnmetOrUnanswered = true;
+                      break;
+                    }
+                    if (cell.status === "met") anyMet = true;
                   }
-                  if (cell.status === "met") anyMet = true;
                 }
                 
                 // Award points only if no unmet/unanswered AND at least one met
@@ -387,7 +442,7 @@ export default function SurveysPage() {
     // For locked surveys:
     // If score >= 75% OR pocGenerated is true, it goes to completed
     // Otherwise, it goes to pending
-    return (scorePercentage >= 75 || survey.pocGenerated) ? 'completed' : 'pending';
+    return (scorePercentage >= 85 || survey.pocGenerated) ? 'completed' : 'pending';
   };
 
   // Group surveys by facility → date → template hierarchy
@@ -584,7 +639,7 @@ export default function SurveysPage() {
       : 0;
 
     // If score >= 75%, no POC required
-    if (scorePercentage >= 75) {
+    if (scorePercentage >= 85) {
       return {
         status: "No POC Required",
         variant: "secondary" as const,

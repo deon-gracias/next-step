@@ -1,7 +1,7 @@
 // app/qisv/surveys/[surveyId]/resident/[residentId]/page.tsx
 "use client";
 
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { api } from "@/trpc/react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -94,7 +94,7 @@ export default function ResidentSurveyPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [questions.data, responsesQuery.data]);
-
+  const router = useRouter();
   // Submit
   const onSubmit = async (vals: FormValues) => {
     if (!questions.data || !survey.data) return;
@@ -143,6 +143,7 @@ export default function ResidentSurveyPage() {
       form.reset({ responses: prefilled });
 
       toast.success("Saved response");
+      router.replace(`/qisv/surveys/${surveyId}`);
     } catch (e: any) {
       toast.error(e?.message ?? "Failed to save response");
     }

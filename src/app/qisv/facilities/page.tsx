@@ -146,6 +146,7 @@ export default function () {
             <TableHeader>
               <TableRow className="bg-secondary text-secondary-foreground">
                 <TableHead className="w-[80px] text-right">System ID</TableHead>
+                <TableHead className="w-[120px]">Facility Code</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Address</TableHead>
                 {hasDeleteFacilityPermission.data && (
@@ -160,7 +161,7 @@ export default function () {
                     <TableCell className="text-right">
                       <Skeleton className="ml-auto h-6" />
                     </TableCell>
-                    {Array.from({ length: 2 }).map((_, i) => (
+                    {Array.from({ length: 3 }).map((_, i) => (
                       <TableCell key={i}>
                         <Skeleton className="h-6" />
                       </TableCell>
@@ -177,7 +178,7 @@ export default function () {
                 facilities.data.data.length === 0 && (
                   <TableRow>
                     <TableCell
-                      colSpan={hasDeleteFacilityPermission.data ? 4 : 3}
+                      colSpan={hasDeleteFacilityPermission.data ? 5 : 4}
                       className="text-muted-foreground py-8 text-center"
                     >
                       No facilities found. Add your first facility to get
@@ -191,6 +192,9 @@ export default function () {
                   <TableRow key={facility.id}>
                     <TableCell className="text-right font-mono tabular-nums">
                       {facility.id}
+                    </TableCell>
+                    <TableCell className="text-center font-mono tabular-nums">
+                      {facility.facilityCode || "—"}
                     </TableCell>
                     <TableCell className="font-medium">
                       {facility.name}
@@ -251,7 +255,6 @@ export default function () {
                               >
                                 {deleteFacility.isPending ? "Deleting..." : "Delete"}
                               </AlertDialogAction>
-
                             </AlertDialogFooter>
                           </AlertDialogContent>
                         </AlertDialog>

@@ -7,6 +7,7 @@ import {
   LayoutDashboardIcon,
   LayoutListIcon,
   TagsIcon,
+  User,
   UsersIcon,
 } from "lucide-react";
 
@@ -62,6 +63,12 @@ const navItems = [
     name: "F-Tags",
     href: "/qisv/ftags",
     icon: TagsIcon,
+    resource: null,
+  },
+  {
+    name: "Users",
+    href: "/qisv/users",
+    icon: User,
     resource: null,
   },
   

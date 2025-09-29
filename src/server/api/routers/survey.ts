@@ -15,15 +15,17 @@ import {
   surveyDOC,
 } from "@/server/db/schema";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
-import { eq, and, inArray, sql, getTableColumns, asc, desc } from "drizzle-orm";
+import { eq, and, inArray, sql, getTableColumns, asc, desc, isNull } from "drizzle-orm";
 import {
   paginationInputSchema,
   surveyCreateInputSchema,
 } from "@/server/utils/schema";
 
+// ✅ Updated schema to support both resident and case responses
 const saveResponsesInput = z.object({
   surveyId: z.number().int().positive(),
-  residentId: z.number().int().positive(),
+  residentId: z.number().int().positive().optional(),
+  surveyCaseId: z.number().int().positive().optional(),
   responses: z.array(
     z.object({
       questionId: z.number().int().positive(),
@@ -31,7 +33,16 @@ const saveResponsesInput = z.object({
       findings: z.string().optional().nullable(),
     }),
   ),
-});
+}).refine(
+  // Ensure either residentId OR surveyCaseId is provided, but not both
+  (data) => 
+    (data.residentId !== undefined && data.surveyCaseId === undefined) || 
+    (data.residentId === undefined && data.surveyCaseId !== undefined),
+  {
+    message: "Either residentId or surveyCaseId must be provided, but not both",
+  }
+);
+
 
 export const surveyRouter = createTRPCRouter({
   create: protectedProcedure
@@ -241,6 +252,12 @@ checkCompletion: protectedProcedure
       .from(surveyResident)
       .where(eq(surveyResident.surveyId, input.surveyId));
 
+    // ✅ Get all cases for this survey
+    const cases = await ctx.db
+      .select()
+      .from(surveyCases)
+      .where(eq(surveyCases.surveyId, input.surveyId));
+
     // Get all questions for this template
     const questions = await ctx.db
       .select()
@@ -258,12 +275,14 @@ checkCompletion: protectedProcedure
         )
       );
 
-    const totalRequired = residents.length * questions.length;
+    // ✅ Calculate total required including both residents and cases
+    const totalRequired = (residents.length + cases.length) * questions.length;
     const totalAnswered = responses.length;
     const isComplete = totalAnswered === totalRequired && totalRequired > 0;
 
     console.log(`Survey ${input.surveyId} completion check:`, {
       residents: residents.length,
+      cases: cases.length,
       questions: questions.length,
       totalRequired,
       totalAnswered,
@@ -275,21 +294,27 @@ checkCompletion: protectedProcedure
       totalAnswered,
       isComplete,
       residents: residents.length,
+      cases: cases.length,
       questions: questions.length,
       completionPercentage: totalRequired > 0 ? Math.round((totalAnswered / totalRequired) * 100) : 0
     };
   }),
 
 
-  // Save resident-level responses and delete POCs for unmet -> met transitions
-  createResponse: protectedProcedure
-    .input(saveResponsesInput)
-    .mutation(async ({ ctx, input }) => {
-      const { surveyId, residentId } = input;
-      const qids = input.responses.map((r) => r.questionId);
 
-      // 1) Load existing statuses for these questions (before update)
-      const existing = await ctx.db
+  // Save resident-level responses and delete POCs for unmet -> met transitions
+  // ✅ Updated mutation to handle both resident and case responses
+createResponse: protectedProcedure
+  .input(saveResponsesInput)
+  .mutation(async ({ ctx, input }) => {
+    const { surveyId, residentId, surveyCaseId } = input;
+    const qids = input.responses.map((r) => r.questionId);
+
+    // 1) Load existing statuses for these questions (before update)
+    let existing;
+    if (residentId) {
+      // For resident responses
+      existing = await ctx.db
         .select({
           questionId: surveyResponse.questionId,
           status: surveyResponse.requirementsMetOrUnmet,
@@ -302,20 +327,39 @@ checkCompletion: protectedProcedure
             inArray(surveyResponse.questionId, qids),
           ),
         );
+    } else {
+      // For case responses
+      existing = await ctx.db
+        .select({
+          questionId: surveyResponse.questionId,
+          status: surveyResponse.requirementsMetOrUnmet,
+        })
+        .from(surveyResponse)
+        .where(
+          and(
+            eq(surveyResponse.surveyId, surveyId),
+            eq(surveyResponse.surveyCaseId, surveyCaseId!),
+            inArray(surveyResponse.questionId, qids),
+          ),
+        );
+    }
 
-      const beforeMap = new Map<number, "met" | "unmet" | "not_applicable">(
-        existing.map((r) => [r.questionId, r.status as any]),
-      );
+    const beforeMap = new Map<number, "met" | "unmet" | "not_applicable">(
+      existing.map((r) => [r.questionId, r.status as any]),
+    );
 
-      // 2) Upsert responses on 3-column composite key
-      const values = input.responses.map((r) => ({
-        surveyId,
-        residentId,
-        questionId: r.questionId,
-        requirementsMetOrUnmet: r.requirementsMetOrUnmet,
-        findings: r.findings ?? null,
-      }));
+    // 2) Upsert responses 
+    const values = input.responses.map((r) => ({
+      surveyId,
+      residentId: residentId || null, // ✅ Can be null for case responses
+      surveyCaseId: surveyCaseId || null, // ✅ Can be null for resident responses
+      questionId: r.questionId,
+      requirementsMetOrUnmet: r.requirementsMetOrUnmet,
+      findings: r.findings ?? null,
+    }));
 
+    if (residentId) {
+      // Upsert for resident responses
       await ctx.db
         .insert(surveyResponse)
         .values(values)
@@ -330,9 +374,28 @@ checkCompletion: protectedProcedure
             findings: sql`excluded.findings`,
           },
         });
+    } else {
+      // Upsert for case responses
+      await ctx.db
+        .insert(surveyResponse)
+        .values(values)
+        .onConflictDoUpdate({
+          target: [
+            surveyResponse.surveyId,
+            surveyResponse.surveyCaseId,
+            surveyResponse.questionId,
+          ],
+          set: {
+            requirementsMetOrUnmet: sql`excluded.requirements_met_or_unmet`,
+            findings: sql`excluded.findings`,
+          },
+        });
+    }
 
-      // 3) Determine which questions transitioned from unmet -> met
-      const transitionedToMet: number[] = [];
+    // 3) Handle POC deletion (only for resident responses)
+    let transitionedToMet: number[] = [];
+    if (residentId) {
+      // Determine which questions transitioned from unmet -> met
       for (const r of input.responses) {
         const before = beforeMap.get(r.questionId);
         if (before === "unmet" && r.requirementsMetOrUnmet === "met") {
@@ -340,7 +403,7 @@ checkCompletion: protectedProcedure
         }
       }
 
-      // 4) If any transitioned to met, delete corresponding POCs by composite key
+      // If any transitioned to met, delete corresponding POCs
       if (transitionedToMet.length > 0) {
         await ctx.db
           .delete(surveyPOC)
@@ -352,34 +415,65 @@ checkCompletion: protectedProcedure
             ),
           );
       }
+    }
 
-      return { success: true, deletedPOCsForQuestions: transitionedToMet };
-    }),
+    return { 
+      success: true, 
+      deletedPOCsForQuestions: transitionedToMet,
+      responseType: residentId ? 'resident' : 'case'
+    };
+  }),
 
-  listResponses: protectedProcedure
-    .input(
-      surveyResponseSelectSchema
-        .pick({
-          surveyId: true,
-          residentId: true,
-          questionId: true,
-        })
-        .partial(),
-    )
-    .query(async ({ ctx, input }) => {
-      const whereConditions: any[] = [];
-      if (input.surveyId !== undefined)
-        whereConditions.push(eq(surveyResponse.surveyId, input.surveyId));
-      if (input.residentId !== undefined)
+
+  // ✅ Updated to handle both resident and case responses
+// ✅ Updated to handle both resident and case responses with proper null handling
+listResponses: protectedProcedure
+  .input(
+    surveyResponseSelectSchema
+      .pick({
+        surveyId: true,
+        residentId: true,
+        surveyCaseId: true,
+        questionId: true,
+      })
+      .partial(),
+  )
+  .query(async ({ ctx, input }) => {
+    const whereConditions: any[] = [];
+    
+    if (input.surveyId !== undefined) {
+      whereConditions.push(eq(surveyResponse.surveyId, input.surveyId));
+    }
+    
+    if (input.residentId !== undefined) {
+      // ✅ Handle nullable residentId properly
+      if (input.residentId === null) {
+        whereConditions.push(isNull(surveyResponse.residentId));
+      } else {
         whereConditions.push(eq(surveyResponse.residentId, input.residentId));
-      if (input.questionId !== undefined)
-        whereConditions.push(eq(surveyResponse.questionId, input.questionId));
+      }
+    }
+    
+    if (input.surveyCaseId !== undefined) {
+      // ✅ Handle nullable surveyCaseId properly
+      if (input.surveyCaseId === null) {
+        whereConditions.push(isNull(surveyResponse.surveyCaseId));
+      } else {
+        whereConditions.push(eq(surveyResponse.surveyCaseId, input.surveyCaseId));
+      }
+    }
+    
+    if (input.questionId !== undefined) {
+      whereConditions.push(eq(surveyResponse.questionId, input.questionId));
+    }
 
-      return await ctx.db
-        .select()
-        .from(surveyResponse)
-        .where(whereConditions.length ? and(...whereConditions) : undefined);
-    }),
+    return await ctx.db
+      .select()
+      .from(surveyResponse)
+      .where(whereConditions.length ? and(...whereConditions) : undefined);
+  }),
+
+
 
   // ===== Lock / Unlock (no role checks; no server-side "all answered" check) =====
   lock: protectedProcedure

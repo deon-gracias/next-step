@@ -140,7 +140,9 @@ export const facility = pgTable("facility", {
   id: integer().primaryKey().generatedAlwaysAsIdentity(),
   name: text("name").notNull(),
   address: text("address").notNull(),
+  facilityCode: varchar("facility_code", { length: 10 }), // ✅ Added facilityCode - max 10 digits
 });
+
 
 export const templateTypeEnum = pgEnum("template_type", [
   "resident",
@@ -247,13 +249,10 @@ export const surveyResponse = pgTable(
       .references(() => survey.id)
       .notNull(),
 
-    // Optional for case-level flows; NOT part of the unique key for resident page
-    surveyCaseId: integer("survey_case_id").references(() => surveyCases.id),
+    // ✅ Remove .notNull() to make it optional
+    residentId: integer("resident_id").references(() => resident.id),
 
-    // Make residentId NOT NULL so (survey_id, resident_id, question_id) is always valid
-    residentId: integer("resident_id")
-      .references(() => resident.id)
-      .notNull(),
+    surveyCaseId: integer("survey_case_id").references(() => surveyCases.id),
 
     questionId: integer("question_id")
       .references(() => question.id)
@@ -266,10 +265,25 @@ export const surveyResponse = pgTable(
     findings: text("findings"),
   },
   (table) => [
-    // EXACT three-column composite unique key you want to upsert on
-    unique().on(table.surveyId, table.residentId, table.questionId),
+    // ✅ Remove the old unique constraint and add new ones
+    // OLD: unique().on(table.surveyId, table.residentId, table.questionId),
+    
+    // New unique constraints for resident and case responses
+    unique("unique_resident_response").on(
+      table.surveyId, 
+      table.residentId, 
+      table.questionId
+    ),
+    
+    unique("unique_case_response").on(
+      table.surveyId, 
+      table.surveyCaseId, 
+      table.questionId
+    ),
   ],
 );
+
+
 
 
 //survey POC table
