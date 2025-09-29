@@ -95,6 +95,11 @@ export const auth = betterAuth({
       ...schema,
     },
   }),
+  trustedOrigins: [
+    "https://nshc-survey-system.vercel.app",
+    "http://localhost:3000",
+    "https://next-step-git-main-soham-03s-projects.vercel.app"
+  ],
   emailAndPassword: {
     enabled: true,
     // Add password reset configuration
