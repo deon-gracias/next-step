@@ -398,17 +398,17 @@ function FacilityComboBox({
   );
 }
 
-// UPDATED: Template Combobox Component with exclusion logic
+// Template Combobox Component with exclusion logic
 function TemplateComboBox({
   selectedItem,
   onSelect,
   withValue = false,
-  excludeTemplateIds = [], // NEW: Add excluded template IDs
+  excludeTemplateIds = [],
 }: {
   selectedItem?: any;
   onSelect: (value: any) => void;
   withValue?: boolean;
-  excludeTemplateIds?: number[]; // NEW: Exclude already selected templates
+  excludeTemplateIds?: number[];
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -424,7 +424,7 @@ function TemplateComboBox({
     name: debouncedSearch,
   });
 
-  // UPDATED: Filter out excluded templates and sort alphabetically
+  // Filter out excluded templates and sort alphabetically
   const availableTemplates = templates.data?.data
     .filter(template => !excludeTemplateIds.includes(template.id))
     .sort((a, b) => a.name.localeCompare(b.name)) || [];
@@ -642,7 +642,6 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
       form.reset(formData);
     }
   }, [form, loadFromStorage]);
-
 
   // Save data when form changes
   useEffect(() => {
@@ -924,7 +923,7 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
   );
 }
 
-// UPDATED: SurveyorField with template exclusion logic
+// UPDATED: SurveyorField with template exclusion logic and conditional forms based on template type
 function SurveyorField({
   form,
   sIndex,
@@ -941,7 +940,7 @@ function SurveyorField({
     name: `surveyors.${sIndex}.templates`,
   });
 
-  // NEW: Get all selected template IDs for this surveyor to exclude from dropdown
+  // Get all selected template IDs for this surveyor to exclude from dropdown
   const getExcludedTemplateIds = (currentTemplateIndex: number) => {
     const surveyorTemplates = form.watch(`surveyors.${sIndex}.templates`);
     return surveyorTemplates
@@ -1023,7 +1022,7 @@ function SurveyorField({
               </CardHeader>
 
               <CardContent className="pt-4 space-y-4">
-                {/* Template Select - UPDATED: With template exclusion */}
+                {/* Template Select */}
                 <Form {...form}>
                   <FormField
                     control={form.control}
@@ -1036,7 +1035,7 @@ function SurveyorField({
                             withValue
                             selectedItem={field.value}
                             onSelect={(item) => field.onChange(item)}
-                            excludeTemplateIds={getExcludedTemplateIds(tIndex)} // NEW: Pass excluded IDs
+                            excludeTemplateIds={getExcludedTemplateIds(tIndex)}
                           />
                         </FormControl>
                         <FormMessage />
@@ -1045,121 +1044,127 @@ function SurveyorField({
                   />
                 </Form>
 
-                {/* Back to vertical layout - Add Resident form on top, Selected Residents below */}
-                <div className="space-y-4">
-                  {/* Add Resident Form */}
-                  <AddResidentInput
-                    facilityId={form.getValues("facilityId")}
-                    value={form.getValues(`surveyors.${sIndex}.templates.${tIndex}.residentIds`)}
-                    onChange={(value) =>
-                      form.setValue(
-                        `surveyors.${sIndex}.templates.${tIndex}.residentIds`,
-                        Array.from(new Set(value)),
-                      )
-                    }
-                  />
+                {/* CONDITIONAL RENDERING BASED ON TEMPLATE TYPE */}
+                {form.watch(`surveyors.${sIndex}.templates.${tIndex}.template`) && (
+                  <>
+                    {/* RESIDENT TYPE: Show Add Resident form and Selected Residents */}
+                    {form.watch(`surveyors.${sIndex}.templates.${tIndex}.template`)?.type === "resident" && (
+                      <div className="space-y-4">
+                        {/* Add Resident Form */}
+                        <AddResidentInput
+                          facilityId={form.getValues("facilityId")}
+                          value={form.getValues(`surveyors.${sIndex}.templates.${tIndex}.residentIds`)}
+                          onChange={(value) =>
+                            form.setValue(
+                              `surveyors.${sIndex}.templates.${tIndex}.residentIds`,
+                              Array.from(new Set(value)),
+                            )
+                          }
+                        />
 
-                  {/* UPDATED: Selected Residents Display - No scroll, natural height */}
-                  <div className="rounded-lg border border-teal-200 bg-teal-50/30 overflow-hidden">
-                    <div className="bg-teal-100/50 px-4 py-2 border-b border-teal-200">
-                      <div className="flex items-center gap-2">
-                        <UsersIcon className="h-4 w-4 text-teal-600" />
-                        <span className="text-sm font-medium text-teal-800">Selected Residents</span>
-                      </div>
-                    </div>
-                    {/* REMOVED: max-h-32 overflow-y-auto - Now natural height, no scroll */}
-                    <div className="p-2"> 
-                      {form.watch(`surveyors.${sIndex}.templates.${tIndex}.residentIds`).length < 1 ? (
-                        <div className="text-muted-foreground py-4 text-center text-xs">
-                          No residents selected
-                        </div>
-                      ) : (
-                        <div className="space-y-2"> {/* Added proper spacing between residents */}
-                          {form
-                            .watch(`surveyors.${sIndex}.templates.${tIndex}.residentIds`)
-                            .sort((curr, next) => (curr > next ? 1 : 0))
-                            .map((id) => (
-                              <ResidentRowById
-                                key={id}
-                                id={id}
-                                handleRemove={() => {
-                                  form.setValue(
-                                    `surveyors.${sIndex}.templates.${tIndex}.residentIds`,
-                                    form
-                                      .getValues(`surveyors.${sIndex}.templates.${tIndex}.residentIds`)
-                                      .filter((i) => i !== id),
-                                  );
-                                }}
-                                compact={true}
-                              />
-                            ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Cases Section */}
-                {form.watch("facilityId") > -1 &&
-                  form.watch(`surveyors.${sIndex}.templates.${tIndex}.template`)?.type === "case" && (
-                    <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-3">
-                      <Form {...form}>
-                        <FormField
-                          control={form.control}
-                          name={`surveyors.${sIndex}.templates.${tIndex}.caseCodes`}
-                          render={({ field }) => {
-                            const ref = useRef<HTMLInputElement>(null);
-                            return (
-                              <FormItem>
-                                <FormLabel className="text-sm font-medium">Cases</FormLabel>
-                                <div className="flex items-center gap-2">
-                                  <FormControl>
-                                    <Input
-                                      ref={ref}
-                                      className="bg-white"
-                                      placeholder="Enter case code"
+                        {/* Selected Residents Display */}
+                        <div className="rounded-lg border border-teal-200 bg-teal-50/30 overflow-hidden">
+                          <div className="bg-teal-100/50 px-4 py-2 border-b border-teal-200">
+                            <div className="flex items-center gap-2">
+                              <UsersIcon className="h-4 w-4 text-teal-600" />
+                              <span className="text-sm font-medium text-teal-800">Selected Residents</span>
+                            </div>
+                          </div>
+                          <div className="p-2">
+                            {form.watch(`surveyors.${sIndex}.templates.${tIndex}.residentIds`).length < 1 ? (
+                              <div className="text-muted-foreground py-4 text-center text-xs">
+                                No residents selected
+                              </div>
+                            ) : (
+                              <div className="space-y-2">
+                                {form
+                                  .watch(`surveyors.${sIndex}.templates.${tIndex}.residentIds`)
+                                  .sort((curr, next) => (curr > next ? 1 : 0))
+                                  .map((id) => (
+                                    <ResidentRowById
+                                      key={id}
+                                      id={id}
+                                      handleRemove={() => {
+                                        form.setValue(
+                                          `surveyors.${sIndex}.templates.${tIndex}.residentIds`,
+                                          form
+                                            .getValues(`surveyors.${sIndex}.templates.${tIndex}.residentIds`)
+                                            .filter((i) => i !== id),
+                                        );
+                                      }}
+                                      compact={true}
                                     />
-                                  </FormControl>
-                                  <Button
-                                    type="button"
-                                    size="icon"
-                                    variant="secondary"
-                                    className="bg-slate-200 hover:bg-slate-300"
-                                    onClick={() => {
-                                      if (ref.current?.value && ref.current.value.trim()) {
-                                        field.onChange([
-                                          ...field.value,
-                                          ref.current.value.trim(),
-                                        ]);
-                                        ref.current.value = "";
-                                      }
-                                    }}
-                                  >
-                                    <PlusIcon className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                                <div className="flex flex-wrap gap-1 mt-2">
-                                  {field.value.map((e, i) => (
-                                    <Badge
+                                  ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* CASE TYPE: Show Case Codes form */}
+                    {form.watch(`surveyors.${sIndex}.templates.${tIndex}.template`)?.type === "case" && (
+                      <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-3">
+                        <Form {...form}>
+                          <FormField
+                            control={form.control}
+                            name={`surveyors.${sIndex}.templates.${tIndex}.caseCodes`}
+                            render={({ field }) => {
+                              const ref = useRef<HTMLInputElement>(null);
+                              return (
+                                <FormItem>
+                                  <FormLabel className="text-sm font-medium">Cases</FormLabel>
+                                  <div className="flex items-center gap-2">
+                                    <FormControl>
+                                      <Input
+                                        ref={ref}
+                                        className="bg-white"
+                                        placeholder="Enter case code"
+                                      />
+                                    </FormControl>
+                                    <Button
+                                      type="button"
+                                      size="icon"
                                       variant="secondary"
-                                      key={i}
-                                      className="bg-slate-200 cursor-pointer hover:bg-slate-300"
+                                      className="bg-slate-200 hover:bg-slate-300"
                                       onClick={() => {
-                                        field.onChange(field.value.filter((_, index) => index !== i));
+                                        if (ref.current?.value && ref.current.value.trim()) {
+                                          field.onChange([
+                                            ...field.value,
+                                            ref.current.value.trim(),
+                                          ]);
+                                          ref.current.value = "";
+                                        }
                                       }}
                                     >
-                                      {e} <XIcon className="h-3 w-3 ml-1" />
-                                    </Badge>
-                                  ))}
-                                </div>
-                                <FormMessage />
-                              </FormItem>
-                            );
-                          }}
-                        />
-                      </Form>
-                    </div>
-                  )}
+                                      <PlusIcon className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                  <div className="flex flex-wrap gap-1 mt-2">
+                                    {field.value.map((e, i) => (
+                                      <Badge
+                                        variant="secondary"
+                                        key={i}
+                                        className="bg-slate-200 cursor-pointer hover:bg-slate-300"
+                                        onClick={() => {
+                                          field.onChange(field.value.filter((_, index) => index !== i));
+                                        }}
+                                      >
+                                        {e} <XIcon className="h-3 w-3 ml-1" />
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                  <FormMessage />
+                                </FormItem>
+                              );
+                            }}
+                          />
+                        </Form>
+                      </div>
+                    )}
+
+                  </>
+                )}
               </CardContent>
             </Card>
           ))}
@@ -1184,7 +1189,7 @@ function SurveyorField({
   );
 }
 
-// ResidentRowById - same as before
+// ResidentRowById component - only cross icon for removal
 function ResidentRowById({
   id,
   handleRemove,
@@ -1226,76 +1231,11 @@ function ResidentRowById({
     );
   }
 
-  // Original table row view
-  return (
-    <TableRow className="bg-white hover:bg-teal-50/50">
-      <TableCell className="text-right font-mono tabular-nums">{id}</TableCell>
-      <TableCell className="font-medium">
-        {!resident.data ? <Skeleton className="h-6" /> : resident.data.name}
-      </TableCell>
-      <TableCell className="font-medium">
-        {!resident.data ? (
-          <Skeleton className="h-6" />
-        ) : (
-          <FacilityHoverCard facility={resident.data.facility} />
-        )}
-      </TableCell>
-      <TableCell>
-        <Badge variant="secondary" className="text-xs">
-          {!resident.data ? <Skeleton className="h-6" /> : resident.data.roomId}
-        </Badge>
-      </TableCell>
-      <TableCell>
-        {!resident.data ? (
-          <Skeleton className="h-6" />
-        ) : (
-          <code className="bg-muted rounded px-2 py-1 text-xs">
-            {resident.data.pcciId}
-          </code>
-        )}
-      </TableCell>
-      <TableCell className="flex items-center gap-2">
-        <Button
-          size="icon"
-          variant="outline"
-          className="h-7 w-7 hover:bg-red-50 hover:border-red-200"
-          onClick={async () => {
-            if (resident.data)
-              toast("Delete resident?", {
-                description: `This will permanently delete ${resident.data.name} (PCC ID: ${resident.data.pcciId})`,
-                closeButton: true,
-                action: {
-                  label: "Yes",
-                  onClick: () => {
-                    toast.promise(deleteResident.mutateAsync({ id }), {
-                      success: () => {
-                        void apiUtils.resident.byId.invalidate();
-                        void apiUtils.resident.list.invalidate();
-                        handleRemove();
-                        return "Deleted Resident";
-                      },
-                    });
-                  },
-                },
-              });
-          }}
-        >
-          <Trash2Icon className="h-3 w-3" />
-        </Button>
-        <Button
-          size="icon"
-          variant="outline"
-          className="h-7 w-7 hover:bg-gray-50"
-          onClick={handleRemove}
-        >
-          <XIcon className="h-3 w-3" />
-        </Button>
-      </TableCell>
-    </TableRow>
-  );
+  // Original table row view (not used in this context)
+  return null;
 }
 
-// AddResidentInput - same as before with PCC ID, Name, Room ID on same line
+// AddResidentInput component with PCC ID, Name, Room ID on same line
 function AddResidentInput({
   value,
   onChange,
@@ -1317,7 +1257,7 @@ function AddResidentInput({
 
   const residentMutation = api.resident.create.useMutation();
 
-  // Manual search function - CORRECTED for continuous use
+  // Manual search function
   const handleSearchResident = async () => {
     const pcciId = form.getValues("pcciId");
 
@@ -1327,12 +1267,11 @@ function AddResidentInput({
     }
 
     try {
-      // Use apiUtils.client to call the tRPC procedure correctly
       const response = await apiUtils.client.resident.list.query({
         pcciId: pcciId.trim(),
         pageSize: 10,
         page: 1,
-        facilityId: facilityId, // Add facility filter to search
+        facilityId: facilityId,
       });
 
       const foundResident = response.data?.find((e) => e.pcciId === pcciId.trim());
@@ -1376,9 +1315,7 @@ function AddResidentInput({
         loading: "Creating resident...",
         success: async (response) => {
           if (response[0]) onChange([...value, response[0].id]);
-          // Invalidate queries to refresh resident list immediately
           void apiUtils.resident.invalidate();
-          // Reset form for next entry
           form.reset({ name: "", pcciId: "", roomId: "", facilityId: 0 });
           setSearchedResident(null);
           return `Successfully created resident ${values.name}`;
@@ -1398,7 +1335,6 @@ function AddResidentInput({
 
     // Add existing resident
     onChange([...value, searchedResident.id]);
-    // Reset for next entry
     form.reset({ name: "", pcciId: "", roomId: "", facilityId: 0 });
     setSearchedResident(null);
     toast.success(`Added ${searchedResident.name} to the survey`);

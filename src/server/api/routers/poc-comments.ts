@@ -5,10 +5,9 @@ import {
   pocCommentInsertSchema,
   user,
 } from "@/server/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm"; // ✅ ADD 'and' import
 
 export const pocCommentRouter = createTRPCRouter({
-  // Create a new comment
   create: protectedProcedure
     .input(
       z.object({
@@ -31,7 +30,6 @@ export const pocCommentRouter = createTRPCRouter({
       return newComment[0];
     }),
 
-  // List comments for a survey/template combination
   list: protectedProcedure
     .input(
       z.object({
@@ -54,13 +52,15 @@ export const pocCommentRouter = createTRPCRouter({
         .from(pocComment)
         .leftJoin(user, eq(pocComment.authorId, user.id))
         .where(
-          eq(pocComment.surveyId, input.surveyId) &&
-          eq(pocComment.templateId, input.templateId)
+          // ✅ FIXED: Use and() instead of &&
+          and(
+            eq(pocComment.surveyId, input.surveyId),
+            eq(pocComment.templateId, input.templateId)
+          )
         )
         .orderBy(desc(pocComment.createdAt));
     }),
 
-  // Delete a comment (if needed)
   delete: protectedProcedure
     .input(
       z.object({
@@ -68,9 +68,10 @@ export const pocCommentRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      // Optional: Add authorization check to ensure user can only delete their own comments
       await ctx.db
         .delete(pocComment)
         .where(eq(pocComment.id, input.id));
+      
+      return { success: true };
     }),
 });

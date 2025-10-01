@@ -368,6 +368,22 @@ export default function SurveyDetailPage() {
           );
         }
 
+        // ✅ NEW: Fetch general responses (no residentId or surveyCaseId)
+        if (survey.data.template?.type === "general") {
+          const generalRows = await utils.survey.listResponses.fetch({ surveyId });
+          const generalResponses = generalRows?.filter(r => !r.residentId && !r.surveyCaseId) ?? [];
+          
+          for (const rr of generalResponses) {
+            arr.push({
+              residentId: null,
+              surveyCaseId: null,
+              questionId: rr.questionId,
+              status: (rr.requirementsMetOrUnmet as StatusVal) ?? null,
+              findings: rr.findings ?? null,
+            });
+          }
+        }
+
         if (!cancelled) {
           setAllResponses(arr);
         }
@@ -380,37 +396,41 @@ export default function SurveyDetailPage() {
     };
   }, [survey.data, residents.data, cases.data, surveyId, utils.survey.listResponses]); // ✅ Added cases.data
 
-  // Fetch existing POCs for the survey
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      if (!survey.data || !residents.data || residents.data.length === 0) {
-        if (!cancelled) {
-          setHasAnyPOC(false);
-          setPocMap(new Map());
-          setCombinedPOC("");
-        }
-        return;
+  // ✅ UPDATED: Fetch existing POCs for resident surveys only (as per current backend)
+  // ✅ UPDATED: Fetch existing POCs for all survey types
+useEffect(() => {
+  let cancelled = false;
+  (async () => {
+    if (!survey.data) {
+      if (!cancelled) {
+        setHasAnyPOC(false);
+        setPocMap(new Map());
+        setCombinedPOC("");
       }
+      return;
+    }
 
-      try {
+    const templateType = survey.data.template?.type;
+
+    try {
+      const newPocMap = new Map<string, string>();
+      let foundAnyPOC = false;
+      let firstPocText = "";
+
+      if (templateType === "resident" && residents.data && residents.data.length > 0) {
+        // ✅ Resident POCs
         const residentIds = residents.data.map((r) => r.residentId);
         const pocResults = await Promise.all(
           residentIds.map((rid) => utils.poc.list.fetch({ surveyId, residentId: rid }))
         );
 
-        const newPocMap = new Map<string, string>();
-        let foundAnyPOC = false;
-        let firstPocText = "";
-
-        // For each resident, collect POC text per question
         for (let i = 0; i < residentIds.length; i++) {
           const residentId = residentIds[i];
           const pocRows = pocResults[i] ?? [];
 
           for (const pocRow of pocRows) {
             if (pocRow.pocText && pocRow.pocText.trim()) {
-              const key = `${residentId}-${pocRow.questionId}`;
+              const key = `resident-${residentId}-${pocRow.questionId}`;
               newPocMap.set(key, pocRow.pocText.trim());
               foundAnyPOC = true;
               if (!firstPocText) {
@@ -419,57 +439,99 @@ export default function SurveyDetailPage() {
             }
           }
         }
+      } else if (templateType === "case" && cases.data && cases.data.length > 0) {
+        // ✅ NEW: Case POCs
+        const caseIds = cases.data.map((c) => c.id);
+        const pocResults = await Promise.all(
+          caseIds.map((cid) => utils.poc.list.fetch({ surveyId, surveyCaseId: cid }))
+        );
 
-        if (!cancelled) {
-          setPocMap(newPocMap);
-          setHasAnyPOC(foundAnyPOC);
-          setCombinedPOC(firstPocText);
+        for (let i = 0; i < caseIds.length; i++) {
+          const caseId = caseIds[i];
+          const pocRows = pocResults[i] ?? [];
+
+          for (const pocRow of pocRows) {
+            if (pocRow.pocText && pocRow.pocText.trim()) {
+              const key = `case-${caseId}-${pocRow.questionId}`;
+              newPocMap.set(key, pocRow.pocText.trim());
+              foundAnyPOC = true;
+              if (!firstPocText) {
+                firstPocText = pocRow.pocText.trim();
+              }
+            }
+          }
         }
-      } catch (error) {
-        console.error("Failed to fetch POCs:", error);
-        if (!cancelled) {
-          setHasAnyPOC(false);
-          setPocMap(new Map());
-          setCombinedPOC("");
+      } else if (templateType === "general") {
+        // ✅ NEW: General POCs
+        const pocRows = await utils.poc.list.fetch({ surveyId });
+        
+        for (const pocRow of pocRows) {
+          if (pocRow.pocText && pocRow.pocText.trim()) {
+            const key = `general-${pocRow.questionId}`;
+            newPocMap.set(key, pocRow.pocText.trim());
+            foundAnyPOC = true;
+            if (!firstPocText) {
+              firstPocText = pocRow.pocText.trim();
+            }
+          }
         }
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [survey.data, residents.data, surveyId, utils.poc.list]);
 
-  // Fetch existing DOCs for the survey
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      if (!survey.data || !residents.data || residents.data.length === 0) {
-        if (!cancelled) {
-          setHasAnyDOC(false);
-          setDocMap(new Map());
-          setCombinedDOC(null);
-        }
-        return;
+      if (!cancelled) {
+        setPocMap(newPocMap);
+        setHasAnyPOC(foundAnyPOC);
+        setCombinedPOC(firstPocText);
       }
+    } catch (error) {
+      console.error("Failed to fetch POCs:", error);
+      if (!cancelled) {
+        setHasAnyPOC(false);
+        setPocMap(new Map());
+        setCombinedPOC("");
+      }
+    }
+  })();
+  return () => {
+    cancelled = true;
+  };
+}, [survey.data, residents.data, cases.data, surveyId, utils.poc.list]);
 
-      try {
+
+  // ✅ UPDATED: Fetch existing DOCs for resident surveys only (as per current backend)
+// ✅ UPDATED: Fetch existing DOCs for all survey types
+useEffect(() => {
+  let cancelled = false;
+  (async () => {
+    if (!survey.data) {
+      if (!cancelled) {
+        setHasAnyDOC(false);
+        setDocMap(new Map());
+        setCombinedDOC(null);
+      }
+      return;
+    }
+
+    const templateType = survey.data.template?.type;
+
+    try {
+      const newDocMap = new Map<string, Date>();
+      let foundAnyDOC = false;
+      let firstDocDate: Date | null = null;
+
+      if (templateType === "resident" && residents.data && residents.data.length > 0) {
+        // ✅ Resident DOCs
         const residentIds = residents.data.map((r) => r.residentId);
         const docResults = await Promise.all(
           residentIds.map((rid) => utils.doc.list.fetch({ surveyId, residentId: rid }))
         );
 
-        const newDocMap = new Map<string, Date>();
-        let foundAnyDOC = false;
-        let firstDocDate: Date | null = null;
-
-        // For each resident, collect DOC dates per question
         for (let i = 0; i < residentIds.length; i++) {
           const residentId = residentIds[i];
           const docRows = docResults[i] ?? [];
 
           for (const docRow of docRows) {
             if (docRow.complianceDate) {
-              const key = `${residentId}-${docRow.questionId}`;
+              const key = `resident-${residentId}-${docRow.questionId}`;
               const docDate = new Date(docRow.complianceDate);
               newDocMap.set(key, docDate);
               foundAnyDOC = true;
@@ -479,25 +541,65 @@ export default function SurveyDetailPage() {
             }
           }
         }
+      } else if (templateType === "case" && cases.data && cases.data.length > 0) {
+        // ✅ NEW: Case DOCs (after backend update)
+        const caseIds = cases.data.map((c) => c.id);
+        const docResults = await Promise.all(
+          caseIds.map((cid) => utils.doc.list.fetch({ surveyId, surveyCaseId: cid }))
+        );
 
-        if (!cancelled) {
-          setDocMap(newDocMap);
-          setHasAnyDOC(foundAnyDOC);
-          setCombinedDOC(firstDocDate);
+        for (let i = 0; i < caseIds.length; i++) {
+          const caseId = caseIds[i];
+          const docRows = docResults[i] ?? [];
+
+          for (const docRow of docRows) {
+            if (docRow.complianceDate) {
+              const key = `case-${caseId}-${docRow.questionId}`;
+              const docDate = new Date(docRow.complianceDate);
+              newDocMap.set(key, docDate);
+              foundAnyDOC = true;
+              if (!firstDocDate) {
+                firstDocDate = docDate;
+              }
+            }
+          }
         }
-      } catch (error) {
-        console.error("Failed to fetch DOCs:", error);
-        if (!cancelled) {
-          setHasAnyDOC(false);
-          setDocMap(new Map());
-          setCombinedDOC(null);
+      } else if (templateType === "general") {
+        // ✅ NEW: General DOCs (after backend update)
+        const docRows = await utils.doc.list.fetch({ surveyId });
+        
+        for (const docRow of docRows) {
+          if (docRow.complianceDate) {
+            const key = `general-${docRow.questionId}`;
+            const docDate = new Date(docRow.complianceDate);
+            newDocMap.set(key, docDate);
+            foundAnyDOC = true;
+            if (!firstDocDate) {
+              firstDocDate = docDate;
+            }
+          }
         }
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [survey.data, residents.data, surveyId, utils.doc.list]);
+
+      if (!cancelled) {
+        setDocMap(newDocMap);
+        setHasAnyDOC(foundAnyDOC);
+        setCombinedDOC(firstDocDate);
+      }
+    } catch (error) {
+      console.error("Failed to fetch DOCs:", error);
+      if (!cancelled) {
+        setHasAnyDOC(false);
+        setDocMap(new Map());
+        setCombinedDOC(null);
+      }
+    }
+  })();
+  return () => {
+    cancelled = true;
+  };
+}, [survey.data, residents.data, cases.data, surveyId, utils.doc.list]); // ✅ Added cases.data
+
 
   // When sheet opens, set the POC text from the map
   useEffect(() => {
@@ -575,18 +677,18 @@ export default function SurveyDetailPage() {
   }, [questions.data, allResponses]);
 
   const ResidentInitial = ({ residentId }: { residentId: number }) => {
-  const resident = api.resident.byId.useQuery({ id: residentId });
+    const resident = api.resident.byId.useQuery({ id: residentId });
 
-  if (resident.isPending) {
-    return <Skeleton className="h-4 w-16" />;
-  }
+    if (resident.isPending) {
+      return <Skeleton className="h-4 w-16" />;
+    }
 
-  return (
-    <span>
-      {resident.data?.name || `ID: ${residentId}`}
-    </span>
-  );
-};
+    return (
+      <span>
+        {resident.data?.name || `ID: ${residentId}`}
+      </span>
+    );
+  };
 
   // Progress calculation for each resident
   const residentProgress = useMemo(() => {
@@ -610,52 +712,154 @@ export default function SurveyDetailPage() {
     return map;
   }, [residents.data, allQuestionIds, byResident]);
 
-  // ✅ Updated: Score calculation including both residents and cases
-  const { overallScore, maxTemplatePoints, overallPercent } = useMemo(() => {
-    const qs: QuestionRow[] = (questions.data ?? []) as QuestionRow[];
-    let awarded = 0;
+  // ✅ FIXED: Score calculation for resident, case, AND general surveys
+// ✅ FIXED: Score calculation for resident, case, AND general surveys
+// ✅ DEBUG: Score calculation with logging - REPLACE YOUR CURRENT overallScore useMemo
+const { overallScore, maxTemplatePoints, overallPercent } = useMemo(() => {
+  const qs: QuestionRow[] = (questions.data ?? []) as QuestionRow[];
+  let awarded = 0;
+  
+  // ✅ DEBUG: Log what we're working with
+  console.log("=== SCORE DEBUG ===");
+  console.log("Survey type:", survey.data?.template?.type);
+  console.log("Questions count:", qs.length);
+  console.log("Residents data:", residents.data);
+  console.log("Cases data:", cases.data);
+  console.log("All responses:", allResponses);
+  console.log("byEntity keys:", Array.from(byEntity.keys()));
+  
+  for (const q of qs) {
+    let anyUnmetOrUnanswered = false;
+    let anyMet = false;
     
-    for (const q of qs) {
-      let anyUnmetOrUnanswered = false;
-      let anyMet = false;
-      
+    console.log(`\n--- Question ${q.id} (${q.points} points) ---`);
+    
+    if (survey.data?.template?.type === "resident") {
       // Check resident responses
       for (const r of residents.data ?? []) {
-        const cell = byEntity.get(`resident-${r.residentId}`)?.get(q.id);
+        const entityKey = `resident-${r.residentId}`;
+        const cell = byEntity.get(entityKey)?.get(q.id);
+        console.log(`Resident ${r.residentId}: entityKey=${entityKey}, cell=`, cell);
+        
         if (!cell?.status) {
           anyUnmetOrUnanswered = true;
+          console.log(`  -> UNANSWERED`);
           break;
         }
         if (cell.status === "unmet") {
           anyUnmetOrUnanswered = true;
+          console.log(`  -> UNMET`);
           break;
         }
-        if (cell.status === "met") anyMet = true;
-      }
-      
-      // ✅ NEW: Check case responses
-      if (!anyUnmetOrUnanswered) {
-        for (const c of cases.data ?? []) {
-          const cell = byEntity.get(`case-${c.id}`)?.get(q.id);
-          if (!cell?.status) {
-            anyUnmetOrUnanswered = true;
-            break;
-          }
-          if (cell.status === "unmet") {
-            anyUnmetOrUnanswered = true;
-            break;
-          }
-          if (cell.status === "met") anyMet = true;
+        if (cell.status === "met") {
+          anyMet = true;
+          console.log(`  -> MET`);
         }
       }
+    } 
+    else if (survey.data?.template?.type === "case") {
+      // Check case responses
+      for (const c of cases.data ?? []) {
+        const entityKey = `case-${c.id}`;
+        const cell = byEntity.get(entityKey)?.get(q.id);
+        console.log(`Case ${c.id}: entityKey=${entityKey}, cell=`, cell);
+        
+        if (!cell?.status) {
+          anyUnmetOrUnanswered = true;
+          console.log(`  -> UNANSWERED`);
+          break;
+        }
+        if (cell.status === "unmet") {
+          anyUnmetOrUnanswered = true;
+          console.log(`  -> UNMET`);
+          break;
+        }
+        if (cell.status === "met") {
+          anyMet = true;
+          console.log(`  -> MET`);
+        }
+      }
+    }
+    else if (survey.data?.template?.type === "general") {
+  // ✅ FIXED: Check general responses using correct field name
+  const generalResponses = allResponses.filter(r => !r.residentId && !r.surveyCaseId);
+  const cell = generalResponses.find(r => r.questionId === q.id);
+  console.log(`General question ${q.id}: cell=`, cell);
+  
+  if (!cell || !cell.status) {
+    anyUnmetOrUnanswered = true;
+    console.log(`  -> UNANSWERED`);
+  } else if (cell.status === "unmet") {
+    anyUnmetOrUnanswered = true;
+    console.log(`  -> UNMET`);
+  } else if (cell.status === "met") { // ✅ FIXED: Use .status instead of .requirementsMetOrUnmet
+    anyMet = true;
+    console.log(`  -> MET`);
+  }
+}
+
+    
+    // Award points if question is fully met
+    const shouldAward = !anyUnmetOrUnanswered && anyMet;
+    console.log(`Question ${q.id} summary: anyUnmetOrUnanswered=${anyUnmetOrUnanswered}, anyMet=${anyMet}, shouldAward=${shouldAward}`);
+    
+    if (shouldAward) {
+      awarded += q.points ?? 0;
+      console.log(`  -> AWARDED ${q.points} points (total now: ${awarded})`);
+    }
+  }
+  
+  const max = qs.reduce((s, q) => s + (q.points ?? 0), 0);
+  const pct = max > 0 ? Math.round((awarded / max) * 100) : 0;
+  
+  console.log(`\nFINAL SCORE: ${awarded}/${max} (${pct}%)`);
+  console.log("=== END DEBUG ===\n");
+  
+  return { overallScore: awarded, maxTemplatePoints: max, overallPercent: pct };
+}, [questions.data, byEntity, residents.data, cases.data, allResponses, survey.data?.template?.type]);
+
+
+
+  // ✅ FIXED: Check if survey is complete for ALL template types
+  const isSurveyComplete = useMemo(() => {
+    if (!questions.data || questions.data.length === 0) return false;
+    
+    const templateType = survey.data?.template?.type;
+    
+    if (templateType === "resident") {
+      // Check if all residents have answered all questions
+      if (!residents.data || residents.data.length === 0) return false;
       
-      if (!anyUnmetOrUnanswered && anyMet) awarded += q.points ?? 0;
+      return questions.data.every(q => {
+        return residents.data!.every(r => {
+          const cell = byEntity.get(`resident-${r.residentId}`)?.get(q.id);
+          return cell?.status && cell.status !== "not_applicable";
+        });
+      });
+    } 
+    else if (templateType === "case") {
+      // Check if all cases have answered all questions
+      if (!cases.data || cases.data.length === 0) return false;
+      
+      return questions.data.every(q => {
+        return cases.data!.every(c => {
+          const cell = byEntity.get(`case-${c.id}`)?.get(q.id);
+          return cell?.status && cell.status !== "not_applicable";
+        });
+      });
+    }
+    else if (templateType === "general") {
+      // ✅ NEW: Check if all general questions are answered
+      const generalResponses = allResponses.filter(r => !r.residentId && !r.surveyCaseId);
+      
+      return questions.data.every(q => {
+        const response = generalResponses.find(r => r.questionId === q.id);
+        return response?.status && response.status !== "not_applicable";
+      });
     }
     
-    const max = qs.reduce((s, q) => s + (q.points ?? 0), 0);
-    const pct = max > 0 ? Math.round((awarded / max) * 100) : 0;
-    return { overallScore: awarded, maxTemplatePoints: max, overallPercent: pct };
-  }, [questions.data, byEntity, residents.data, cases.data]); // ✅ Updated dependencies
+    return false;
+  }, [questions.data, residents.data, cases.data, allResponses, byEntity, survey.data?.template?.type]);
 
   // POC availability - UPDATED LOGIC
   const isLocked = Boolean(survey.data?.isLocked);
@@ -663,7 +867,7 @@ export default function SurveyDetailPage() {
   const scoreAllowsPOC = overallPercent < 85;
   const canOpenPOCSheet = isLocked && pocGenerated && scoreAllowsPOC;
 
-  // POC sheet blocks
+  // ✅ UPDATED: POC sheet blocks for case type (shows case numbers) and general type (shows just unmets)
   const sheetBlocks = useMemo(() => {
     const qrows: QuestionRow[] = (questions.data ?? []) as QuestionRow[];
     if (qrows.length === 0 || !canOpenPOCSheet) return [] as Array<{
@@ -671,21 +875,46 @@ export default function SurveyDetailPage() {
       text: string;
       ftags: string[];
       strengthPct: number;
-      items: Array<{ residentId: number; findings: string | null }>;
+      items: Array<{ residentPcciId?: string; caseNumber?: string; findings: string | null }>;
     }>;
+
+    const templateType = survey.data?.template?.type;
     const blocks: Array<{
       qid: number;
       text: string;
       ftags: string[];
       strengthPct: number;
-      items: Array<{ residentId: number; findings: string | null }>;
+      items: Array<{ residentPcciId?: string; caseNumber?: string; findings: string | null }>;
     }> = [];
+    
     for (const q of qrows) {
-      const items: Array<{ residentId: number; findings: string | null }> = [];
-      for (const r of residents.data ?? []) {
-        const cell = byResident.get(r.residentId)?.get(q.id);
-        if (cell?.status === "unmet") items.push({ residentId: r.residentId, findings: cell.findings ?? null });
+      const items: Array<{ residentPcciId?: string; caseNumber?: string; findings: string | null }> = [];
+      
+      if (templateType === "resident") {
+        // ✅ UPDATED: Use resident PCCI ID instead of residentId
+        for (const r of residents.data ?? []) {
+          const cell = byResident.get(r.residentId)?.get(q.id);
+          if (cell?.status === "unmet") {
+            items.push({ residentPcciId: r.pcciId, findings: cell.findings ?? null });
+          }
+        }
+      } else if (templateType === "case") {
+        // ✅ UPDATED: Use case number instead of case ID
+        for (const c of cases.data ?? []) {
+          const cell = byEntity.get(`case-${c.id}`)?.get(q.id);
+          if (cell?.status === "unmet") {
+            items.push({ caseNumber: c.caseCode, findings: cell.findings ?? null });
+          }
+        }
+      } else if (templateType === "general") {
+        // ✅ NEW: General logic - shows just unmets, no resident/case IDs
+        const generalResponses = allResponses.filter(r => !r.residentId && !r.surveyCaseId);
+        const cell = generalResponses.find(r => r.questionId === q.id);
+        if (cell?.status === "unmet") {
+          items.push({ findings: cell.findings ?? null });
+        }
       }
+      
       if (items.length > 0) {
         const ftags = (q.ftags ?? []).map((f) => f.code);
         const s = questionStrengths.find((x) => x.questionId === q.id)?.strengthPct ?? 0;
@@ -693,7 +922,7 @@ export default function SurveyDetailPage() {
       }
     }
     return blocks;
-  }, [questions.data, canOpenPOCSheet, byResident, residents.data, questionStrengths]);
+  }, [questions.data, canOpenPOCSheet, byResident, residents.data, cases.data, byEntity, allResponses, questionStrengths, survey.data?.template?.type]);
 
   // Check if all questions are answered
   const allAnswered = surveyCompletion.data?.isComplete ?? false;
@@ -824,7 +1053,7 @@ export default function SurveyDetailPage() {
         }
       }
 
-      // Unmet Questions Summary
+      // ✅ UPDATED: Unmet Questions Summary for all template types
       if (sheetBlocks.length > 0) {
         // Check if we need a new page
         if (yPos + 30 > 280) {
@@ -861,21 +1090,60 @@ export default function SurveyDetailPage() {
           }
           yPos += 6;
 
-          // Residents with unmet
-          doc.setFont("helvetica", "italic");
-          doc.text("Residents with unmet:", 20, yPos);
-          yPos += 4;
+          // ✅ UPDATED: Show different labels based on template type with PCCI ID and case numbers
+          const templateType = survey.data?.template?.type;
+          if (templateType === "resident") {
+            doc.setFont("helvetica", "italic");
+            doc.text("Residents with unmet:", 20, yPos);
+            yPos += 4;
 
-          doc.setFont("helvetica", "normal");
-          for (const item of block.items) {
-            doc.text(`• Resident ${item.residentId}`, 25, yPos);
-            if (item.findings) {
-              yPos += 4;
-              const findingsLines = doc.splitTextToSize(`  Findings: ${item.findings}`, 160);
-              doc.text(findingsLines, 25, yPos);
-              yPos += findingsLines.length * 4;
+            doc.setFont("helvetica", "normal");
+            for (const item of block.items) {
+              if (item.residentPcciId) {
+                doc.text(`• PCCI: ${item.residentPcciId}`, 25, yPos);
+                if (item.findings) {
+                  yPos += 4;
+                  const findingsLines = doc.splitTextToSize(`  Findings: ${item.findings}`, 160);
+                  doc.text(findingsLines, 25, yPos);
+                  yPos += findingsLines.length * 4;
+                }
+                yPos += 3;
+              }
             }
-            yPos += 3;
+          } else if (templateType === "case") {
+            doc.setFont("helvetica", "italic");
+            doc.text("Cases with unmet:", 20, yPos);
+            yPos += 4;
+
+            doc.setFont("helvetica", "normal");
+            for (const item of block.items) {
+              if (item.caseNumber) {
+                doc.text(`• Case: ${item.caseNumber}`, 25, yPos);
+                if (item.findings) {
+                  yPos += 4;
+                  const findingsLines = doc.splitTextToSize(`  Findings: ${item.findings}`, 160);
+                  doc.text(findingsLines, 25, yPos);
+                  yPos += findingsLines.length * 4;
+                }
+                yPos += 3;
+              }
+            }
+          } else if (templateType === "general") {
+            doc.setFont("helvetica", "italic");
+            doc.text("Unmet requirements:", 20, yPos);
+            yPos += 4;
+
+            doc.setFont("helvetica", "normal");
+            for (const item of block.items) {
+              if (item.findings) {
+                const findingsLines = doc.splitTextToSize(`• ${item.findings}`, 160);
+                doc.text(findingsLines, 25, yPos);
+                yPos += findingsLines.length * 4 + 3;
+              } else {
+                doc.text("• Requirements not met", 25, yPos);
+                yPos += 6;
+              }
+            }
           }
           yPos += 5;
         }
@@ -893,73 +1161,134 @@ export default function SurveyDetailPage() {
     }
   }, [survey.data, hasAnyPOC, surveyId, combinedPOC, comments.data, sheetBlocks, hasAnyDOC, combinedDOC, facility.data, surveyor.data]);
 
-  // Save POC handler
-  const handleSaveCombinedPOC = useCallback(async () => {
-    if (!survey.data || !canOpenPOCSheet) return;
-    const templateId = survey.data.templateId;
-    const text = combinedPOC.trim();
-    if (!text) {
-      toast.error("POC text cannot be empty");
+  // ✅ FIXED: Save POC handler - only pass fields that exist
+  // ✅ FIXED: Save POC handler - supports all survey types
+const handleSaveCombinedPOC = useCallback(async () => {
+  if (!survey.data || !canOpenPOCSheet) return;
+  const templateId = survey.data.templateId;
+  const templateType = survey.data.template?.type;
+  const text = combinedPOC.trim();
+  if (!text) {
+    toast.error("POC text cannot be empty");
+    return;
+  }
+
+  try {
+    const updates: Array<{ 
+      residentId?: number; 
+      surveyCaseId?: number; 
+      questionId: number 
+    }> = [];
+
+    if (templateType === "resident") {
+      // Handle resident surveys
+      for (const r of residents.data ?? []) {
+        const ansMap = byResident.get(r.residentId) ?? new Map<number, ResponseCell>();
+        for (const q of questions.data ?? []) {
+          const cell = ansMap.get(q.id);
+          if (cell?.status === "unmet") {
+            updates.push({ residentId: r.residentId, questionId: q.id });
+          }
+        }
+      }
+    } else if (templateType === "case") {
+      // ✅ NEW: Handle case surveys
+      for (const c of cases.data ?? []) {
+        const ansMap = byEntity.get(`case-${c.id}`) ?? new Map<number, ResponseCell>();
+        for (const q of questions.data ?? []) {
+          const cell = ansMap.get(q.id);
+          if (cell?.status === "unmet") {
+            updates.push({ surveyCaseId: c.id, questionId: q.id });
+          }
+        }
+      }
+    } else if (templateType === "general") {
+      // ✅ NEW: Handle general surveys
+      const generalResponses = allResponses.filter(r => !r.residentId && !r.surveyCaseId);
+      for (const q of questions.data ?? []) {
+        const cell = generalResponses.find(r => r.questionId === q.id);
+        if (cell?.status === "unmet") {
+          updates.push({ questionId: q.id }); // No residentId or surveyCaseId
+        }
+      }
+    }
+
+    if (updates.length === 0) {
+      toast.error("No questions with unmet answers found");
       return;
     }
 
-    try {
-      const updates: Array<{ residentId: number; questionId: number }> = [];
+    // ✅ UPDATED: Pass appropriate IDs based on survey type
+    await Promise.all(
+      updates.map((update) => {
+        const pocData: any = {
+          surveyId,
+          templateId,
+          questionId: update.questionId,
+          pocText: text,
+        };
 
-      for (const r of residents.data ?? []) {
-        const ansMap = byResident.get(r.residentId) ?? new Map<number, ResponseCell>();
-        for (const q of questions.data ?? []) {
-          const cell = ansMap.get(q.id);
-          if (cell?.status === "unmet") {
-            updates.push({ residentId: r.residentId, questionId: q.id });
-          }
+        // Add the appropriate ID field
+        if (update.residentId) {
+          pocData.residentId = update.residentId;
+        } else if (update.surveyCaseId) {
+          pocData.surveyCaseId = update.surveyCaseId;
         }
-      }
+        // For general surveys, no additional ID is needed
 
-      if (updates.length === 0) {
-        toast.error("No questions with unmet answers found");
-        return;
-      }
+        return pocUpsert.mutateAsync(pocData);
+      })
+    );
 
-      await Promise.all(
-        updates.map((update) =>
-          pocUpsert.mutateAsync({
-            surveyId,
-            residentId: update.residentId,
-            templateId,
-            questionId: update.questionId,
-            pocText: text,
-          })
-        )
-      );
+    // Update local state
+    const newPocMap = new Map(pocMap);
+    updates.forEach(update => {
+      const key = update.residentId 
+        ? `resident-${update.residentId}-${update.questionId}` 
+        : update.surveyCaseId 
+        ? `case-${update.surveyCaseId}-${update.questionId}`
+        : `general-${update.questionId}`;
+      newPocMap.set(key, text);
+    });
+    setPocMap(newPocMap);
+    setHasAnyPOC(true);
 
-      const newPocMap = new Map(pocMap);
-      updates.forEach(update => {
-        const key = `${update.residentId}-${update.questionId}`;
-        newPocMap.set(key, text);
-      });
-      setPocMap(newPocMap);
-      setHasAnyPOC(true);
-
-      const affectedResidents = Array.from(new Set(updates.map(u => u.residentId)));
+    // ✅ UPDATED: Invalidate based on survey type
+    if (templateType === "resident") {
+      const affectedResidents = Array.from(new Set(updates.map(u => u.residentId).filter(Boolean)));
       await Promise.all(affectedResidents.map((rid) => utils.poc.list.invalidate({ surveyId, residentId: rid })));
-
-      setSheetOpen(false);
-      toast.success("POC updated for unmet questions successfully");
-    } catch (e) {
-      console.error("Save combined POC failed", e);
-      toast.error("Failed to save POC");
+    } else if (templateType === "case") {
+      const affectedCases = Array.from(new Set(updates.map(u => u.surveyCaseId).filter(Boolean)));
+      await Promise.all(affectedCases.map((cid) => utils.poc.list.invalidate({ surveyId, surveyCaseId: cid })));
+    } else if (templateType === "general") {
+      await utils.poc.list.invalidate({ surveyId }); // General POCs
     }
-  }, [survey.data, canOpenPOCSheet, combinedPOC, pocUpsert, utils.poc.list, surveyId, questions.data, residents.data, byResident, pocMap]);
 
-  // DOC save handler
-  const handleSaveCombinedDOC = useCallback(async () => {
-    if (!survey.data || !canOpenPOCSheet || !combinedDOC) return;
-    const templateId = survey.data.templateId;
+    setSheetOpen(false);
+    toast.success("POC updated for unmet questions successfully");
+  } catch (e) {
+    console.error("Save combined POC failed", e);
+    toast.error("Failed to save POC");
+  }
+}, [survey.data, canOpenPOCSheet, combinedPOC, pocUpsert, utils.poc.list, surveyId, questions.data, residents.data, cases.data, byResident, byEntity, allResponses, pocMap]);
 
-    try {
-      const updates: Array<{ residentId: number; questionId: number }> = [];
 
+  // ✅ FIXED: DOC save handler - only pass fields that exist
+  // ✅ UPDATED: DOC save handler - supports all survey types
+const handleSaveCombinedDOC = useCallback(async () => {
+  if (!survey.data || !canOpenPOCSheet || !combinedDOC) return;
+  const templateId = survey.data.templateId;
+  const templateType = survey.data.template?.type;
+
+  try {
+    const updates: Array<{ 
+      residentId?: number; 
+      surveyCaseId?: number; 
+      questionId: number 
+    }> = [];
+
+    if (templateType === "resident") {
+      // Handle resident surveys
       for (const r of residents.data ?? []) {
         const ansMap = byResident.get(r.residentId) ?? new Map<number, ResponseCell>();
         for (const q of questions.data ?? []) {
@@ -969,46 +1298,91 @@ export default function SurveyDetailPage() {
           }
         }
       }
-
-      if (updates.length === 0) {
-        toast.error("No questions with unmet answers found");
-        return;
+    } else if (templateType === "case") {
+      // ✅ NEW: Handle case surveys
+      for (const c of cases.data ?? []) {
+        const ansMap = byEntity.get(`case-${c.id}`) ?? new Map<number, ResponseCell>();
+        for (const q of questions.data ?? []) {
+          const cell = ansMap.get(q.id);
+          if (cell?.status === "unmet") {
+            updates.push({ surveyCaseId: c.id, questionId: q.id });
+          }
+        }
       }
-
-      if (!combinedDOC) return;
-      // Convert Date to YYYY-MM-DD string format
-      const complianceDateString = combinedDOC.toISOString().split('T')[0];
-      if (!complianceDateString) return;
-
-      await Promise.all(
-        updates.map((update) =>
-          docUpsert.mutateAsync({
-            surveyId,
-            residentId: update.residentId,
-            templateId,
-            questionId: update.questionId,
-            complianceDate: complianceDateString,
-          })
-        )
-      );
-
-      const newDocMap = new Map(docMap);
-      updates.forEach(update => {
-        const key = `${update.residentId}-${update.questionId}`;
-        newDocMap.set(key, combinedDOC);
-      });
-      setDocMap(newDocMap);
-      setHasAnyDOC(true);
-
-      const affectedResidents = Array.from(new Set(updates.map(u => u.residentId)));
-      await Promise.all(affectedResidents.map((rid) => utils.doc.list.invalidate({ surveyId, residentId: rid })));
-
-      toast.success("Date of Compliance updated for unmet questions successfully");
-    } catch (e) {
-      console.error("Save combined DOC failed", e);
-      toast.error("Failed to save Date of Compliance");
+    } else if (templateType === "general") {
+      // ✅ NEW: Handle general surveys
+      const generalResponses = allResponses.filter(r => !r.residentId && !r.surveyCaseId);
+      for (const q of questions.data ?? []) {
+        const cell = generalResponses.find(r => r.questionId === q.id);
+        if (cell?.status === "unmet") {
+          updates.push({ questionId: q.id }); // No residentId or surveyCaseId
+        }
+      }
     }
-  }, [survey.data, canOpenPOCSheet, combinedDOC, docUpsert, utils.doc.list, surveyId, questions.data, residents.data, byResident, docMap]);
+
+    if (updates.length === 0) {
+      toast.error("No questions with unmet answers found");
+      return;
+    }
+
+    if (!combinedDOC) return;
+    // Convert Date to YYYY-MM-DD string format
+    const complianceDateString = combinedDOC.toISOString().split('T')[0];
+    if (!complianceDateString) return;
+
+    // ✅ UPDATED: Pass appropriate IDs based on survey type
+    await Promise.all(
+      updates.map((update) => {
+        const docData: any = {
+          surveyId,
+          templateId,
+          questionId: update.questionId,
+          complianceDate: complianceDateString,
+        };
+
+        // Add the appropriate ID field
+        if (update.residentId) {
+          docData.residentId = update.residentId;
+        } else if (update.surveyCaseId) {
+          docData.surveyCaseId = update.surveyCaseId;
+        }
+        // For general surveys, no additional ID is needed
+
+        return docUpsert.mutateAsync(docData);
+      })
+    );
+
+    // Update local state
+    const newDocMap = new Map(docMap);
+    updates.forEach(update => {
+      const key = update.residentId 
+        ? `resident-${update.residentId}-${update.questionId}` 
+        : update.surveyCaseId 
+        ? `case-${update.surveyCaseId}-${update.questionId}`
+        : `general-${update.questionId}`;
+      newDocMap.set(key, combinedDOC);
+    });
+    setDocMap(newDocMap);
+    setHasAnyDOC(true);
+
+    // ✅ UPDATED: Invalidate based on survey type
+    if (templateType === "resident") {
+      const affectedResidents = Array.from(new Set(updates.map(u => u.residentId).filter(Boolean)));
+      await Promise.all(affectedResidents.map((rid) => utils.doc.list.invalidate({ surveyId, residentId: rid })));
+    } else if (templateType === "case") {
+      const affectedCases = Array.from(new Set(updates.map(u => u.surveyCaseId).filter(Boolean)));
+      await Promise.all(affectedCases.map((cid) => utils.doc.list.invalidate({ surveyId, surveyCaseId: cid })));
+    } else if (templateType === "general") {
+      await utils.doc.list.invalidate({ surveyId }); // General DOCs
+    }
+
+    toast.success("Date of Compliance updated for unmet questions successfully");
+  } catch (e) {
+    console.error("Save combined DOC failed", e);
+    toast.error("Failed to save Date of Compliance");
+  }
+}, [survey.data, canOpenPOCSheet, combinedDOC, docUpsert, utils.doc.list, surveyId, questions.data, residents.data, cases.data, byResident, byEntity, allResponses, docMap]);
+
 
   // Handle adding comment
   const handleAddComment = useCallback(async () => {
@@ -1039,9 +1413,9 @@ export default function SurveyDetailPage() {
   }
 
   // Lock/Unlock button configuration
-  const lockDisabled = !allAnswered || lockSurvey.isPending;
+  const lockDisabled = !isSurveyComplete || lockSurvey.isPending;
   const unlockDisabled = unlockSurvey.isPending;
-  const lockDisabledReason = !allAnswered ? "Complete all questions for all residents to enable lock." : lockSurvey.isPending ? "Locking..." : "";
+  const lockDisabledReason = !isSurveyComplete ? "Complete all questions for all residents to enable lock." : lockSurvey.isPending ? "Locking..." : "";
 
   // Lock/Unlock buttons component
   const LockUnlockButtons = () => {
@@ -1070,7 +1444,7 @@ export default function SurveyDetailPage() {
               <AlertDialogCancel>Cancel</AlertDialogCancel>
               <AlertDialogAction
                 onClick={() => {
-                  if (!allAnswered) {
+                  if (!isSurveyComplete) {
                     toast.error("Please complete all questions before locking the survey");
                     return;
                   }
@@ -1079,7 +1453,7 @@ export default function SurveyDetailPage() {
                 disabled={lockDisabled}
                 className={cn(
                   "px-6 py-2.5 font-medium rounded-md transition-all duration-200 flex items-center gap-2",
-                  allAnswered
+                  isSurveyComplete
                     ? "bg-red-600 hover:bg-red-700 text-white shadow-md hover:shadow-lg active:bg-red-800 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
                     : "bg-red-200 text-red-400 cursor-not-allowed"
                 )}
@@ -1169,7 +1543,18 @@ export default function SurveyDetailPage() {
     // Existing POC sheet logic when pocGenerated is true
     const label = hasAnyPOC ? "View POC" : "Create POC";
     const totalUnmetQuestions = sheetBlocks.length;
-    const totalUnmetResidents = Array.from(new Set(sheetBlocks.flatMap(block => block.items.map(item => item.residentId)))).length;
+    
+    // ✅ UPDATED: Count entities based on template type
+    const templateType = survey.data?.template?.type;
+    const totalUnmetEntities = Array.from(new Set(
+      sheetBlocks.flatMap(block => 
+        block.items.map(item => 
+          templateType === "resident" ? item.residentPcciId : 
+          templateType === "case" ? item.caseNumber : 
+          "general"
+        )
+      )
+    )).length;
 
     return (
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
@@ -1206,10 +1591,14 @@ export default function SurveyDetailPage() {
                     <div className="font-semibold text-red-600">{totalUnmetQuestions}</div>
                     <div className="text-gray-500">Questions</div>
                   </div>
-                  <div className="text-center">
-                    <div className="font-semibold text-red-600">{totalUnmetResidents}</div>
-                    <div className="text-gray-500">Residents</div>
-                  </div>
+                  {templateType !== "general" && (
+                    <div className="text-center">
+                      <div className="font-semibold text-red-600">{totalUnmetEntities}</div>
+                      <div className="text-gray-500">
+                        {templateType === "resident" ? "Residents" : "Cases"}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1238,7 +1627,8 @@ export default function SurveyDetailPage() {
                           <h3 className="font-semibold text-gray-900 mb-1">Questions Requiring Attention</h3>
                           <p className="text-sm text-gray-600 leading-relaxed">
                             The following {totalUnmetQuestions} question{totalUnmetQuestions !== 1 ? 's' : ''}
-                            {totalUnmetQuestions === 1 ? ' has' : ' have'} unmet requirements across {totalUnmetResidents} resident{totalUnmetResidents !== 1 ? 's' : ''}.
+                            {totalUnmetQuestions === 1 ? ' has' : ' have'} unmet requirements{templateType !== "general" ? 
+                            ` across ${totalUnmetEntities} ${templateType === "resident" ? "resident" : "case"}${totalUnmetEntities !== 1 ? 's' : ''}` : ""}.
                             Please review each question and provide a comprehensive Plan of Correction.
                           </p>
                         </div>
@@ -1285,38 +1675,62 @@ export default function SurveyDetailPage() {
                         </CardHeader>
 
                         <CardContent className="p-4">
-                          <div className="flex items-center gap-2 mb-3">
-                            <Users className="h-4 w-4 text-gray-500" />
-                            <span className="text-sm font-medium text-gray-700">
-                              Affected Residents ({block.items.length})
-                            </span>
-                          </div>
-
-                          <div className="grid gap-3 sm:grid-cols-2">
-                            {block.items.map((item) => (
-                              <div
-                                key={`${block.qid}-${item.residentId}`}
-                                className="bg-gray-50 rounded-lg p-3 border"
-                              >
-                                <div className="flex items-center gap-2 mb-1">
-                                  <div className="h-6 w-6 rounded-full bg-blue-100 flex items-center justify-center">
-                                    <User className="h-3 w-3 text-blue-600" />
-                                  </div>
-                                  <span className="text-sm font-medium text-gray-900">
-                                    Resident {item.residentId}
-                                  </span>
-                                </div>
-                                {item.findings && (
-                                  <div className="mt-2 p-2 bg-white rounded border-l-2 border-l-orange-300">
-                                    <div className="text-xs text-gray-500 mb-1">Findings:</div>
-                                    <p className="text-sm text-gray-700 leading-relaxed">
-                                      {item.findings}
-                                    </p>
-                                  </div>
-                                )}
+                          {templateType === "general" ? (
+                            // ✅ NEW: For general surveys, just show unmet status
+                            <div className="bg-red-50 rounded-lg p-3 border border-red-200">
+                              <div className="text-sm font-medium text-red-800 mb-1">
+                                Requirements Not Met
                               </div>
-                            ))}
-                          </div>
+                              {block.items.map((item, itemIndex) => (
+                                <div key={itemIndex}>
+                                  {item.findings && (
+                                    <div className="mt-2 p-2 bg-white rounded border-l-2 border-l-orange-300">
+                                      <div className="text-xs text-gray-500 mb-1">Findings:</div>
+                                      <p className="text-sm text-gray-700 leading-relaxed">
+                                        {item.findings}
+                                      </p>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            // For resident and case surveys, show entity details
+                            <>
+                              <div className="flex items-center gap-2 mb-3">
+                                <Users className="h-4 w-4 text-gray-500" />
+                                <span className="text-sm font-medium text-gray-700">
+                                  Affected {templateType === "resident" ? "Residents" : "Cases"} ({block.items.length})
+                                </span>
+                              </div>
+
+                              <div className="grid gap-3 sm:grid-cols-2">
+                                {block.items.map((item, itemIndex) => (
+                                  <div
+                                    key={itemIndex}
+                                    className="bg-gray-50 rounded-lg p-3 border"
+                                  >
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <div className="h-6 w-6 rounded-full bg-blue-100 flex items-center justify-center">
+                                        <User className="h-3 w-3 text-blue-600" />
+                                      </div>
+                                      <span className="text-sm font-medium text-gray-900">
+                                        {templateType === "resident" ? `PCCI: ${item.residentPcciId}` : `Case: ${item.caseNumber}`}
+                                      </span>
+                                    </div>
+                                    {item.findings && (
+                                      <div className="mt-2 p-2 bg-white rounded border-l-2 border-l-orange-300">
+                                        <div className="text-xs text-gray-500 mb-1">Findings:</div>
+                                        <p className="text-sm text-gray-700 leading-relaxed">
+                                          {item.findings}
+                                        </p>
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </>
+                          )}
                         </CardContent>
                       </Card>
                     ))}
@@ -1446,7 +1860,6 @@ export default function SurveyDetailPage() {
             <div className="text-sm text-muted-foreground space-y-1">
               {/* Display facility name with separate query */}
               <FacilityInfo facilityId={survey.data.facilityId} />
-
               {/* Display surveyor name with separate query */}
               <SurveyorInfo surveyorId={survey.data.surveyorId} />
             </div>
@@ -1464,7 +1877,7 @@ export default function SurveyDetailPage() {
 
         <Separator />
 
-        {(survey.data.template?.type === "general" || survey.data.template?.type === "resident") && (
+        {(survey.data.template?.type === "resident") && (
           <>
             {/* Template Information */}
             <div className="mb-4">
@@ -1518,8 +1931,8 @@ export default function SurveyDetailPage() {
                   return (
                     <TableRow key={r.id}>
                       <TableCell>
-  <ResidentInitial residentId={r.residentId} />
-</TableCell>
+                        <ResidentInitial residentId={r.residentId} />
+                      </TableCell>
                       <TableCell>
                         <div className="text-sm">
                           {progress.answered} answered • {progress.unanswered} pending
@@ -1542,6 +1955,29 @@ export default function SurveyDetailPage() {
               </TableBody>
             </Table>
           </>
+        )}
+
+        {/* ✅ NEW: General Survey Button with Start/View logic */}
+        {survey.data.template?.type === "general" && (
+          <div className="mb-4">
+            {(() => {
+              // Check if general responses exist
+              const generalResponses = allResponses.filter(r => !r.residentId && !r.surveyCaseId);
+              const hasResponses = generalResponses.length > 0;
+              
+              return (
+                <Link
+                  href={`/qisv/surveys/${surveyId}/general`}
+                  className={cn(
+                    buttonVariants({ variant: "default" }),
+                    "bg-green-600 hover:bg-green-700"
+                  )}
+                >
+                  {hasResponses ? "View Survey" : "Start Survey"}
+                </Link>
+              );
+            })()}
+          </div>
         )}
 
         {survey.data.template?.type === "case" && (

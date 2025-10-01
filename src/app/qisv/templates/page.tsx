@@ -172,7 +172,7 @@ export default function TemplatePage() {
                 <DialogHeader>
                   <DialogTitle>New Template</DialogTitle>
                 </DialogHeader>
-                <NewTemplateForm />
+                <NewTemplateForm onSuccess={() => setDialogOpen(false)} />
               </DialogContent>
             </Dialog>
           )}
@@ -187,7 +187,7 @@ export default function TemplatePage() {
                 <TableHead>Type</TableHead>
                 <TableHead className="text-right">Question Count</TableHead>
                 <TableHead className="text-center">Total Score</TableHead>
-                {hasDeleteTemplatePermission.data && <TableHead className="max-w-fit w-[100px]">Actions</TableHead>}
+                <TableHead className="max-w-fit w-[100px]">Actions</TableHead>
                 <TableHead className="max-w-fit"></TableHead>
               </TableRow>
             </TableHeader>
@@ -210,11 +210,9 @@ export default function TemplatePage() {
                     <TableCell className="text-center">
                       <Skeleton className="h-6 w-20 mx-auto" />
                     </TableCell>
-                    {hasDeleteTemplatePermission.data && (
-                      <TableCell className="max-w-fit">
-                        <Skeleton className="ml-auto size-6" />
-                      </TableCell>
-                    )}
+                    <TableCell className="max-w-fit">
+                      <Skeleton className="ml-auto size-6" />
+                    </TableCell>
                     <TableCell className="max-w-fit">
                       <Skeleton className="ml-auto size-6" />
                     </TableCell>
@@ -224,7 +222,7 @@ export default function TemplatePage() {
               {!templates.isPending && templates.data?.data.length === 0 && (
                 <TableRow>
                   <TableCell
-                    colSpan={hasDeleteTemplatePermission.data ? 7 : 6}
+                    colSpan={7}
                     className="text-muted-foreground py-8 text-center"
                   >
                     No templates found. Add your first template to get started.
@@ -250,73 +248,72 @@ export default function TemplatePage() {
                       <ScoreBadge score={template.totalPoints ? Number(template.totalPoints) : 0} />
                     </TableCell>
 
-                    {hasDeleteTemplatePermission.data && (
-                      <TableCell className="max-w-fit text-right">
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-                              onClick={() =>
-                                setTemplateToDelete({
-                                  id: template.id,
-                                  name: template.name,
-                                })
-                              }
+                    <TableCell className="max-w-fit text-right">
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                            onClick={() =>
+                              setTemplateToDelete({
+                                id: template.id,
+                                name: template.name,
+                              })
+                            }
+                            disabled={deleteTemplate.isPending}
+                          >
+                            <TrashIcon className="h-4 w-4" />
+                            <span className="sr-only">Delete template</span>
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent className="max-w-md">
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>
+                              <div className="flex items-center gap-2">
+                                <TrashIcon className="h-5 w-5 text-destructive" />
+                                Delete Template
+                              </div>
+                            </AlertDialogTitle>
+                            <AlertDialogDescription className="text-sm text-muted-foreground">
+                              Are you sure you want to delete <span className="font-semibold text-foreground">"{template.name}"</span>?
+                              This action cannot be undone and will permanently remove this template 
+                              and all related data from the system.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter className="gap-2">
+                            <AlertDialogCancel
+                              onClick={() => setTemplateToDelete(null)}
                               disabled={deleteTemplate.isPending}
+                              className="mt-0"
                             >
-                              <TrashIcon className="h-4 w-4" />
-                              <span className="sr-only">Delete template</span>
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent className="max-w-md">
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>
-                                <div className="flex items-center gap-2">
-                                  <TrashIcon className="h-5 w-5 text-destructive" />
-                                  Delete Template
-                                </div>
-                              </AlertDialogTitle>
-                              <AlertDialogDescription className="text-sm text-muted-foreground">
-                                Are you sure you want to delete <span className="font-semibold text-foreground">"{template.name}"</span>?
-                                This action cannot be undone and will permanently remove this template 
-                                and all related data from the system.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter className="gap-2">
-                              <AlertDialogCancel
-                                onClick={() => setTemplateToDelete(null)}
-                                disabled={deleteTemplate.isPending}
-                                className="mt-0"
-                              >
-                                Cancel
-                              </AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={() => {
-                                  setTemplateToDelete(null);
-                                  deleteTemplate.mutate({ id: template.id });
-                                }}
-                                disabled={deleteTemplate.isPending}
-                                className="bg-red-600 text-white shadow-lg hover:bg-red-700 hover:shadow-xl focus:ring-2 focus:ring-red-500 focus:ring-offset-2 active:bg-red-800 transition-all duration-200 font-medium px-4 py-2 rounded-md border-0 min-w-[100px] flex items-center justify-center gap-2"
-                              >
-                                {deleteTemplate.isPending ? (
-                                  <>
-                                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                                    <span>Deleting...</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <TrashIcon className="h-4 w-4" />
-                                    <span>Delete</span>
-                                  </>
-                                )}
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </TableCell>
-                    )}
+                              Cancel
+                            </AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => {
+                                setTemplateToDelete(null);
+                                deleteTemplate.mutate({ id: template.id });
+                              }}
+                              disabled={deleteTemplate.isPending}
+                              className="bg-red-600 text-white shadow-lg hover:bg-red-700 hover:shadow-xl focus:ring-2 focus:ring-red-500 focus:ring-offset-2 active:bg-red-800 transition-all duration-200 font-medium px-4 py-2 rounded-md border-0 min-w-[100px] flex items-center justify-center gap-2"
+                            >
+                              {deleteTemplate.isPending ? (
+                                <>
+                                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                                  <span>Deleting...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <TrashIcon className="h-4 w-4" />
+                                  <span>Delete</span>
+                                </>
+                              )}
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </TableCell>
+                    
                     <TableCell className="text-right">
                       <Link
                         href={`/qisv/templates/${template.id}`}

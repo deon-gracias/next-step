@@ -131,7 +131,7 @@ export default function SurveysPage() {
   // Access utils for API calls
   const utils = api.useUtils();
 
-  // ✅ UPDATED: Fetch survey scores including CASE responses
+  // ✅ UPDATED: Fetch survey scores including GENERAL, CASE, and RESIDENT responses
   React.useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -140,13 +140,13 @@ export default function SurveysPage() {
       try {
         const scoresMap = new Map<number, { score: number; totalPossible: number }>();
         
-        // Calculate score for each survey using UPDATED logic to include case responses
+        // Calculate score for each survey using UPDATED logic to include all survey types
         await Promise.all(
           surveys.data.map(async (survey) => {
             try {
               // Get residents, cases, and questions
               const residents = await utils.survey.listResidents.fetch({ surveyId: survey.id });
-              const cases = await utils.survey.listCases.fetch({ surveyId: survey.id }); // ✅ NEW: Fetch cases
+              const cases = await utils.survey.listCases.fetch({ surveyId: survey.id });
               const questions = await utils.question.list.fetch({ templateId: survey.templateId });
 
               if (!questions || questions.length === 0) {
@@ -154,7 +154,7 @@ export default function SurveysPage() {
                 return;
               }
 
-              // ✅ UPDATED: Fetch responses for BOTH residents AND cases
+              // ✅ UPDATED: Fetch responses for RESIDENTS, CASES, AND GENERAL
               const allResponses: Array<{ 
                 residentId: number | null; 
                 surveyCaseId: number | null;
@@ -184,7 +184,7 @@ export default function SurveysPage() {
                 );
               }
 
-              // ✅ NEW: Fetch case responses
+              // ✅ Fetch case responses
               if (cases && cases.length > 0) {
                 await Promise.all(
                   cases.map(async (c) => {
@@ -205,50 +205,85 @@ export default function SurveysPage() {
                 );
               }
 
-              // ✅ UPDATED: Create byEntity map to handle both residents and cases
+              // ✅ NEW: Fetch general responses (no resident or case ID)
+              if ((!residents || residents.length === 0) && (!cases || cases.length === 0)) {
+                const rows = await utils.survey.listResponses.fetch({ 
+                  surveyId: survey.id,
+                  residentId: null,
+                  surveyCaseId: null
+                });
+                for (const rr of rows ?? []) {
+                  allResponses.push({
+                    residentId: null,
+                    surveyCaseId: null,
+                    questionId: rr.questionId,
+                    status: rr.requirementsMetOrUnmet ?? null,
+                    findings: rr.findings ?? null,
+                  });
+                }
+              }
+
+              // ✅ UPDATED: Create byEntity map to handle residents, cases, AND general
               const byEntity = new Map<string, Map<number, { status: string | null; findings: string | null }>>();
               for (const r of allResponses) {
-                const entityKey = r.residentId ? `resident-${r.residentId}` : `case-${r.surveyCaseId}`;
+                const entityKey = r.residentId 
+                  ? `resident-${r.residentId}` 
+                  : r.surveyCaseId 
+                  ? `case-${r.surveyCaseId}` 
+                  : 'general'; // ✅ NEW: Handle general responses
                 const inner = byEntity.get(entityKey) ?? new Map();
                 inner.set(r.questionId, { status: r.status, findings: r.findings });
                 byEntity.set(entityKey, inner);
               }
 
-              // ✅ UPDATED: Score calculation - SAME logic as detail page but for both residents and cases
+              // ✅ UPDATED: Score calculation - handle all three survey types
               let awarded = 0;
               for (const q of questions) {
                 let anyUnmetOrUnanswered = false;
                 let anyMet = false;
                 
-                // Check resident responses
-                if (residents && residents.length > 0) {
-                  for (const r of residents) {
-                    const cell = byEntity.get(`resident-${r.residentId}`)?.get(q.id);
-                    if (!cell?.status) {
-                      anyUnmetOrUnanswered = true;
-                      break;
-                    }
-                    if (cell.status === "unmet") {
-                      anyUnmetOrUnanswered = true;
-                      break;
-                    }
-                    if (cell.status === "met") anyMet = true;
+                // ✅ NEW: Handle general surveys (no residents or cases)
+                if ((!residents || residents.length === 0) && (!cases || cases.length === 0)) {
+                  // This is a general survey
+                  const cell = byEntity.get('general')?.get(q.id);
+                  if (!cell?.status) {
+                    anyUnmetOrUnanswered = true;
+                  } else if (cell.status === "unmet") {
+                    anyUnmetOrUnanswered = true;
+                  } else if (cell.status === "met") {
+                    anyMet = true;
                   }
-                }
-                
-                // ✅ NEW: Check case responses
-                if (!anyUnmetOrUnanswered && cases && cases.length > 0) {
-                  for (const c of cases) {
-                    const cell = byEntity.get(`case-${c.id}`)?.get(q.id);
-                    if (!cell?.status) {
-                      anyUnmetOrUnanswered = true;
-                      break;
+                } else {
+                  // Check resident responses
+                  if (residents && residents.length > 0) {
+                    for (const r of residents) {
+                      const cell = byEntity.get(`resident-${r.residentId}`)?.get(q.id);
+                      if (!cell?.status) {
+                        anyUnmetOrUnanswered = true;
+                        break;
+                      }
+                      if (cell.status === "unmet") {
+                        anyUnmetOrUnanswered = true;
+                        break;
+                      }
+                      if (cell.status === "met") anyMet = true;
                     }
-                    if (cell.status === "unmet") {
-                      anyUnmetOrUnanswered = true;
-                      break;
+                  }
+                  
+                  // Check case responses
+                  if (!anyUnmetOrUnanswered && cases && cases.length > 0) {
+                    for (const c of cases) {
+                      const cell = byEntity.get(`case-${c.id}`)?.get(q.id);
+                      if (!cell?.status) {
+                        anyUnmetOrUnanswered = true;
+                        break;
+                      }
+                      if (cell.status === "unmet") {
+                        anyUnmetOrUnanswered = true;
+                        break;
+                      }
+                      if (cell.status === "met") anyMet = true;
                     }
-                    if (cell.status === "met") anyMet = true;
                   }
                 }
                 
@@ -285,7 +320,7 @@ export default function SurveysPage() {
     };
   }, [surveys.data, utils]);
 
-  // Fetch actual POC existence from survey_poc table (FOR DISPLAY STATUS ONLY)
+  // ✅ UPDATED: Fetch POC existence for ALL survey types (resident, case, AND general)
   React.useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -298,25 +333,52 @@ export default function SurveysPage() {
         await Promise.all(
           surveys.data.map(async (survey) => {
             try {
-              // Get residents for this survey
+              // Get residents and cases for this survey
               const residents = await utils.survey.listResidents.fetch({ surveyId: survey.id });
-              if (!residents || residents.length === 0) {
-                pocExistsMap.set(survey.id, false);
-                return;
-              }
-
-              // Check if any resident has POC entries for this survey in survey_poc table
-              const pocResults = await Promise.all(
-                residents.map(r => utils.poc.list.fetch({ surveyId: survey.id, residentId: r.residentId }))
-              );
-
+              const cases = await utils.survey.listCases.fetch({ surveyId: survey.id });
+              
               let hasPOC = false;
-              outer: for (const pocRows of pocResults) {
+
+              // ✅ NEW: Handle general surveys (no residents or cases)
+              if ((!residents || residents.length === 0) && (!cases || cases.length === 0)) {
+                // This is a general survey - check for general POCs
+                const pocRows = await utils.poc.list.fetch({ surveyId: survey.id });
                 for (const pocRow of pocRows ?? []) {
-                  // Check if POC exists with actual content for this survey's template
                   if (pocRow.pocText && pocRow.pocText.trim() && pocRow.templateId === survey.templateId) {
                     hasPOC = true;
-                    break outer;
+                    break;
+                  }
+                }
+              } else {
+                // ✅ Check resident POCs
+                if (residents && residents.length > 0) {
+                  const pocResults = await Promise.all(
+                    residents.map(r => utils.poc.list.fetch({ surveyId: survey.id, residentId: r.residentId }))
+                  );
+
+                  outer: for (const pocRows of pocResults) {
+                    for (const pocRow of pocRows ?? []) {
+                      if (pocRow.pocText && pocRow.pocText.trim() && pocRow.templateId === survey.templateId) {
+                        hasPOC = true;
+                        break outer;
+                      }
+                    }
+                  }
+                }
+
+                // ✅ NEW: Check case POCs
+                if (!hasPOC && cases && cases.length > 0) {
+                  const pocResults = await Promise.all(
+                    cases.map(c => utils.poc.list.fetch({ surveyId: survey.id, surveyCaseId: c.id }))
+                  );
+
+                  outer: for (const pocRows of pocResults) {
+                    for (const pocRow of pocRows ?? []) {
+                      if (pocRow.pocText && pocRow.pocText.trim() && pocRow.templateId === survey.templateId) {
+                        hasPOC = true;
+                        break outer;
+                      }
+                    }
                   }
                 }
               }
@@ -627,7 +689,7 @@ export default function SurveysPage() {
     if (!survey.isLocked) {
       const isCompleted = survey.responses && survey.responses.length > 0;
       return {
-        status: isCompleted ? "In Progress" : "Not Started",
+        status: isCompleted ? "In Progress" : "POC Not Started",
         variant: "secondary" as const,
         className: isCompleted ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-800"
       };

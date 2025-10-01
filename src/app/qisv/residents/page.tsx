@@ -499,7 +499,7 @@ export default function ResidentsPage() {
                   ) : (
                     <>
                       <UploadIcon className="mr-2 size-4" />
-                      Attach CSV
+                      Upload CSV
                     </>
                   )}
                 </Button>

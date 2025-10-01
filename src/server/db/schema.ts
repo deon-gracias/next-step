@@ -135,14 +135,12 @@ export const resident = pgTable("resident", {
     .notNull(),
 });
 
-
 export const facility = pgTable("facility", {
   id: integer().primaryKey().generatedAlwaysAsIdentity(),
   name: text("name").notNull(),
   address: text("address").notNull(),
-  facilityCode: varchar("facility_code", { length: 10 }), // ✅ Added facilityCode - max 10 digits
+  facilityCode: varchar("facility_code", { length: 10 }),
 });
-
 
 export const templateTypeEnum = pgEnum("template_type", [
   "resident",
@@ -202,11 +200,10 @@ export const survey = pgTable("survey", {
     .references(() => template.id)
     .notNull(),
   isLocked: boolean("is_locked").default(false).notNull(),
-  pocGenerated: boolean("poc_generated").default(false).notNull(), // ADD THIS LINE
+  pocGenerated: boolean("poc_generated").default(false).notNull(),
   surveyDate: date("survey_date").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
-
 
 export const surveyResident = pgTable(
   "survey_resident",
@@ -238,8 +235,7 @@ export const metStatusEnum = pgEnum("met_status_enum", [
   "not_applicable",
 ]);
 
-// Replace your existing surveyResponse definition with this block
-
+// ✅ FIXED: Simplified surveyResponse with only necessary constraints
 export const surveyResponse = pgTable(
   "survey_response",
   {
@@ -249,9 +245,10 @@ export const surveyResponse = pgTable(
       .references(() => survey.id)
       .notNull(),
 
-    // ✅ Remove .notNull() to make it optional
+    // Optional for general surveys
     residentId: integer("resident_id").references(() => resident.id),
 
+    // Optional for general surveys  
     surveyCaseId: integer("survey_case_id").references(() => surveyCases.id),
 
     questionId: integer("question_id")
@@ -265,27 +262,26 @@ export const surveyResponse = pgTable(
     findings: text("findings"),
   },
   (table) => [
-    // ✅ Remove the old unique constraint and add new ones
-    // OLD: unique().on(table.surveyId, table.residentId, table.questionId),
-    
-    // New unique constraints for resident and case responses
+    // ✅ Keep only the working constraints
     unique("unique_resident_response").on(
-      table.surveyId, 
-      table.residentId, 
+      table.surveyId,
+      table.residentId,
       table.questionId
     ),
-    
+
     unique("unique_case_response").on(
-      table.surveyId, 
-      table.surveyCaseId, 
+      table.surveyId,
+      table.surveyCaseId,
       table.questionId
     ),
+
+    // ✅ REMOVED: The problematic unique_general_response constraint
+    // This constraint was causing the error because it was being triggered
+    // by resident responses that had NULL values
   ],
 );
 
-
-
-
+//survey POC table
 //survey POC table
 export const surveyPOC = pgTable(
   "survey_poc",
@@ -297,9 +293,8 @@ export const surveyPOC = pgTable(
       .notNull()
       .references(() => survey.id, { onDelete: "cascade" }),
 
-    residentId: integer("resident_id")
-      .notNull()
-      .references(() => resident.id, { onDelete: "cascade" }),
+    residentId: integer("resident_id").references(() => resident.id), // ✅ Optional for case/general
+    surveyCaseId: integer("survey_case_id").references(() => surveyCases.id), // ✅ ADD this
 
     templateId: integer("template_id")
       .notNull()
@@ -323,42 +318,60 @@ export const surveyPOC = pgTable(
       onDelete: "set null",
     }),
     updatedByUserId: text("updated_by_user_id").references(() => user.id, {
-      onDelete: "set null" },
+      onDelete: "set null"
+    },
     ),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   (table) => [
-    // One POC per survey+resident+template+question
-    unique().on(
+    // ✅ FIXED: Add all three constraint types
+    
+    // Resident POCs: One POC per survey+resident+template+question
+    unique("unique_resident_poc").on(
       table.surveyId,
       table.residentId,
       table.templateId,
       table.questionId,
     ),
+    
+    // ✅ NEW: Case POCs: One POC per survey+case+template+question
+    unique("unique_case_poc").on(
+      table.surveyId,
+      table.surveyCaseId,
+      table.templateId,
+      table.questionId,
+    ),
+    
+    // ✅ NEW: General POCs: One POC per survey+question (no resident/case)
+    unique("unique_general_poc").on(
+      table.surveyId,
+      table.questionId,
+    ),
   ],
 );
 
+
 export const pocComment = pgTable("poc_comment", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
-  
+
   // Reference to the survey and template (for easier querying)
   surveyId: integer("survey_id")
     .notNull()
     .references(() => survey.id, { onDelete: "cascade" }),
-  
+
   templateId: integer("template_id")
     .notNull()
     .references(() => template.id, { onDelete: "cascade" }),
-  
+
   // Comment content
   commentText: text("comment_text").notNull(),
-  
+
   // Author tracking
   authorId: text("author_id")
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
-  
+
   // Timestamps (comments cannot be edited)
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -368,14 +381,13 @@ export const surveyDOC = pgTable(
   {
     id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
 
-    // Context keys (all required) - same structure as POC
+    // Context keys - same structure as POC
     surveyId: integer("survey_id")
       .notNull()
       .references(() => survey.id, { onDelete: "cascade" }),
 
-    residentId: integer("resident_id")
-      .notNull()
-      .references(() => resident.id, { onDelete: "cascade" }),
+    residentId: integer("resident_id").references(() => resident.id), // ✅ Make optional
+    surveyCaseId: integer("survey_case_id").references(() => surveyCases.id), // ✅ ADD this
 
     templateId: integer("template_id")
       .notNull()
@@ -405,15 +417,32 @@ export const surveyDOC = pgTable(
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   (table) => [
-    // One DOC per survey+resident+template+question (same as POC)
-    unique().on(
+    // ✅ FIXED: Add all three constraint types
+    
+    // Resident DOCs
+    unique("unique_resident_doc").on(
       table.surveyId,
       table.residentId,
       table.templateId,
       table.questionId
     ),
+    
+    // ✅ NEW: Case DOCs
+    unique("unique_case_doc").on(
+      table.surveyId,
+      table.surveyCaseId,
+      table.templateId,
+      table.questionId
+    ),
+    
+    // ✅ NEW: General DOCs
+    unique("unique_general_doc").on(
+      table.surveyId,
+      table.questionId
+    ),
   ]
 );
+
 
 export const dietarySurveys = pgTable("dietary_surveys", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),

@@ -1,56 +1,85 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import { surveyDOC, surveyDOCSelectSchema } from "@/server/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, isNull, sql } from "drizzle-orm";
 
 export const docRouter = createTRPCRouter({
+  // ✅ UPDATED: Support all survey types
   upsert: protectedProcedure
     .input(
       z.object({
         surveyId: z.number().int().positive(),
-        residentId: z.number().int().positive(),
+        residentId: z.number().int().positive().optional(), // ✅ Make optional
+        surveyCaseId: z.number().int().positive().optional(), // ✅ ADD this
         templateId: z.number().int().positive(),
         questionId: z.number().int().positive(),
         complianceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format"),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { surveyId, residentId, templateId, questionId, complianceDate } = input;
+      const { surveyId, residentId, surveyCaseId, templateId, questionId, complianceDate } = input;
 
-      const [result] = await ctx.db
-        .insert(surveyDOC)
-        .values({
-          surveyId,
-          residentId,
-          templateId,
-          questionId,
-          complianceDate, // This is now a string in YYYY-MM-DD format
-          createdByUserId: ctx.session.user.id,
-          updatedByUserId: ctx.session.user.id,
-        })
-        .onConflictDoUpdate({
-          target: [
-            surveyDOC.surveyId,
-            surveyDOC.residentId,
-            surveyDOC.templateId,
-            surveyDOC.questionId,
-          ],
-          set: {
-            complianceDate,
-            updatedByUserId: ctx.session.user.id,
-            updatedAt: new Date(),
-          },
-        })
-        .returning();
+      const docData = {
+        surveyId,
+        residentId: residentId || null,
+        surveyCaseId: surveyCaseId || null,
+        templateId,
+        questionId,
+        complianceDate,
+        createdByUserId: ctx.session.user.id,
+        updatedByUserId: ctx.session.user.id,
+      };
 
-      return result;
+      // ✅ Handle different survey types with proper constraints
+      if (residentId) {
+        return await ctx.db
+          .insert(surveyDOC)
+          .values(docData)
+          .onConflictDoUpdate({
+            target: [surveyDOC.surveyId, surveyDOC.residentId, surveyDOC.templateId, surveyDOC.questionId],
+            set: {
+              complianceDate,
+              updatedByUserId: ctx.session.user.id,
+              updatedAt: new Date(),
+            },
+          })
+          .returning();
+      } else if (surveyCaseId) {
+        return await ctx.db
+          .insert(surveyDOC)
+          .values(docData)
+          .onConflictDoUpdate({
+            target: [surveyDOC.surveyId, surveyDOC.surveyCaseId, surveyDOC.templateId, surveyDOC.questionId],
+            set: {
+              complianceDate,
+              updatedByUserId: ctx.session.user.id,
+              updatedAt: new Date(),
+            },
+          })
+          .returning();
+      } else {
+        return await ctx.db
+          .insert(surveyDOC)
+          .values(docData)
+          .onConflictDoUpdate({
+            target: [surveyDOC.surveyId, surveyDOC.questionId],
+            set: {
+              complianceDate,
+              updatedByUserId: ctx.session.user.id,
+              updatedAt: new Date(),
+            },
+          })
+          .returning();
+      }
     }),
 
+  // ✅ UPDATED: Support all survey types
   list: protectedProcedure
     .input(
       z.object({
         surveyId: z.number().int().positive(),
         residentId: z.number().int().positive().optional(),
+        surveyCaseId: z.number().int().positive().optional(), // ✅ ADD this
         templateId: z.number().int().positive().optional(),
         questionId: z.number().int().positive().optional(),
       })
@@ -60,7 +89,14 @@ export const docRouter = createTRPCRouter({
 
       if (input.residentId !== undefined) {
         conditions.push(eq(surveyDOC.residentId, input.residentId));
+      } else if (input.surveyCaseId !== undefined) {
+        conditions.push(eq(surveyDOC.surveyCaseId, input.surveyCaseId));
+      } else if (input.residentId === undefined && input.surveyCaseId === undefined) {
+        // General DOCs - both residentId and surveyCaseId are null
+        conditions.push(isNull(surveyDOC.residentId));
+        conditions.push(isNull(surveyDOC.surveyCaseId));
       }
+
       if (input.templateId !== undefined) {
         conditions.push(eq(surveyDOC.templateId, input.templateId));
       }

@@ -402,7 +402,7 @@ async function main() {
       { text: "Three-compartment sink contained 1) detergent and water, 2) clear rinse water, and 3) sanitizer that were tested when the sink was filled.", points: 1, ftags: ["F812"] },
       { text: "Sanitizer log was available and filled out.", points: 1, ftags: ["F812"] },
       { text: "The dish machine was clean both inside and out, free of lime build up.", points: 2, ftags: ["F812"] },
-      { text: "Dishwasher wash and rinse cycle temps met or exceeded Department of Health recommendations.", points: 3, ftags: ["F812"] },
+      { text: "Dishwasher wash and rinse cycle temps met or exceeded Department of Health recommendations.", points: 1, ftags: ["F812"] },
       { text: "Temperatures were recorded three times a day.", points: 1, ftags: ["F812"] },
       { text: "The interior and exterior of the ice machine was clean and operable, free of rust.", points: 1, ftags: ["F812"] },
       { text: "Ice scoop was covered when not in use and was stored in upright position.", points: 1, ftags: ["F812"] },

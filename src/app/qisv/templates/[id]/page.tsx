@@ -24,17 +24,29 @@ import {
 } from "@/components/ui/card";
 import { useQuery } from "@tanstack/react-query";
 import { authClient } from "@/components/providers/auth-client";
-import { FileText, PencilIcon } from "lucide-react";
+import { FileText, PencilIcon, TrashIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import type { QuestionSelectType } from "@/server/db/schema";
 import { EditQuestionForm } from "../_components/edit-question-form";
+import { toast } from "sonner";
+import { useState } from "react";
 
 function QuestionFtags({ id }: { id: number }) {
   const { data: ftags, isLoading } = api.question.getFtagsByQuestionId.useQuery(
@@ -70,6 +82,8 @@ function QuestionFtags({ id }: { id: number }) {
 export default function AddQuestionsPage() {
   const params = useParams();
   const templateId = Number(params.id);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [currentEditQuestion, setCurrentEditQuestion] = useState<QuestionSelectType | null>(null);
 
   const template = api.template.byId.useQuery({
     id: templateId,
@@ -81,7 +95,18 @@ export default function AddQuestionsPage() {
     },
     { enabled: !!template.data },
   );
-  console.log("Questions", questions);
+
+  const utils = api.useUtils();
+
+  const deleteQuestion = api.question.delete.useMutation({
+    onSuccess: () => {
+      toast.success("Question deleted successfully");
+      void utils.question.list.invalidate();
+    },
+    onError: (error) => {
+      toast.error(`Failed to delete question: ${error.message}`);
+    },
+  });
 
   const hasNewQuestionPermission = useQuery({
     queryKey: ["question-create-permission"],
@@ -95,6 +120,21 @@ export default function AddQuestionsPage() {
 
   const totalPoints =
     questions.data?.reduce((sum, q) => sum + q.points, 0) || 0;
+
+  const handleEditClick = (question: QuestionSelectType) => {
+    setCurrentEditQuestion(question);
+    setEditDialogOpen(true);
+  };
+
+  const handleEditSuccess = () => {
+    setEditDialogOpen(false);
+    setCurrentEditQuestion(null);
+    void utils.question.list.invalidate();
+  };
+
+  const handleNewQuestionSuccess = () => {
+    void utils.question.list.invalidate();
+  };
 
   return (
     <>
@@ -133,6 +173,7 @@ export default function AddQuestionsPage() {
               <AddQuestionForm
                 template={template.data}
                 currentTotalPoints={totalPoints}
+                onSuccess={handleNewQuestionSuccess}
               />
             </CardContent>
           </Card>
@@ -147,6 +188,11 @@ export default function AddQuestionsPage() {
           </CardHeader>
           <CardContent>
             {questions.isPending && <Skeleton className="h-[200px] w-full" />}
+            {!questions.isPending && questions.data?.length === 0 && (
+              <p className="text-center text-muted-foreground py-8">
+                No questions found. Add your first question to get started.
+              </p>
+            )}
             {!questions.isPending &&
               questions.data &&
               questions.data.length > 0 && (
@@ -156,6 +202,7 @@ export default function AddQuestionsPage() {
                       <TableHead>Question</TableHead>
                       <TableHead className="text-right">Points</TableHead>
                       <TableHead>FTags</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -172,12 +219,72 @@ export default function AddQuestionsPage() {
                         <TableCell>
                           <QuestionFtags id={question.id} />
                         </TableCell>
-                        <TableCell>
-                          <EditQuestionDialog question={question}>
-                            <Button size="icon" variant={"outline"}>
-                              <PencilIcon />
+                        <TableCell className="text-right">
+                          <div className="flex items-center gap-2 justify-end">
+                            <Button 
+                              size="icon" 
+                              variant="outline"
+                              onClick={() => handleEditClick(question)}
+                            >
+                              <PencilIcon className="h-4 w-4" />
                             </Button>
-                          </EditQuestionDialog>
+
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  size="icon"
+                                  variant="outline"
+                                  className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                  disabled={deleteQuestion.isPending}
+                                >
+                                  <TrashIcon className="h-4 w-4" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent className="max-w-md">
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>
+                                    <div className="flex items-center gap-2">
+                                      <TrashIcon className="h-5 w-5 text-destructive" />
+                                      Delete Question
+                                    </div>
+                                  </AlertDialogTitle>
+                                  <AlertDialogDescription className="text-sm text-muted-foreground">
+                                    Are you sure you want to delete this question:{" "}
+                                    <span className="font-semibold text-foreground">
+                                      "{question.text.substring(0, 50)}{question.text.length > 50 ? '...' : ''}"
+                                    </span>
+                                    ? This action cannot be undone and will permanently remove this
+                                    question from the template.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter className="gap-2">
+                                  <AlertDialogCancel
+                                    disabled={deleteQuestion.isPending}
+                                    className="mt-0"
+                                  >
+                                    Cancel
+                                  </AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => deleteQuestion.mutate({ id: question.id })}
+                                    disabled={deleteQuestion.isPending}
+                                    className="bg-red-600 text-white shadow-lg hover:bg-red-700 hover:shadow-xl focus:ring-2 focus:ring-red-500 focus:ring-offset-2 active:bg-red-800 transition-all duration-200 font-medium px-4 py-2 rounded-md border-0 min-w-[100px] flex items-center justify-center gap-2"
+                                  >
+                                    {deleteQuestion.isPending ? (
+                                      <>
+                                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                                        <span>Deleting...</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <TrashIcon className="h-4 w-4" />
+                                        <span>Delete</span>
+                                      </>
+                                    )}
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -197,27 +304,21 @@ export default function AddQuestionsPage() {
           </CardContent>
         </Card>
       </main>
+
+      {/* Edit Question Dialog */}
+      {editDialogOpen && currentEditQuestion && (
+        <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit Question</DialogTitle>
+            </DialogHeader>
+            <EditQuestionForm 
+              question={currentEditQuestion} 
+              currentTotalPoints={totalPoints}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
     </>
-  );
-}
-
-function EditQuestionDialog({
-  question,
-  children,
-}: {
-  question: QuestionSelectType;
-  children: React.ReactNode;
-}) {
-  return (
-    <Dialog>
-      <DialogTrigger asChild>{children}</DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Edit Question</DialogTitle>
-        </DialogHeader>
-
-        <EditQuestionForm question={question} />
-      </DialogContent>
-    </Dialog>
   );
 }
