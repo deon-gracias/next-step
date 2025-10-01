@@ -15,6 +15,9 @@ import {
   Trash2Icon,
   FilterIcon,
   XIcon,
+  ChevronUpIcon,
+  ChevronDownIcon,
+  ArrowUpDownIcon,
 } from "lucide-react";
 import { NewResidentForm } from "./_components/new-resident-form";
 import {
@@ -53,7 +56,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { authClient } from "@/components/providers/auth-client";
@@ -99,17 +102,54 @@ export default function ResidentsPage() {
   const [residentToDelete, setResidentToDelete] = useState<{ id: number; name: string } | null>(null);
   const [selectedResidents, setSelectedResidents] = useState<Set<number>>(new Set());
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
+  const [sortField, setSortField] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   const activeOrganization = authClient.useActiveOrganization();
 
   // Get facilities for the filter dropdown
   const facilities = api.facility.list.useQuery({ page: 1, pageSize: 100 });
 
-  const residents = api.resident.list.useQuery({
+  // FIXED: Remove sortBy and sortDirection from API query
+  const residentsQuery = api.resident.list.useQuery({
     page,
     pageSize,
     facilityId: facilityFilter ? Number(facilityFilter) : undefined,
   });
+
+  // NEW: Client-side sorted and paginated data
+  const sortedResidents = useMemo(() => {
+    if (!residentsQuery.data?.data) return { data: [], totalPages: 0, total: 0 };
+
+    let sortedData = [...residentsQuery.data.data];
+
+    // Apply sorting if sortField is set
+    if (sortField) {
+      sortedData.sort((a, b) => {
+        let aValue: any = a[sortField as keyof typeof a];
+        let bValue: any = b[sortField as keyof typeof b];
+
+        // Handle different data types
+        if (typeof aValue === 'string') aValue = aValue.toLowerCase();
+        if (typeof bValue === 'string') bValue = bValue.toLowerCase();
+        
+        if (aValue instanceof Date) aValue = aValue.getTime();
+        if (bValue instanceof Date) bValue = bValue.getTime();
+
+        let result = 0;
+        if (aValue < bValue) result = -1;
+        if (aValue > bValue) result = 1;
+
+        return sortDirection === 'desc' ? -result : result;
+      });
+    }
+
+    return {
+      data: sortedData,
+      totalPages: residentsQuery.data.totalPages,
+      total: residentsQuery.data.total,
+    };
+  }, [residentsQuery.data, sortField, sortDirection]);
 
   const utils = api.useUtils();
 
@@ -170,6 +210,31 @@ export default function ResidentsPage() {
       ).data?.success ?? false,
   });
 
+  // FIXED: Sorting handler - no need to call handlePage(1)
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      // Toggle direction if same field
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // New field, default to ascending
+      setSortField(field);
+      setSortDirection('asc');
+    }
+    
+    setSelectedResidents(new Set());
+  };
+
+  // Get sort icon for column header
+  const getSortIcon = (field: string) => {
+    if (sortField !== field) {
+      return <ArrowUpDownIcon className="ml-2 h-4 w-4 text-muted-foreground" />;
+    }
+    
+    return sortDirection === 'asc' 
+      ? <ChevronUpIcon className="ml-2 h-4 w-4 text-blue-600" />
+      : <ChevronDownIcon className="ml-2 h-4 w-4 text-blue-600" />;
+  };
+
   function handlePageSize(pageSize: number) {
     const newSearchParams = new URLSearchParams(searchParams.toString());
     newSearchParams.set("pageSize", String(pageSize));
@@ -196,6 +261,9 @@ export default function ResidentsPage() {
     newSearchParams.set("page", "1");
     router.replace(`?${newSearchParams.toString()}`);
     setSelectedResidents(new Set());
+    // Reset sorting when filter changes
+    setSortField(null);
+    setSortDirection('asc');
   }
 
   function clearFilters() {
@@ -204,14 +272,17 @@ export default function ResidentsPage() {
     newSearchParams.set("page", "1");
     router.replace(`?${newSearchParams.toString()}`);
     setSelectedResidents(new Set());
+    // Reset sorting when clearing filters
+    setSortField(null);
+    setSortDirection('asc');
   }
 
   // Bulk selection handlers
   const handleSelectAll = (checked: boolean) => {
-    if (!residents.data) return;
+    if (!sortedResidents.data) return;
 
     if (checked) {
-      const allIds = new Set(residents.data.data.map(resident => resident.id));
+      const allIds = new Set(sortedResidents.data.map(resident => resident.id));
       setSelectedResidents(allIds);
     } else {
       setSelectedResidents(new Set());
@@ -246,7 +317,7 @@ export default function ResidentsPage() {
 
     const headers = firstLine.split(',').map(h => h.trim().toLowerCase());
 
-    const requiredHeaders = ['initials', 'facilityCode', 'roomid', 'pccId#'];
+    const requiredHeaders = ['initials', 'facilitycode', 'roomno', 'pccid#'];
     const missingHeaders = requiredHeaders.filter(h => !headers.includes(h));
 
     if (missingHeaders.length > 0) {
@@ -272,17 +343,17 @@ export default function ResidentsPage() {
           case 'initials':
             resident.name = value;
             break;
-          case 'facilityCode':
+          case 'facilitycode':
             resident.facilityId = parseInt(value);
             if (isNaN(resident.facilityId)) {
               throw new Error(`Invalid facility ID on row ${i + 1}: ${value}`);
             }
             break;
-          case 'roomNo':
+          case 'roomno':
             resident.roomId = value;
             break;
-          case 'pccId#':
-            resident.pcciId = value; // This will map to ppci_id in your schema
+          case 'pccid#':
+            resident.pcciId = value;
             break;
         }
       });
@@ -334,12 +405,12 @@ export default function ResidentsPage() {
     fileInputRef.current?.click();
   };
 
-  const isAllSelected = residents.data ?
-    residents.data.data.length > 0 && residents.data.data.every(resident => selectedResidents.has(resident.id)) :
+  const isAllSelected = sortedResidents.data ?
+    sortedResidents.data.length > 0 && sortedResidents.data.every(resident => selectedResidents.has(resident.id)) :
     false;
 
-  const isIndeterminate = residents.data ?
-    selectedResidents.size > 0 && selectedResidents.size < residents.data.data.length :
+  const isIndeterminate = sortedResidents.data ?
+    selectedResidents.size > 0 && selectedResidents.size < sortedResidents.data.length :
     false;
 
   // Get the selected facility name for display
@@ -534,19 +605,67 @@ export default function ResidentsPage() {
                     />
                   </TableHead>
                 )}
-                <TableHead className="w-[80px] text-right">System ID</TableHead>
-                <TableHead>Initials</TableHead>
-                <TableHead>Facility</TableHead>
-                <TableHead>Room No</TableHead>
-                <TableHead>PCC ID #</TableHead>
-                <TableHead>Added At</TableHead>
+                <TableHead 
+                  className="w-[80px] text-right cursor-pointer hover:bg-muted/50 transition-colors"
+                  onClick={() => handleSort('id')}
+                >
+                  <div className="flex items-center justify-end">
+                    System ID
+                    {getSortIcon('id')}
+                  </div>
+                </TableHead>
+                <TableHead 
+                  className="cursor-pointer hover:bg-muted/50 transition-colors"
+                  onClick={() => handleSort('name')}
+                >
+                  <div className="flex items-center">
+                    Initials
+                    {getSortIcon('name')}
+                  </div>
+                </TableHead>
+                <TableHead 
+                  className="cursor-pointer hover:bg-muted/50 transition-colors"
+                  onClick={() => handleSort('facilityId')}
+                >
+                  <div className="flex items-center">
+                    Facility
+                    {getSortIcon('facilityId')}
+                  </div>
+                </TableHead>
+                <TableHead 
+                  className="cursor-pointer hover:bg-muted/50 transition-colors"
+                  onClick={() => handleSort('roomId')}
+                >
+                  <div className="flex items-center">
+                    Room No
+                    {getSortIcon('roomId')}
+                  </div>
+                </TableHead>
+                <TableHead 
+                  className="cursor-pointer hover:bg-muted/50 transition-colors"
+                  onClick={() => handleSort('pcciId')}
+                >
+                  <div className="flex items-center">
+                    PCC ID #
+                    {getSortIcon('pcciId')}
+                  </div>
+                </TableHead>
+                <TableHead 
+                  className="cursor-pointer hover:bg-muted/50 transition-colors"
+                  onClick={() => handleSort('createdAt')}
+                >
+                  <div className="flex items-center">
+                    Added At
+                    {getSortIcon('createdAt')}
+                  </div>
+                </TableHead>
                 {hasDeleteResidentPermission.data && (
                   <TableHead className="w-[100px]">Actions</TableHead>
                 )}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {residents.isPending &&
+              {residentsQuery.isPending &&
                 Array.from({ length: pageSize }).map((_, i) => (
                   <TableRow key={i}>
                     {hasDeleteResidentPermission.data && (
@@ -569,9 +688,9 @@ export default function ResidentsPage() {
                     )}
                   </TableRow>
                 ))}
-              {!residents.isPending &&
-                residents.data &&
-                residents.data.data.length === 0 && (
+              {!residentsQuery.isPending &&
+                sortedResidents.data &&
+                sortedResidents.data.length === 0 && (
                   <TableRow>
                     <TableCell
                       colSpan={hasDeleteResidentPermission.data ? 8 : 6}
@@ -591,9 +710,9 @@ export default function ResidentsPage() {
                     </TableCell>
                   </TableRow>
                 )}
-              {!residents.isPending &&
-                residents.data &&
-                residents.data.data.map((resident) => (
+              {!residentsQuery.isPending &&
+                sortedResidents.data &&
+                sortedResidents.data.map((resident) => (
                   <TableRow key={resident.id}>
                     {hasDeleteResidentPermission.data && (
                       <TableCell>
@@ -693,7 +812,7 @@ export default function ResidentsPage() {
         <div className="mt-4 flex items-center justify-between px-4">
           <div className="text-muted-foreground hidden flex-1 text-sm lg:flex">
             {selectedResidents.size > 0 && (
-              <span>{selectedResidents.size} of {residents.data?.data.length || 0} resident(s) selected</span>
+              <span>{selectedResidents.size} of {sortedResidents.data?.length || 0} resident(s) selected</span>
             )}
           </div>
           <div className="flex w-full items-center gap-8 lg:w-fit">
@@ -717,9 +836,9 @@ export default function ResidentsPage() {
                 </SelectContent>
               </Select>
             </div>
-            {residents.data ? (
+            {sortedResidents ? (
               <div className="flex w-fit items-center justify-center text-sm font-medium">
-                Page {page} of {residents.data.totalPages}
+                Page {page} of {sortedResidents.totalPages}
               </div>
             ) : (
               <Skeleton className="h-4 w-[50px]" />
@@ -750,7 +869,7 @@ export default function ResidentsPage() {
                 size="icon"
                 onClick={() => handlePage(page + 1)}
                 disabled={
-                  residents.data ? page === residents.data.totalPages : true
+                  sortedResidents ? page === sortedResidents.totalPages : true
                 }
               >
                 <span className="sr-only">Go to next page</span>
@@ -761,10 +880,10 @@ export default function ResidentsPage() {
                 className="hidden size-8 lg:flex"
                 size="icon"
                 onClick={() =>
-                  residents.data && handlePage(residents.data.totalPages)
+                  sortedResidents && handlePage(sortedResidents.totalPages)
                 }
                 disabled={
-                  residents.data ? page === residents.data.totalPages : true
+                  sortedResidents ? page === sortedResidents.totalPages : true
                 }
               >
                 <span className="sr-only">Go to last page</span>

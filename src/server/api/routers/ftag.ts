@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import { ftag, questionFtag } from "@/server/db/schema";
-import { eq, and, count, ilike, desc, asc, getTableColumns, inArray } from "drizzle-orm";
+import { eq, and, count, ilike, desc, asc, getTableColumns, inArray, or } from "drizzle-orm";
 import { paginationInputSchema } from "@/server/utils/schema";
 
 export const ftagRouter = createTRPCRouter({
@@ -98,6 +98,37 @@ export const ftagRouter = createTRPCRouter({
       return newFtag;
     }),
 
+  getAll: protectedProcedure.query(async ({ ctx }) => {
+    return await ctx.db
+      .select()
+      .from(ftag)
+      .orderBy(asc(ftag.code));
+  }),
+
+  search: protectedProcedure
+    .input(z.object({ 
+      query: z.string().optional() 
+    }))
+    .query(async ({ ctx, input }) => {
+      const { query } = input;
+      
+      let whereCondition;
+      if (query && query.trim()) {
+        // Search in both code and description
+        whereCondition = or(
+          ilike(ftag.code, `%${query.trim()}%`),
+          ilike(ftag.description, `%${query.trim()}%`)
+        );
+      }
+
+      return await ctx.db
+        .select()
+        .from(ftag)
+        .where(whereCondition)
+        .orderBy(asc(ftag.code))
+        .limit(50); // Limit results for performance
+    }),
+
   update: protectedProcedure
     .input(
       z.object({
@@ -149,6 +180,8 @@ export const ftagRouter = createTRPCRouter({
 
       return { success: true };
     }),
+
+    
 
   bulkDelete: protectedProcedure
     .input(

@@ -51,8 +51,8 @@ import {
   ChevronRightIcon,
   SearchIcon,
   BuildingIcon,
-  SaveIcon,  // ✅ Added for save indicator
-  AlertCircleIcon,  // ✅ Added for info alert
+  SaveIcon,
+  AlertCircleIcon,
   TrashIcon
 } from "lucide-react";
 import { FacilityHoverCard } from "../../_components/facility-card";
@@ -63,14 +63,14 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Alert, AlertDescription } from "@/components/ui/alert";  // ✅ Added for alerts
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 import { z } from "zod";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { authClient } from "@/components/providers/auth-client";
-import { useLocalStorageForm } from "@/hooks/useLocalStorageForm";  // ✅ Added localStorage hook
+import { useLocalStorageForm } from "@/hooks/useLocalStorageForm";
 
 export const newMultiSurveyCreateInputSchema = z.object({
   surveyDate: z.date(),
@@ -101,7 +101,6 @@ export type NewMultiSurveyCreateInputType = z.infer<
   typeof newMultiSurveyCreateInputSchema
 >;
 
-// ✅ Storage key for localStorage
 const SURVEY_FORM_STORAGE_KEY = "survey-form-draft";
 
 // Custom User Combobox Component with Fixed Search
@@ -173,7 +172,6 @@ function UserComboBox({
             />
           </div>
         </div>
-
         <div className="max-h-64 overflow-y-auto">
           {users.isLoading ? (
             <div className="p-4 space-y-2">
@@ -400,15 +398,17 @@ function FacilityComboBox({
   );
 }
 
-// Custom Template Combobox Component with Fixed Search
+// UPDATED: Template Combobox Component with exclusion logic
 function TemplateComboBox({
   selectedItem,
   onSelect,
   withValue = false,
+  excludeTemplateIds = [], // NEW: Add excluded template IDs
 }: {
   selectedItem?: any;
   onSelect: (value: any) => void;
   withValue?: boolean;
+  excludeTemplateIds?: number[]; // NEW: Exclude already selected templates
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -423,6 +423,11 @@ function TemplateComboBox({
     pageSize,
     name: debouncedSearch,
   });
+
+  // UPDATED: Filter out excluded templates and sort alphabetically
+  const availableTemplates = templates.data?.data
+    .filter(template => !excludeTemplateIds.includes(template.id))
+    .sort((a, b) => a.name.localeCompare(b.name)) || [];
 
   const totalPages = templates.data?.totalPages || 1;
   const hasNextPage = currentPage < totalPages;
@@ -496,13 +501,14 @@ function TemplateComboBox({
                 </div>
               ))}
             </div>
-          ) : templates.data?.data.length === 0 ? (
+          ) : availableTemplates.length === 0 ? (
             <div className="p-4 text-center text-muted-foreground">
-              {debouncedSearch ? "No templates found matching your search." : "No templates available."}
+              {debouncedSearch ? "No templates found matching your search." : 
+               excludeTemplateIds.length > 0 ? "No more templates available. All others are already selected." : "No templates available."}
             </div>
           ) : (
             <div className="p-2">
-              {templates.data?.data.map((template) => (
+              {availableTemplates.map((template) => (
                 <div
                   key={template.id}
                   className={cn(
@@ -572,7 +578,7 @@ function TemplateComboBox({
             </div>
             {templates.data && (
               <div className="text-xs text-muted-foreground mt-1">
-                Showing {templates.data.data.length} of {templates.data.total} templates
+                Showing {availableTemplates.length} of {templates.data.total} templates
               </div>
             )}
           </div>
@@ -610,12 +616,12 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
     },
   });
 
-  // ✅ Initialize localStorage persistence
+  // Initialize localStorage persistence
   const { clearStorage, loadFromStorage, saveToStorage } = useLocalStorageForm<NewMultiSurveyCreateInputType>(
     SURVEY_FORM_STORAGE_KEY
   );
 
-  // ✅ State for showing save indicator
+  // State for showing save indicator
   const [showSavedIndicator, setShowSavedIndicator] = useState(false);
 
   const surveyorsField = useFieldArray({
@@ -623,8 +629,7 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
     name: "surveyors",
   });
 
-  // ✅ Load saved data on mount
-  // ✅ Load saved data on mount
+  // Load saved data on mount
   useEffect(() => {
     const savedData = loadFromStorage();
     if (savedData) {
@@ -639,8 +644,7 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
   }, [form, loadFromStorage]);
 
 
-  // ✅ Save data when form changes
-  // ✅ Save data when form changes
+  // Save data when form changes
   useEffect(() => {
     const subscription = form.watch((data) => {
       if (data && data.surveyDate && typeof data.facilityId === 'number') {
@@ -652,7 +656,6 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
     });
     return () => subscription.unsubscribe();
   }, [form, saveToStorage]);
-
 
   // Auto-select admin user and initialize surveyors
   useEffect(() => {
@@ -715,10 +718,10 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
       {
         loading: "Creating surveys",
         success: () => {
-          // ✅ Clear localStorage FIRST - completely remove all saved data
+          // Clear localStorage FIRST - completely remove all saved data
           clearStorage();
 
-          // ✅ Reset form to completely fresh state
+          // Reset form to completely fresh state
           const freshFormData: NewMultiSurveyCreateInputType = {
             surveyDate: new Date(),
             facilityId: -1, // Reset to default "not selected" state
@@ -727,10 +730,10 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
 
           form.reset(freshFormData);
 
-          // ✅ Force surveyors field to be completely empty initially
+          // Force surveyors field to be completely empty initially
           surveyorsField.replace([]);
 
-          // ✅ Show success message
+          // Show success message
           return "Survey created successfully! Form has been cleared.";
         },
         error: () => "Failed to create survey.",
@@ -740,8 +743,8 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
   };
 
   return (
-    <div className="space-y-6">
-      {/* ✅ Draft Status Indicator */}
+    <div className="space-y-4">
+      {/* Draft Status Indicator */}
       <div className="sticky top-4 z-10">
         {showSavedIndicator && (
           <Alert className="bg-green-50 border-green-200 animate-in slide-in-from-top-2">
@@ -753,7 +756,7 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
         )}
       </div>
 
-      {/* ✅ Offline Protection Info + Clear Data Button */}
+      {/* Offline Protection Info + Clear Data Button */}
 <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
     <div className="flex items-start gap-3">
@@ -768,10 +771,10 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
       variant="outline"
       size="sm"
       onClick={() => {
-        // ✅ Clear localStorage
+        // Clear localStorage
         clearStorage();
         
-        // ✅ Reset form to fresh state
+        // Reset form to fresh state
         const freshFormData: NewMultiSurveyCreateInputType = {
           surveyDate: new Date(),
           facilityId: -1,
@@ -781,7 +784,7 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
         form.reset(freshFormData);
         surveyorsField.replace([]);
         
-        // ✅ Show success message
+        // Show success message
         toast.success("All data cleared! Form has been reset.");
       }}
       className="border-red-200 text-red-700 hover:bg-red-50 hover:border-red-300 whitespace-nowrap"
@@ -792,12 +795,9 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
   </div>
 </div>
 
-
-
-
-      {/* Main Form - EXACTLY as your original */}
+      {/* Survey Details - Compact layout with reduced spacing */}
       <Card className="border-2 border-blue-100 bg-gradient-to-r from-blue-50/30 to-indigo-50/30">
-        <CardHeader className="border-b border-blue-100">
+        <CardHeader className="border-b border-blue-100 pb-2">
           <div className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100">
               <CalendarIcon className="h-4 w-4 text-blue-600" />
@@ -805,73 +805,75 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
             <h2 className="text-lg font-semibold text-gray-900">Survey Details</h2>
           </div>
         </CardHeader>
-        <CardContent className="pt-6">
+        <CardContent className="pt-4">
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4">
-              <FormField
-                control={form.control}
-                name="surveyDate"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Survey Date</FormLabel>
-                    <FormControl>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <FormControl>
-                            <Button
-                              variant={"outline"}
-                              className={cn(
-                                "w-[240px] pl-3 text-left font-normal bg-white hover:bg-gray-50",
-                                !field.value && "text-muted-foreground",
-                              )}
-                            >
-                              {field.value ? (
-                                format(field.value, "PPP")
-                              ) : (
-                                <span>Pick a date</span>
-                              )}
-                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                            </Button>
-                          </FormControl>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={field.value}
-                            onSelect={field.onChange}
-                            // disabled={(date) => date < new Date()}
-                            captionLayout="dropdown"
-                          />
-                        </PopoverContent>
-                      </Popover>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+            <form onSubmit={form.handleSubmit(onSubmit)}>
+              {/* Date and Facility on same line */}
+              <div className="flex gap-4">
+                <FormField
+                  control={form.control}
+                  name="surveyDate"
+                  render={({ field }) => (
+                    <FormItem className="flex-1">
+                      <FormLabel>Survey Date</FormLabel>
+                      <FormControl>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <FormControl>
+                              <Button
+                                variant={"outline"}
+                                className={cn(
+                                  "w-full pl-3 text-left font-normal bg-white hover:bg-gray-50",
+                                  !field.value && "text-muted-foreground",
+                                )}
+                              >
+                                {field.value ? (
+                                  format(field.value, "PPP")
+                                ) : (
+                                  <span>Pick a date</span>
+                                )}
+                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                              </Button>
+                            </FormControl>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={field.value}
+                              onSelect={field.onChange}
+                              captionLayout="dropdown"
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-              <FormField
-                control={form.control}
-                name="facilityId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Facility</FormLabel>
-                    <FormControl>
-                      <FacilityComboBox
-                        selectedItem={field.value}
-                        onSelect={(item) => field.onChange(item)}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                <FormField
+                  control={form.control}
+                  name="facilityId"
+                  render={({ field }) => (
+                    <FormItem className="flex-1">
+                      <FormLabel>Facility</FormLabel>
+                      <FormControl>
+                        <FacilityComboBox
+                          selectedItem={field.value}
+                          onSelect={(item) => field.onChange(item)}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
             </form>
           </Form>
         </CardContent>
       </Card>
 
-      {/* Surveyors Section - EXACTLY as your original */}
+      {/* Surveyors Section */}
       <div className="space-y-4">
         {surveyorsField.fields.map((surveyor, sIndex) => {
           return (
@@ -901,7 +903,7 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
         )}
       </div>
 
-      {/* Submit Button - EXACTLY as your original */}
+      {/* Submit Button */}
       <Card className="border-2 border-emerald-100 bg-gradient-to-r from-emerald-50/50 to-green-50/50">
         <CardContent className="pt-6">
           <Form {...form}>
@@ -922,7 +924,7 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
   );
 }
 
-// Keep ALL your original components EXACTLY as they are...
+// UPDATED: SurveyorField with template exclusion logic
 function SurveyorField({
   form,
   sIndex,
@@ -938,6 +940,14 @@ function SurveyorField({
     control: form.control,
     name: `surveyors.${sIndex}.templates`,
   });
+
+  // NEW: Get all selected template IDs for this surveyor to exclude from dropdown
+  const getExcludedTemplateIds = (currentTemplateIndex: number) => {
+    const surveyorTemplates = form.watch(`surveyors.${sIndex}.templates`);
+    return surveyorTemplates
+      .map((template, index) => index !== currentTemplateIndex ? template.template?.id : null)
+      .filter(Boolean) as number[];
+  };
 
   return (
     <Card
@@ -1013,7 +1023,7 @@ function SurveyorField({
               </CardHeader>
 
               <CardContent className="pt-4 space-y-4">
-                {/* Template Select */}
+                {/* Template Select - UPDATED: With template exclusion */}
                 <Form {...form}>
                   <FormField
                     control={form.control}
@@ -1026,6 +1036,7 @@ function SurveyorField({
                             withValue
                             selectedItem={field.value}
                             onSelect={(item) => field.onChange(item)}
+                            excludeTemplateIds={getExcludedTemplateIds(tIndex)} // NEW: Pass excluded IDs
                           />
                         </FormControl>
                         <FormMessage />
@@ -1033,6 +1044,60 @@ function SurveyorField({
                     )}
                   />
                 </Form>
+
+                {/* Back to vertical layout - Add Resident form on top, Selected Residents below */}
+                <div className="space-y-4">
+                  {/* Add Resident Form */}
+                  <AddResidentInput
+                    facilityId={form.getValues("facilityId")}
+                    value={form.getValues(`surveyors.${sIndex}.templates.${tIndex}.residentIds`)}
+                    onChange={(value) =>
+                      form.setValue(
+                        `surveyors.${sIndex}.templates.${tIndex}.residentIds`,
+                        Array.from(new Set(value)),
+                      )
+                    }
+                  />
+
+                  {/* UPDATED: Selected Residents Display - No scroll, natural height */}
+                  <div className="rounded-lg border border-teal-200 bg-teal-50/30 overflow-hidden">
+                    <div className="bg-teal-100/50 px-4 py-2 border-b border-teal-200">
+                      <div className="flex items-center gap-2">
+                        <UsersIcon className="h-4 w-4 text-teal-600" />
+                        <span className="text-sm font-medium text-teal-800">Selected Residents</span>
+                      </div>
+                    </div>
+                    {/* REMOVED: max-h-32 overflow-y-auto - Now natural height, no scroll */}
+                    <div className="p-2"> 
+                      {form.watch(`surveyors.${sIndex}.templates.${tIndex}.residentIds`).length < 1 ? (
+                        <div className="text-muted-foreground py-4 text-center text-xs">
+                          No residents selected
+                        </div>
+                      ) : (
+                        <div className="space-y-2"> {/* Added proper spacing between residents */}
+                          {form
+                            .watch(`surveyors.${sIndex}.templates.${tIndex}.residentIds`)
+                            .sort((curr, next) => (curr > next ? 1 : 0))
+                            .map((id) => (
+                              <ResidentRowById
+                                key={id}
+                                id={id}
+                                handleRemove={() => {
+                                  form.setValue(
+                                    `surveyors.${sIndex}.templates.${tIndex}.residentIds`,
+                                    form
+                                      .getValues(`surveyors.${sIndex}.templates.${tIndex}.residentIds`)
+                                      .filter((i) => i !== id),
+                                  );
+                                }}
+                                compact={true}
+                              />
+                            ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
 
                 {/* Cases Section */}
                 {form.watch("facilityId") > -1 &&
@@ -1095,75 +1160,6 @@ function SurveyorField({
                       </Form>
                     </div>
                   )}
-
-                {/* Residents Section */}
-                {form.watch("facilityId") > -1 &&
-                  form.watch(`surveyors.${sIndex}.templates.${tIndex}.template`)?.type === "resident" && (
-                    <div className="space-y-3">
-                      <AddResidentInput
-                        facilityId={form.getValues("facilityId")}
-                        value={form.getValues(`surveyors.${sIndex}.templates.${tIndex}.residentIds`)}
-                        onChange={(value) =>
-                          form.setValue(
-                            `surveyors.${sIndex}.templates.${tIndex}.residentIds`,
-                            Array.from(new Set(value)),
-                          )
-                        }
-                      />
-
-                      {/* Residents Table */}
-                      <div className="rounded-lg border border-teal-200 bg-teal-50/30 overflow-hidden">
-                        <div className="bg-teal-100/50 px-4 py-2 border-b border-teal-200">
-                          <div className="flex items-center gap-2">
-                            <UsersIcon className="h-4 w-4 text-teal-600" />
-                            <span className="text-sm font-medium text-teal-800">Selected Residents</span>
-                          </div>
-                        </div>
-                        <Table>
-                          <TableHeader>
-                            <TableRow className="bg-teal-50 hover:bg-teal-50">
-                              <TableHead className="w-[80px] text-right text-teal-700">ID</TableHead>
-                              <TableHead className="text-teal-700">Name</TableHead>
-                              <TableHead className="text-teal-700">Facility</TableHead>
-                              <TableHead className="text-teal-700">Room</TableHead>
-                              <TableHead className="text-teal-700">PCC ID</TableHead>
-                              <TableHead className="text-teal-700"></TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {form.watch(`surveyors.${sIndex}.templates.${tIndex}.residentIds`).length < 1 && (
-                              <TableRow>
-                                <TableCell
-                                  colSpan={6}
-                                  className="text-muted-foreground py-8 text-center bg-white"
-                                >
-                                  No residents selected. Add residents to get started.
-                                </TableCell>
-                              </TableRow>
-                            )}
-
-                            {form
-                              .watch(`surveyors.${sIndex}.templates.${tIndex}.residentIds`)
-                              .sort((curr, next) => (curr > next ? 1 : 0))
-                              .map((id) => (
-                                <ResidentRowById
-                                  key={id}
-                                  id={id}
-                                  handleRemove={() => {
-                                    form.setValue(
-                                      `surveyors.${sIndex}.templates.${tIndex}.residentIds`,
-                                      form
-                                        .getValues(`surveyors.${sIndex}.templates.${tIndex}.residentIds`)
-                                        .filter((i) => i !== id),
-                                    );
-                                  }}
-                                />
-                              ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    </div>
-                  )}
               </CardContent>
             </Card>
           ))}
@@ -1188,17 +1184,49 @@ function SurveyorField({
   );
 }
 
+// ResidentRowById - same as before
 function ResidentRowById({
   id,
   handleRemove,
+  compact = false,
 }: {
   id: number;
   handleRemove: () => void;
+  compact?: boolean;
 }) {
   const apiUtils = api.useUtils();
   const resident = api.resident.byId.useQuery({ id });
   const deleteResident = api.resident.delete.useMutation();
 
+  if (compact) {
+    // Compact view for selected residents - only cross icon
+    return (
+      <div className="flex items-center gap-2 p-2 bg-blue-50 rounded-md">
+        <div className="flex h-4 w-4 items-center justify-center rounded-full bg-blue-100">
+          <UserIcon className="h-2 w-2 text-blue-600" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="font-medium text-xs truncate">
+            {!resident.data ? <Skeleton className="h-3 w-16" /> : resident.data.name}
+          </div>
+          <div className="text-xs text-muted-foreground">
+            {!resident.data ? <Skeleton className="h-2 w-12" /> : `Room: ${resident.data.roomId}`}
+          </div>
+        </div>
+        {/* Only cross icon, no delete button */}
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-4 w-4 hover:bg-red-100"
+          onClick={handleRemove}
+        >
+          <XIcon className="h-2 w-2" />
+        </Button>
+      </div>
+    );
+  }
+
+  // Original table row view
   return (
     <TableRow className="bg-white hover:bg-teal-50/50">
       <TableCell className="text-right font-mono tabular-nums">{id}</TableCell>
@@ -1267,6 +1295,7 @@ function ResidentRowById({
   );
 }
 
+// AddResidentInput - same as before with PCC ID, Name, Room ID on same line
 function AddResidentInput({
   value,
   onChange,
@@ -1288,7 +1317,7 @@ function AddResidentInput({
 
   const residentMutation = api.resident.create.useMutation();
 
-  // Manual search function - CORRECTED
+  // Manual search function - CORRECTED for continuous use
   const handleSearchResident = async () => {
     const pcciId = form.getValues("pcciId");
 
@@ -1347,8 +1376,10 @@ function AddResidentInput({
         loading: "Creating resident...",
         success: async (response) => {
           if (response[0]) onChange([...value, response[0].id]);
+          // Invalidate queries to refresh resident list immediately
           void apiUtils.resident.invalidate();
-          form.reset({});
+          // Reset form for next entry
+          form.reset({ name: "", pcciId: "", roomId: "", facilityId: 0 });
           setSearchedResident(null);
           return `Successfully created resident ${values.name}`;
         },
@@ -1367,7 +1398,8 @@ function AddResidentInput({
 
     // Add existing resident
     onChange([...value, searchedResident.id]);
-    form.reset({});
+    // Reset for next entry
+    form.reset({ name: "", pcciId: "", roomId: "", facilityId: 0 });
     setSearchedResident(null);
     toast.success(`Added ${searchedResident.name} to the survey`);
   }
@@ -1394,53 +1426,48 @@ function AddResidentInput({
       </CardHeader>
       <CardContent className="pt-4">
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField
-              name="pcciId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>PCC ID</FormLabel>
-                  <FormControl>
-                    <div className="flex gap-2">
-                      <Input
-                        {...field}
-                        onChange={(e) => handlePcciIdChange(e.target.value)}
-                        className="bg-white"
-                        placeholder="Enter PCC ID"
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={handleSearchResident}
-                        disabled={!field.value || field.value.trim().length === 0}
-                        className="min-w-[100px] bg-blue-50 hover:bg-blue-100 border-blue-200"
-                      >
-                        <SearchIcon className="mr-2 h-4 w-4" />
-                        Search
-                      </Button>
-                    </div>
-                  </FormControl>
-                  {searchedResident && (
-                    <p className="text-xs text-green-600">
-                      ✓ Resident found: {searchedResident.name} (Room: {searchedResident.roomId})
-                    </p>
-                  )}
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
+            {/* All three fields in one row */}
+            <div className="flex gap-2">
+              <FormField
+                name="pcciId"
+                render={({ field }) => (
+                  <FormItem className="flex-1">
+                    <FormLabel className="text-sm">PCC ID</FormLabel>
+                    <FormControl>
+                      <div className="flex gap-1">
+                        <Input
+                          {...field}
+                          onChange={(e) => handlePcciIdChange(e.target.value)}
+                          className="bg-white h-8"
+                          placeholder="Enter PCC ID"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={handleSearchResident}
+                          disabled={!field.value || field.value.trim().length === 0}
+                          className="h-8 px-2 bg-blue-50 hover:bg-blue-100 border-blue-200"
+                        >
+                          <SearchIcon className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-            <div className="grid gap-4 md:grid-cols-2">
               <FormField
                 name="name"
                 render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Name</FormLabel>
+                  <FormItem className="flex-1">
+                    <FormLabel className="text-sm">Name</FormLabel>
                     <FormControl>
                       <Input
                         {...field}
                         disabled={!!searchedResident}
-                        className="bg-white disabled:bg-gray-50"
+                        className="bg-white disabled:bg-gray-50 h-8"
                         placeholder="Resident name"
                       />
                     </FormControl>
@@ -1452,13 +1479,13 @@ function AddResidentInput({
               <FormField
                 name="roomId"
                 render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Room ID</FormLabel>
+                  <FormItem className="flex-1">
+                    <FormLabel className="text-sm">Room ID</FormLabel>
                     <FormControl>
                       <Input
                         {...field}
                         disabled={!!searchedResident}
-                        className="bg-white disabled:bg-gray-50"
+                        className="bg-white disabled:bg-gray-50 h-8"
                         placeholder="Room number"
                       />
                     </FormControl>
@@ -1468,18 +1495,24 @@ function AddResidentInput({
               />
             </div>
 
+            {searchedResident && (
+              <p className="text-xs text-green-600">
+                ✓ Resident found: {searchedResident.name} (Room: {searchedResident.roomId})
+              </p>
+            )}
+
             <input type="hidden" value={facilityId} />
 
             <Button
               type="submit"
-              className="w-full bg-indigo-600 hover:bg-indigo-700"
+              className="w-full bg-indigo-600 hover:bg-indigo-700 h-8"
               disabled={
                 !form.watch("pcciId") ||
                 !form.watch("name") ||
                 residentMutation.isPending
               }
             >
-              <PlusIcon className="mr-2 h-4 w-4" />
+              <PlusIcon className="mr-2 h-3 w-3" />
               {searchedResident ? "Add Existing Resident" : "Create & Add Resident"}
             </Button>
           </form>

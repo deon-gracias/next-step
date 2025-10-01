@@ -574,6 +574,20 @@ export default function SurveyDetailPage() {
     return out;
   }, [questions.data, allResponses]);
 
+  const ResidentInitial = ({ residentId }: { residentId: number }) => {
+  const resident = api.resident.byId.useQuery({ id: residentId });
+
+  if (resident.isPending) {
+    return <Skeleton className="h-4 w-16" />;
+  }
+
+  return (
+    <span>
+      {resident.data?.name || `ID: ${residentId}`}
+    </span>
+  );
+};
+
   // Progress calculation for each resident
   const residentProgress = useMemo(() => {
     const map = new Map<number, { answered: number; unanswered: number }>();
@@ -1490,7 +1504,7 @@ export default function SurveyDetailPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[120px]">Resident</TableHead>
+                  <TableHead className="w-[120px]">Initials</TableHead>
                   <TableHead className="w-[160px]">Progress</TableHead>
                   <TableHead className="text-right w-[120px]">Action</TableHead>
                 </TableRow>
@@ -1503,7 +1517,9 @@ export default function SurveyDetailPage() {
 
                   return (
                     <TableRow key={r.id}>
-                      <TableCell>{r.residentId}</TableCell>
+                      <TableCell>
+  <ResidentInitial residentId={r.residentId} />
+</TableCell>
                       <TableCell>
                         <div className="text-sm">
                           {progress.answered} answered • {progress.unanswered} pending
