@@ -940,6 +940,8 @@ function SurveyorField({
     name: `surveyors.${sIndex}.templates`,
   });
 
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
   // Get all selected template IDs for this surveyor to exclude from dropdown
   const getExcludedTemplateIds = (currentTemplateIndex: number) => {
     const surveyorTemplates = form.watch(`surveyors.${sIndex}.templates`);
@@ -954,25 +956,37 @@ function SurveyorField({
       className="border-2 border-amber-100 bg-gradient-to-r from-amber-50/40 to-orange-50/40 shadow-sm"
     >
       <CardHeader className="border-b border-amber-100">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-100">
-              <UserIcon className="h-4 w-4 text-amber-600" />
-            </div>
-            <h3 className="font-semibold text-gray-900">Surveyor {sIndex + 1}</h3>
-          </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="text-gray-400 hover:text-red-500 hover:bg-red-50"
-            onClick={() => surveyorsField.remove(sIndex)}
-          >
-            <XIcon className="h-4 w-4" />
-          </Button>
-        </div>
-      </CardHeader>
+  <div className="flex items-center justify-between">
+    <div className="flex items-center gap-3">
+      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-100">
+        <UserIcon className="h-4 w-4 text-amber-600" />
+      </div>
+      <h3 className="font-semibold text-gray-900">Surveyor {sIndex + 1}</h3>
+    </div>
+    <div className="flex items-center gap-2">
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="text-gray-400 hover:text-gray-600"
+        onClick={() => setIsCollapsed(!isCollapsed)}
+      >
+        <ChevronRightIcon className={cn("h-4 w-4 transition-transform", isCollapsed ? "rotate-0" : "rotate-90")} />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="text-gray-400 hover:text-red-500 hover:bg-red-50"
+        onClick={() => surveyorsField.remove(sIndex)}
+      >
+        <XIcon className="h-4 w-4" />
+      </Button>
+    </div>
+  </div>
+</CardHeader>
 
+{!isCollapsed && (
       <CardContent className="pt-6 space-y-4">
         {/* Surveyor Select */}
         <Form {...form}>
@@ -1184,7 +1198,8 @@ function SurveyorField({
             <PlusIcon className="mr-2 h-4 w-4" /> Add Template
           </Button>
         </div>
-      </CardContent>
+            </CardContent>
+    )}
     </Card>
   );
 }

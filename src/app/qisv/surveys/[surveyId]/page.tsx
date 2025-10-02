@@ -297,12 +297,12 @@ export default function SurveyDetailPage() {
 
   // ✅ Updated to include both resident and case responses
   const [allResponses, setAllResponses] = useState<
-    Array<{ 
-      residentId: number | null; 
+    Array<{
+      residentId: number | null;
       surveyCaseId: number | null;
-      questionId: number; 
-      status: StatusVal | null; 
-      findings: string | null 
+      questionId: number;
+      status: StatusVal | null;
+      findings: string | null
     }>
   >([]);
   const [showComments, setShowComments] = useState(false);
@@ -318,21 +318,21 @@ export default function SurveyDetailPage() {
     (async () => {
       if (!survey.data) return;
       try {
-        const arr: Array<{ 
-          residentId: number | null; 
+        const arr: Array<{
+          residentId: number | null;
           surveyCaseId: number | null;
-          questionId: number; 
-          status: StatusVal | null; 
-          findings: string | null 
+          questionId: number;
+          status: StatusVal | null;
+          findings: string | null
         }> = [];
 
         // Fetch resident responses
         if (residents.data) {
           await Promise.all(
             residents.data.map(async (r) => {
-              const rows = await utils.survey.listResponses.fetch({ 
-                surveyId, 
-                residentId: r.residentId 
+              const rows = await utils.survey.listResponses.fetch({
+                surveyId,
+                residentId: r.residentId
               });
               for (const rr of rows ?? []) {
                 arr.push({
@@ -351,9 +351,9 @@ export default function SurveyDetailPage() {
         if (cases.data) {
           await Promise.all(
             cases.data.map(async (c) => {
-              const rows = await utils.survey.listResponses.fetch({ 
-                surveyId, 
-                surveyCaseId: c.id 
+              const rows = await utils.survey.listResponses.fetch({
+                surveyId,
+                surveyCaseId: c.id
               });
               for (const rr of rows ?? []) {
                 arr.push({
@@ -372,7 +372,7 @@ export default function SurveyDetailPage() {
         if (survey.data.template?.type === "general") {
           const generalRows = await utils.survey.listResponses.fetch({ surveyId });
           const generalResponses = generalRows?.filter(r => !r.residentId && !r.surveyCaseId) ?? [];
-          
+
           for (const rr of generalResponses) {
             arr.push({
               residentId: null,
@@ -398,39 +398,76 @@ export default function SurveyDetailPage() {
 
   // ✅ UPDATED: Fetch existing POCs for resident surveys only (as per current backend)
   // ✅ UPDATED: Fetch existing POCs for all survey types
-useEffect(() => {
-  let cancelled = false;
-  (async () => {
-    if (!survey.data) {
-      if (!cancelled) {
-        setHasAnyPOC(false);
-        setPocMap(new Map());
-        setCombinedPOC("");
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!survey.data) {
+        if (!cancelled) {
+          setHasAnyPOC(false);
+          setPocMap(new Map());
+          setCombinedPOC("");
+        }
+        return;
       }
-      return;
-    }
 
-    const templateType = survey.data.template?.type;
+      const templateType = survey.data.template?.type;
 
-    try {
-      const newPocMap = new Map<string, string>();
-      let foundAnyPOC = false;
-      let firstPocText = "";
+      try {
+        const newPocMap = new Map<string, string>();
+        let foundAnyPOC = false;
+        let firstPocText = "";
 
-      if (templateType === "resident" && residents.data && residents.data.length > 0) {
-        // ✅ Resident POCs
-        const residentIds = residents.data.map((r) => r.residentId);
-        const pocResults = await Promise.all(
-          residentIds.map((rid) => utils.poc.list.fetch({ surveyId, residentId: rid }))
-        );
+        if (templateType === "resident" && residents.data && residents.data.length > 0) {
+          // ✅ Resident POCs
+          const residentIds = residents.data.map((r) => r.residentId);
+          const pocResults = await Promise.all(
+            residentIds.map((rid) => utils.poc.list.fetch({ surveyId, residentId: rid }))
+          );
 
-        for (let i = 0; i < residentIds.length; i++) {
-          const residentId = residentIds[i];
-          const pocRows = pocResults[i] ?? [];
+          for (let i = 0; i < residentIds.length; i++) {
+            const residentId = residentIds[i];
+            const pocRows = pocResults[i] ?? [];
+
+            for (const pocRow of pocRows) {
+              if (pocRow.pocText && pocRow.pocText.trim()) {
+                const key = `resident-${residentId}-${pocRow.questionId}`;
+                newPocMap.set(key, pocRow.pocText.trim());
+                foundAnyPOC = true;
+                if (!firstPocText) {
+                  firstPocText = pocRow.pocText.trim();
+                }
+              }
+            }
+          }
+        } else if (templateType === "case" && cases.data && cases.data.length > 0) {
+          // ✅ NEW: Case POCs
+          const caseIds = cases.data.map((c) => c.id);
+          const pocResults = await Promise.all(
+            caseIds.map((cid) => utils.poc.list.fetch({ surveyId, surveyCaseId: cid }))
+          );
+
+          for (let i = 0; i < caseIds.length; i++) {
+            const caseId = caseIds[i];
+            const pocRows = pocResults[i] ?? [];
+
+            for (const pocRow of pocRows) {
+              if (pocRow.pocText && pocRow.pocText.trim()) {
+                const key = `case-${caseId}-${pocRow.questionId}`;
+                newPocMap.set(key, pocRow.pocText.trim());
+                foundAnyPOC = true;
+                if (!firstPocText) {
+                  firstPocText = pocRow.pocText.trim();
+                }
+              }
+            }
+          }
+        } else if (templateType === "general") {
+          // ✅ NEW: General POCs
+          const pocRows = await utils.poc.list.fetch({ surveyId });
 
           for (const pocRow of pocRows) {
             if (pocRow.pocText && pocRow.pocText.trim()) {
-              const key = `resident-${residentId}-${pocRow.questionId}`;
+              const key = `general-${pocRow.questionId}`;
               newPocMap.set(key, pocRow.pocText.trim());
               foundAnyPOC = true;
               if (!firstPocText) {
@@ -439,99 +476,101 @@ useEffect(() => {
             }
           }
         }
-      } else if (templateType === "case" && cases.data && cases.data.length > 0) {
-        // ✅ NEW: Case POCs
-        const caseIds = cases.data.map((c) => c.id);
-        const pocResults = await Promise.all(
-          caseIds.map((cid) => utils.poc.list.fetch({ surveyId, surveyCaseId: cid }))
-        );
 
-        for (let i = 0; i < caseIds.length; i++) {
-          const caseId = caseIds[i];
-          const pocRows = pocResults[i] ?? [];
-
-          for (const pocRow of pocRows) {
-            if (pocRow.pocText && pocRow.pocText.trim()) {
-              const key = `case-${caseId}-${pocRow.questionId}`;
-              newPocMap.set(key, pocRow.pocText.trim());
-              foundAnyPOC = true;
-              if (!firstPocText) {
-                firstPocText = pocRow.pocText.trim();
-              }
-            }
-          }
+        if (!cancelled) {
+          setPocMap(newPocMap);
+          setHasAnyPOC(foundAnyPOC);
+          setCombinedPOC(firstPocText);
         }
-      } else if (templateType === "general") {
-        // ✅ NEW: General POCs
-        const pocRows = await utils.poc.list.fetch({ surveyId });
-        
-        for (const pocRow of pocRows) {
-          if (pocRow.pocText && pocRow.pocText.trim()) {
-            const key = `general-${pocRow.questionId}`;
-            newPocMap.set(key, pocRow.pocText.trim());
-            foundAnyPOC = true;
-            if (!firstPocText) {
-              firstPocText = pocRow.pocText.trim();
-            }
-          }
+      } catch (error) {
+        console.error("Failed to fetch POCs:", error);
+        if (!cancelled) {
+          setHasAnyPOC(false);
+          setPocMap(new Map());
+          setCombinedPOC("");
         }
       }
-
-      if (!cancelled) {
-        setPocMap(newPocMap);
-        setHasAnyPOC(foundAnyPOC);
-        setCombinedPOC(firstPocText);
-      }
-    } catch (error) {
-      console.error("Failed to fetch POCs:", error);
-      if (!cancelled) {
-        setHasAnyPOC(false);
-        setPocMap(new Map());
-        setCombinedPOC("");
-      }
-    }
-  })();
-  return () => {
-    cancelled = true;
-  };
-}, [survey.data, residents.data, cases.data, surveyId, utils.poc.list]);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [survey.data, residents.data, cases.data, surveyId, utils.poc.list]);
 
 
   // ✅ UPDATED: Fetch existing DOCs for resident surveys only (as per current backend)
-// ✅ UPDATED: Fetch existing DOCs for all survey types
-useEffect(() => {
-  let cancelled = false;
-  (async () => {
-    if (!survey.data) {
-      if (!cancelled) {
-        setHasAnyDOC(false);
-        setDocMap(new Map());
-        setCombinedDOC(null);
+  // ✅ UPDATED: Fetch existing DOCs for all survey types
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!survey.data) {
+        if (!cancelled) {
+          setHasAnyDOC(false);
+          setDocMap(new Map());
+          setCombinedDOC(null);
+        }
+        return;
       }
-      return;
-    }
 
-    const templateType = survey.data.template?.type;
+      const templateType = survey.data.template?.type;
 
-    try {
-      const newDocMap = new Map<string, Date>();
-      let foundAnyDOC = false;
-      let firstDocDate: Date | null = null;
+      try {
+        const newDocMap = new Map<string, Date>();
+        let foundAnyDOC = false;
+        let firstDocDate: Date | null = null;
 
-      if (templateType === "resident" && residents.data && residents.data.length > 0) {
-        // ✅ Resident DOCs
-        const residentIds = residents.data.map((r) => r.residentId);
-        const docResults = await Promise.all(
-          residentIds.map((rid) => utils.doc.list.fetch({ surveyId, residentId: rid }))
-        );
+        if (templateType === "resident" && residents.data && residents.data.length > 0) {
+          // ✅ Resident DOCs
+          const residentIds = residents.data.map((r) => r.residentId);
+          const docResults = await Promise.all(
+            residentIds.map((rid) => utils.doc.list.fetch({ surveyId, residentId: rid }))
+          );
 
-        for (let i = 0; i < residentIds.length; i++) {
-          const residentId = residentIds[i];
-          const docRows = docResults[i] ?? [];
+          for (let i = 0; i < residentIds.length; i++) {
+            const residentId = residentIds[i];
+            const docRows = docResults[i] ?? [];
+
+            for (const docRow of docRows) {
+              if (docRow.complianceDate) {
+                const key = `resident-${residentId}-${docRow.questionId}`;
+                const docDate = new Date(docRow.complianceDate);
+                newDocMap.set(key, docDate);
+                foundAnyDOC = true;
+                if (!firstDocDate) {
+                  firstDocDate = docDate;
+                }
+              }
+            }
+          }
+        } else if (templateType === "case" && cases.data && cases.data.length > 0) {
+          // ✅ NEW: Case DOCs (after backend update)
+          const caseIds = cases.data.map((c) => c.id);
+          const docResults = await Promise.all(
+            caseIds.map((cid) => utils.doc.list.fetch({ surveyId, surveyCaseId: cid }))
+          );
+
+          for (let i = 0; i < caseIds.length; i++) {
+            const caseId = caseIds[i];
+            const docRows = docResults[i] ?? [];
+
+            for (const docRow of docRows) {
+              if (docRow.complianceDate) {
+                const key = `case-${caseId}-${docRow.questionId}`;
+                const docDate = new Date(docRow.complianceDate);
+                newDocMap.set(key, docDate);
+                foundAnyDOC = true;
+                if (!firstDocDate) {
+                  firstDocDate = docDate;
+                }
+              }
+            }
+          }
+        } else if (templateType === "general") {
+          // ✅ NEW: General DOCs (after backend update)
+          const docRows = await utils.doc.list.fetch({ surveyId });
 
           for (const docRow of docRows) {
             if (docRow.complianceDate) {
-              const key = `resident-${residentId}-${docRow.questionId}`;
+              const key = `general-${docRow.questionId}`;
               const docDate = new Date(docRow.complianceDate);
               newDocMap.set(key, docDate);
               foundAnyDOC = true;
@@ -541,64 +580,25 @@ useEffect(() => {
             }
           }
         }
-      } else if (templateType === "case" && cases.data && cases.data.length > 0) {
-        // ✅ NEW: Case DOCs (after backend update)
-        const caseIds = cases.data.map((c) => c.id);
-        const docResults = await Promise.all(
-          caseIds.map((cid) => utils.doc.list.fetch({ surveyId, surveyCaseId: cid }))
-        );
 
-        for (let i = 0; i < caseIds.length; i++) {
-          const caseId = caseIds[i];
-          const docRows = docResults[i] ?? [];
-
-          for (const docRow of docRows) {
-            if (docRow.complianceDate) {
-              const key = `case-${caseId}-${docRow.questionId}`;
-              const docDate = new Date(docRow.complianceDate);
-              newDocMap.set(key, docDate);
-              foundAnyDOC = true;
-              if (!firstDocDate) {
-                firstDocDate = docDate;
-              }
-            }
-          }
+        if (!cancelled) {
+          setDocMap(newDocMap);
+          setHasAnyDOC(foundAnyDOC);
+          setCombinedDOC(firstDocDate);
         }
-      } else if (templateType === "general") {
-        // ✅ NEW: General DOCs (after backend update)
-        const docRows = await utils.doc.list.fetch({ surveyId });
-        
-        for (const docRow of docRows) {
-          if (docRow.complianceDate) {
-            const key = `general-${docRow.questionId}`;
-            const docDate = new Date(docRow.complianceDate);
-            newDocMap.set(key, docDate);
-            foundAnyDOC = true;
-            if (!firstDocDate) {
-              firstDocDate = docDate;
-            }
-          }
+      } catch (error) {
+        console.error("Failed to fetch DOCs:", error);
+        if (!cancelled) {
+          setHasAnyDOC(false);
+          setDocMap(new Map());
+          setCombinedDOC(null);
         }
       }
-
-      if (!cancelled) {
-        setDocMap(newDocMap);
-        setHasAnyDOC(foundAnyDOC);
-        setCombinedDOC(firstDocDate);
-      }
-    } catch (error) {
-      console.error("Failed to fetch DOCs:", error);
-      if (!cancelled) {
-        setHasAnyDOC(false);
-        setDocMap(new Map());
-        setCombinedDOC(null);
-      }
-    }
-  })();
-  return () => {
-    cancelled = true;
-  };
-}, [survey.data, residents.data, cases.data, surveyId, utils.doc.list]); // ✅ Added cases.data
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [survey.data, residents.data, cases.data, surveyId, utils.doc.list]); // ✅ Added cases.data
 
 
   // When sheet opens, set the POC text from the map
@@ -640,25 +640,37 @@ useEffect(() => {
     return m;
   }, [allResponses]);
 
+  const byCase = useMemo(() => {
+    const m = new Map<number, Map<number, ResponseCell>>();
+    for (const r of allResponses) {
+      if (r.surveyCaseId) {
+        const inner = m.get(r.surveyCaseId) ?? new Map<number, ResponseCell>();
+        inner.set(r.questionId, { status: r.status, findings: r.findings });
+        m.set(r.surveyCaseId, inner);
+      }
+    }
+    return m;
+  }, [allResponses]);
+
   // ✅ Updated: Question strengths calculation including case responses
   const questionStrengths: QuestionStrength[] = useMemo(() => {
     const qrows: QuestionRow[] = (questions.data ?? []) as QuestionRow[];
     if (qrows.length === 0) return [];
-    
+
     const metByQ = new Map<number, number>();
     const unmetByQ = new Map<number, number>();
-    
+
     for (const q of qrows) {
       metByQ.set(q.id, 0);
       unmetByQ.set(q.id, 0);
     }
-    
+
     for (const r of allResponses) {
       if (!metByQ.has(r.questionId)) continue;
       if (r.status === "met") metByQ.set(r.questionId, (metByQ.get(r.questionId) ?? 0) + 1);
       else if (r.status === "unmet") unmetByQ.set(r.questionId, (unmetByQ.get(r.questionId) ?? 0) + 1);
     }
-    
+
     const out: QuestionStrength[] = [];
     for (const q of qrows) {
       const met = metByQ.get(q.id) ?? 0;
@@ -712,135 +724,163 @@ useEffect(() => {
     return map;
   }, [residents.data, allQuestionIds, byResident]);
 
-  // ✅ FIXED: Score calculation for resident, case, AND general surveys
-// ✅ FIXED: Score calculation for resident, case, AND general surveys
-// ✅ DEBUG: Score calculation with logging - REPLACE YOUR CURRENT overallScore useMemo
-const { overallScore, maxTemplatePoints, overallPercent } = useMemo(() => {
-  const qs: QuestionRow[] = (questions.data ?? []) as QuestionRow[];
-  let awarded = 0;
-  
-  // ✅ DEBUG: Log what we're working with
-  console.log("=== SCORE DEBUG ===");
-  console.log("Survey type:", survey.data?.template?.type);
-  console.log("Questions count:", qs.length);
-  console.log("Residents data:", residents.data);
-  console.log("Cases data:", cases.data);
-  console.log("All responses:", allResponses);
-  console.log("byEntity keys:", Array.from(byEntity.keys()));
-  
-  for (const q of qs) {
-    let anyUnmetOrUnanswered = false;
-    let anyMet = false;
-    
-    console.log(`\n--- Question ${q.id} (${q.points} points) ---`);
-    
-    if (survey.data?.template?.type === "resident") {
-      // Check resident responses
-      for (const r of residents.data ?? []) {
-        const entityKey = `resident-${r.residentId}`;
-        const cell = byEntity.get(entityKey)?.get(q.id);
-        console.log(`Resident ${r.residentId}: entityKey=${entityKey}, cell=`, cell);
-        
-        if (!cell?.status) {
-          anyUnmetOrUnanswered = true;
-          console.log(`  -> UNANSWERED`);
-          break;
-        }
-        if (cell.status === "unmet") {
-          anyUnmetOrUnanswered = true;
-          console.log(`  -> UNMET`);
-          break;
-        }
-        if (cell.status === "met") {
-          anyMet = true;
-          console.log(`  -> MET`);
-        }
-      }
-    } 
-    else if (survey.data?.template?.type === "case") {
-      // Check case responses
-      for (const c of cases.data ?? []) {
-        const entityKey = `case-${c.id}`;
-        const cell = byEntity.get(entityKey)?.get(q.id);
-        console.log(`Case ${c.id}: entityKey=${entityKey}, cell=`, cell);
-        
-        if (!cell?.status) {
-          anyUnmetOrUnanswered = true;
-          console.log(`  -> UNANSWERED`);
-          break;
-        }
-        if (cell.status === "unmet") {
-          anyUnmetOrUnanswered = true;
-          console.log(`  -> UNMET`);
-          break;
-        }
-        if (cell.status === "met") {
-          anyMet = true;
-          console.log(`  -> MET`);
-        }
-      }
-    }
-    else if (survey.data?.template?.type === "general") {
-  // ✅ FIXED: Check general responses using correct field name
-  const generalResponses = allResponses.filter(r => !r.residentId && !r.surveyCaseId);
-  const cell = generalResponses.find(r => r.questionId === q.id);
-  console.log(`General question ${q.id}: cell=`, cell);
-  
-  if (!cell || !cell.status) {
-    anyUnmetOrUnanswered = true;
-    console.log(`  -> UNANSWERED`);
-  } else if (cell.status === "unmet") {
-    anyUnmetOrUnanswered = true;
-    console.log(`  -> UNMET`);
-  } else if (cell.status === "met") { // ✅ FIXED: Use .status instead of .requirementsMetOrUnmet
-    anyMet = true;
-    console.log(`  -> MET`);
-  }
-}
+  // NEW: Progress calculation for each case
+  const caseProgress = useMemo(() => {
+    const map = new Map<number, { answered: number; unanswered: number }>();
+    if (!cases.data || allQuestionIds.length === 0) return map;
 
-    
-    // Award points if question is fully met
-    const shouldAward = !anyUnmetOrUnanswered && anyMet;
-    console.log(`Question ${q.id} summary: anyUnmetOrUnanswered=${anyUnmetOrUnanswered}, anyMet=${anyMet}, shouldAward=${shouldAward}`);
-    
-    if (shouldAward) {
-      awarded += q.points ?? 0;
-      console.log(`  -> AWARDED ${q.points} points (total now: ${awarded})`);
+    for (const c of cases.data) {
+      const ansMap = byCase.get(c.id) ?? new Map<number, ResponseCell>();
+      let answered = 0;
+
+      for (const qid of allQuestionIds) {
+        const item = ansMap.get(qid);
+        if (
+          item?.status &&
+          (item.status === "met" ||
+            item.status === "unmet" ||
+            item.status === "not_applicable")
+        ) {
+          answered += 1;
+        }
+      }
+
+      const unanswered = allQuestionIds.length - answered;
+      map.set(c.id, { answered, unanswered });
     }
-  }
-  
-  const max = qs.reduce((s, q) => s + (q.points ?? 0), 0);
-  const pct = max > 0 ? Math.round((awarded / max) * 100) : 0;
-  
-  console.log(`\nFINAL SCORE: ${awarded}/${max} (${pct}%)`);
-  console.log("=== END DEBUG ===\n");
-  
-  return { overallScore: awarded, maxTemplatePoints: max, overallPercent: pct };
-}, [questions.data, byEntity, residents.data, cases.data, allResponses, survey.data?.template?.type]);
+    return map;
+  }, [cases.data, allQuestionIds, byCase]);
+
+
+  // ✅ FIXED: Score calculation for resident, case, AND general surveys
+  // ✅ FIXED: Score calculation for resident, case, AND general surveys
+  // ✅ DEBUG: Score calculation with logging - REPLACE YOUR CURRENT overallScore useMemo
+  const { overallScore, maxTemplatePoints, overallPercent } = useMemo(() => {
+    const qs: QuestionRow[] = (questions.data ?? []) as QuestionRow[];
+    let awarded = 0;
+
+    // ✅ DEBUG: Log what we're working with
+    console.log("=== SCORE DEBUG ===");
+    console.log("Survey type:", survey.data?.template?.type);
+    console.log("Questions count:", qs.length);
+    console.log("Residents data:", residents.data);
+    console.log("Cases data:", cases.data);
+    console.log("All responses:", allResponses);
+    console.log("byEntity keys:", Array.from(byEntity.keys()));
+
+    for (const q of qs) {
+      let anyUnmetOrUnanswered = false;
+      let anyMet = false;
+
+      console.log(`\n--- Question ${q.id} (${q.points} points) ---`);
+
+      if (survey.data?.template?.type === "resident") {
+        // Check resident responses
+        for (const r of residents.data ?? []) {
+          const entityKey = `resident-${r.residentId}`;
+          const cell = byEntity.get(entityKey)?.get(q.id);
+          console.log(`Resident ${r.residentId}: entityKey=${entityKey}, cell=`, cell);
+
+          if (!cell?.status) {
+            anyUnmetOrUnanswered = true;
+            console.log(`  -> UNANSWERED`);
+            break;
+          }
+          if (cell.status === "unmet") {
+            anyUnmetOrUnanswered = true;
+            console.log(`  -> UNMET`);
+            break;
+          }
+          if (cell.status === "met") {
+            anyMet = true;
+            console.log(`  -> MET`);
+          }
+        }
+      }
+      else if (survey.data?.template?.type === "case") {
+        // Check case responses
+        for (const c of cases.data ?? []) {
+          const entityKey = `case-${c.id}`;
+          const cell = byEntity.get(entityKey)?.get(q.id);
+          console.log(`Case ${c.id}: entityKey=${entityKey}, cell=`, cell);
+
+          if (!cell?.status) {
+            anyUnmetOrUnanswered = true;
+            console.log(`  -> UNANSWERED`);
+            break;
+          }
+          if (cell.status === "unmet") {
+            anyUnmetOrUnanswered = true;
+            console.log(`  -> UNMET`);
+            break;
+          }
+          if (cell.status === "met") {
+            anyMet = true;
+            console.log(`  -> MET`);
+          }
+        }
+      }
+      else if (survey.data?.template?.type === "general") {
+        // ✅ FIXED: Check general responses using correct field name
+        const generalResponses = allResponses.filter(r => !r.residentId && !r.surveyCaseId);
+        const cell = generalResponses.find(r => r.questionId === q.id);
+        console.log(`General question ${q.id}: cell=`, cell);
+
+        if (!cell || !cell.status) {
+          anyUnmetOrUnanswered = true;
+          console.log(`  -> UNANSWERED`);
+        } else if (cell.status === "unmet") {
+          anyUnmetOrUnanswered = true;
+          console.log(`  -> UNMET`);
+        } else if (cell.status === "met") { // ✅ FIXED: Use .status instead of .requirementsMetOrUnmet
+          anyMet = true;
+          console.log(`  -> MET`);
+        }
+      }
+
+
+      // Award points if question is fully met
+      const shouldAward = !anyUnmetOrUnanswered && anyMet;
+      console.log(`Question ${q.id} summary: anyUnmetOrUnanswered=${anyUnmetOrUnanswered}, anyMet=${anyMet}, shouldAward=${shouldAward}`);
+
+      if (shouldAward) {
+        awarded += q.points ?? 0;
+        console.log(`  -> AWARDED ${q.points} points (total now: ${awarded})`);
+      }
+    }
+
+    const max = qs.reduce((s, q) => s + (q.points ?? 0), 0);
+    const pct = max > 0 ? Math.round((awarded / max) * 100) : 0;
+
+    console.log(`\nFINAL SCORE: ${awarded}/${max} (${pct}%)`);
+    console.log("=== END DEBUG ===\n");
+
+    return { overallScore: awarded, maxTemplatePoints: max, overallPercent: pct };
+  }, [questions.data, byEntity, residents.data, cases.data, allResponses, survey.data?.template?.type]);
 
 
 
   // ✅ FIXED: Check if survey is complete for ALL template types
   const isSurveyComplete = useMemo(() => {
     if (!questions.data || questions.data.length === 0) return false;
-    
+
     const templateType = survey.data?.template?.type;
-    
+
     if (templateType === "resident") {
       // Check if all residents have answered all questions
       if (!residents.data || residents.data.length === 0) return false;
-      
+
       return questions.data.every(q => {
         return residents.data!.every(r => {
           const cell = byEntity.get(`resident-${r.residentId}`)?.get(q.id);
           return cell?.status && cell.status !== "not_applicable";
         });
       });
-    } 
+    }
     else if (templateType === "case") {
       // Check if all cases have answered all questions
       if (!cases.data || cases.data.length === 0) return false;
-      
+
       return questions.data.every(q => {
         return cases.data!.every(c => {
           const cell = byEntity.get(`case-${c.id}`)?.get(q.id);
@@ -851,13 +891,13 @@ const { overallScore, maxTemplatePoints, overallPercent } = useMemo(() => {
     else if (templateType === "general") {
       // ✅ NEW: Check if all general questions are answered
       const generalResponses = allResponses.filter(r => !r.residentId && !r.surveyCaseId);
-      
+
       return questions.data.every(q => {
         const response = generalResponses.find(r => r.questionId === q.id);
         return response?.status && response.status !== "not_applicable";
       });
     }
-    
+
     return false;
   }, [questions.data, residents.data, cases.data, allResponses, byEntity, survey.data?.template?.type]);
 
@@ -886,10 +926,10 @@ const { overallScore, maxTemplatePoints, overallPercent } = useMemo(() => {
       strengthPct: number;
       items: Array<{ residentPcciId?: string; caseNumber?: string; findings: string | null }>;
     }> = [];
-    
+
     for (const q of qrows) {
       const items: Array<{ residentPcciId?: string; caseNumber?: string; findings: string | null }> = [];
-      
+
       if (templateType === "resident") {
         // ✅ UPDATED: Use resident PCCI ID instead of residentId
         for (const r of residents.data ?? []) {
@@ -914,7 +954,7 @@ const { overallScore, maxTemplatePoints, overallPercent } = useMemo(() => {
           items.push({ findings: cell.findings ?? null });
         }
       }
-      
+
       if (items.length > 0) {
         const ftags = (q.ftags ?? []).map((f) => f.code);
         const s = questionStrengths.find((x) => x.questionId === q.id)?.strengthPct ?? 0;
@@ -1163,225 +1203,225 @@ const { overallScore, maxTemplatePoints, overallPercent } = useMemo(() => {
 
   // ✅ FIXED: Save POC handler - only pass fields that exist
   // ✅ FIXED: Save POC handler - supports all survey types
-const handleSaveCombinedPOC = useCallback(async () => {
-  if (!survey.data || !canOpenPOCSheet) return;
-  const templateId = survey.data.templateId;
-  const templateType = survey.data.template?.type;
-  const text = combinedPOC.trim();
-  if (!text) {
-    toast.error("POC text cannot be empty");
-    return;
-  }
-
-  try {
-    const updates: Array<{ 
-      residentId?: number; 
-      surveyCaseId?: number; 
-      questionId: number 
-    }> = [];
-
-    if (templateType === "resident") {
-      // Handle resident surveys
-      for (const r of residents.data ?? []) {
-        const ansMap = byResident.get(r.residentId) ?? new Map<number, ResponseCell>();
-        for (const q of questions.data ?? []) {
-          const cell = ansMap.get(q.id);
-          if (cell?.status === "unmet") {
-            updates.push({ residentId: r.residentId, questionId: q.id });
-          }
-        }
-      }
-    } else if (templateType === "case") {
-      // ✅ NEW: Handle case surveys
-      for (const c of cases.data ?? []) {
-        const ansMap = byEntity.get(`case-${c.id}`) ?? new Map<number, ResponseCell>();
-        for (const q of questions.data ?? []) {
-          const cell = ansMap.get(q.id);
-          if (cell?.status === "unmet") {
-            updates.push({ surveyCaseId: c.id, questionId: q.id });
-          }
-        }
-      }
-    } else if (templateType === "general") {
-      // ✅ NEW: Handle general surveys
-      const generalResponses = allResponses.filter(r => !r.residentId && !r.surveyCaseId);
-      for (const q of questions.data ?? []) {
-        const cell = generalResponses.find(r => r.questionId === q.id);
-        if (cell?.status === "unmet") {
-          updates.push({ questionId: q.id }); // No residentId or surveyCaseId
-        }
-      }
-    }
-
-    if (updates.length === 0) {
-      toast.error("No questions with unmet answers found");
+  const handleSaveCombinedPOC = useCallback(async () => {
+    if (!survey.data || !canOpenPOCSheet) return;
+    const templateId = survey.data.templateId;
+    const templateType = survey.data.template?.type;
+    const text = combinedPOC.trim();
+    if (!text) {
+      toast.error("POC text cannot be empty");
       return;
     }
 
-    // ✅ UPDATED: Pass appropriate IDs based on survey type
-    await Promise.all(
-      updates.map((update) => {
-        const pocData: any = {
-          surveyId,
-          templateId,
-          questionId: update.questionId,
-          pocText: text,
-        };
+    try {
+      const updates: Array<{
+        residentId?: number;
+        surveyCaseId?: number;
+        questionId: number
+      }> = [];
 
-        // Add the appropriate ID field
-        if (update.residentId) {
-          pocData.residentId = update.residentId;
-        } else if (update.surveyCaseId) {
-          pocData.surveyCaseId = update.surveyCaseId;
+      if (templateType === "resident") {
+        // Handle resident surveys
+        for (const r of residents.data ?? []) {
+          const ansMap = byResident.get(r.residentId) ?? new Map<number, ResponseCell>();
+          for (const q of questions.data ?? []) {
+            const cell = ansMap.get(q.id);
+            if (cell?.status === "unmet") {
+              updates.push({ residentId: r.residentId, questionId: q.id });
+            }
+          }
         }
-        // For general surveys, no additional ID is needed
+      } else if (templateType === "case") {
+        // ✅ NEW: Handle case surveys
+        for (const c of cases.data ?? []) {
+          const ansMap = byEntity.get(`case-${c.id}`) ?? new Map<number, ResponseCell>();
+          for (const q of questions.data ?? []) {
+            const cell = ansMap.get(q.id);
+            if (cell?.status === "unmet") {
+              updates.push({ surveyCaseId: c.id, questionId: q.id });
+            }
+          }
+        }
+      } else if (templateType === "general") {
+        // ✅ NEW: Handle general surveys
+        const generalResponses = allResponses.filter(r => !r.residentId && !r.surveyCaseId);
+        for (const q of questions.data ?? []) {
+          const cell = generalResponses.find(r => r.questionId === q.id);
+          if (cell?.status === "unmet") {
+            updates.push({ questionId: q.id }); // No residentId or surveyCaseId
+          }
+        }
+      }
 
-        return pocUpsert.mutateAsync(pocData);
-      })
-    );
+      if (updates.length === 0) {
+        toast.error("No questions with unmet answers found");
+        return;
+      }
 
-    // Update local state
-    const newPocMap = new Map(pocMap);
-    updates.forEach(update => {
-      const key = update.residentId 
-        ? `resident-${update.residentId}-${update.questionId}` 
-        : update.surveyCaseId 
-        ? `case-${update.surveyCaseId}-${update.questionId}`
-        : `general-${update.questionId}`;
-      newPocMap.set(key, text);
-    });
-    setPocMap(newPocMap);
-    setHasAnyPOC(true);
+      // ✅ UPDATED: Pass appropriate IDs based on survey type
+      await Promise.all(
+        updates.map((update) => {
+          const pocData: any = {
+            surveyId,
+            templateId,
+            questionId: update.questionId,
+            pocText: text,
+          };
 
-    // ✅ UPDATED: Invalidate based on survey type
-    if (templateType === "resident") {
-      const affectedResidents = Array.from(new Set(updates.map(u => u.residentId).filter(Boolean)));
-      await Promise.all(affectedResidents.map((rid) => utils.poc.list.invalidate({ surveyId, residentId: rid })));
-    } else if (templateType === "case") {
-      const affectedCases = Array.from(new Set(updates.map(u => u.surveyCaseId).filter(Boolean)));
-      await Promise.all(affectedCases.map((cid) => utils.poc.list.invalidate({ surveyId, surveyCaseId: cid })));
-    } else if (templateType === "general") {
-      await utils.poc.list.invalidate({ surveyId }); // General POCs
+          // Add the appropriate ID field
+          if (update.residentId) {
+            pocData.residentId = update.residentId;
+          } else if (update.surveyCaseId) {
+            pocData.surveyCaseId = update.surveyCaseId;
+          }
+          // For general surveys, no additional ID is needed
+
+          return pocUpsert.mutateAsync(pocData);
+        })
+      );
+
+      // Update local state
+      const newPocMap = new Map(pocMap);
+      updates.forEach(update => {
+        const key = update.residentId
+          ? `resident-${update.residentId}-${update.questionId}`
+          : update.surveyCaseId
+            ? `case-${update.surveyCaseId}-${update.questionId}`
+            : `general-${update.questionId}`;
+        newPocMap.set(key, text);
+      });
+      setPocMap(newPocMap);
+      setHasAnyPOC(true);
+
+      // ✅ UPDATED: Invalidate based on survey type
+      if (templateType === "resident") {
+        const affectedResidents = Array.from(new Set(updates.map(u => u.residentId).filter(Boolean)));
+        await Promise.all(affectedResidents.map((rid) => utils.poc.list.invalidate({ surveyId, residentId: rid })));
+      } else if (templateType === "case") {
+        const affectedCases = Array.from(new Set(updates.map(u => u.surveyCaseId).filter(Boolean)));
+        await Promise.all(affectedCases.map((cid) => utils.poc.list.invalidate({ surveyId, surveyCaseId: cid })));
+      } else if (templateType === "general") {
+        await utils.poc.list.invalidate({ surveyId }); // General POCs
+      }
+
+      setSheetOpen(false);
+      toast.success("POC updated for unmet questions successfully");
+    } catch (e) {
+      console.error("Save combined POC failed", e);
+      toast.error("Failed to save POC");
     }
-
-    setSheetOpen(false);
-    toast.success("POC updated for unmet questions successfully");
-  } catch (e) {
-    console.error("Save combined POC failed", e);
-    toast.error("Failed to save POC");
-  }
-}, [survey.data, canOpenPOCSheet, combinedPOC, pocUpsert, utils.poc.list, surveyId, questions.data, residents.data, cases.data, byResident, byEntity, allResponses, pocMap]);
+  }, [survey.data, canOpenPOCSheet, combinedPOC, pocUpsert, utils.poc.list, surveyId, questions.data, residents.data, cases.data, byResident, byEntity, allResponses, pocMap]);
 
 
   // ✅ FIXED: DOC save handler - only pass fields that exist
   // ✅ UPDATED: DOC save handler - supports all survey types
-const handleSaveCombinedDOC = useCallback(async () => {
-  if (!survey.data || !canOpenPOCSheet || !combinedDOC) return;
-  const templateId = survey.data.templateId;
-  const templateType = survey.data.template?.type;
+  const handleSaveCombinedDOC = useCallback(async () => {
+    if (!survey.data || !canOpenPOCSheet || !combinedDOC) return;
+    const templateId = survey.data.templateId;
+    const templateType = survey.data.template?.type;
 
-  try {
-    const updates: Array<{ 
-      residentId?: number; 
-      surveyCaseId?: number; 
-      questionId: number 
-    }> = [];
+    try {
+      const updates: Array<{
+        residentId?: number;
+        surveyCaseId?: number;
+        questionId: number
+      }> = [];
 
-    if (templateType === "resident") {
-      // Handle resident surveys
-      for (const r of residents.data ?? []) {
-        const ansMap = byResident.get(r.residentId) ?? new Map<number, ResponseCell>();
+      if (templateType === "resident") {
+        // Handle resident surveys
+        for (const r of residents.data ?? []) {
+          const ansMap = byResident.get(r.residentId) ?? new Map<number, ResponseCell>();
+          for (const q of questions.data ?? []) {
+            const cell = ansMap.get(q.id);
+            if (cell?.status === "unmet") {
+              updates.push({ residentId: r.residentId, questionId: q.id });
+            }
+          }
+        }
+      } else if (templateType === "case") {
+        // ✅ NEW: Handle case surveys
+        for (const c of cases.data ?? []) {
+          const ansMap = byEntity.get(`case-${c.id}`) ?? new Map<number, ResponseCell>();
+          for (const q of questions.data ?? []) {
+            const cell = ansMap.get(q.id);
+            if (cell?.status === "unmet") {
+              updates.push({ surveyCaseId: c.id, questionId: q.id });
+            }
+          }
+        }
+      } else if (templateType === "general") {
+        // ✅ NEW: Handle general surveys
+        const generalResponses = allResponses.filter(r => !r.residentId && !r.surveyCaseId);
         for (const q of questions.data ?? []) {
-          const cell = ansMap.get(q.id);
+          const cell = generalResponses.find(r => r.questionId === q.id);
           if (cell?.status === "unmet") {
-            updates.push({ residentId: r.residentId, questionId: q.id });
+            updates.push({ questionId: q.id }); // No residentId or surveyCaseId
           }
         }
       }
-    } else if (templateType === "case") {
-      // ✅ NEW: Handle case surveys
-      for (const c of cases.data ?? []) {
-        const ansMap = byEntity.get(`case-${c.id}`) ?? new Map<number, ResponseCell>();
-        for (const q of questions.data ?? []) {
-          const cell = ansMap.get(q.id);
-          if (cell?.status === "unmet") {
-            updates.push({ surveyCaseId: c.id, questionId: q.id });
+
+      if (updates.length === 0) {
+        toast.error("No questions with unmet answers found");
+        return;
+      }
+
+      if (!combinedDOC) return;
+      // Convert Date to YYYY-MM-DD string format
+      const complianceDateString = combinedDOC.toISOString().split('T')[0];
+      if (!complianceDateString) return;
+
+      // ✅ UPDATED: Pass appropriate IDs based on survey type
+      await Promise.all(
+        updates.map((update) => {
+          const docData: any = {
+            surveyId,
+            templateId,
+            questionId: update.questionId,
+            complianceDate: complianceDateString,
+          };
+
+          // Add the appropriate ID field
+          if (update.residentId) {
+            docData.residentId = update.residentId;
+          } else if (update.surveyCaseId) {
+            docData.surveyCaseId = update.surveyCaseId;
           }
-        }
+          // For general surveys, no additional ID is needed
+
+          return docUpsert.mutateAsync(docData);
+        })
+      );
+
+      // Update local state
+      const newDocMap = new Map(docMap);
+      updates.forEach(update => {
+        const key = update.residentId
+          ? `resident-${update.residentId}-${update.questionId}`
+          : update.surveyCaseId
+            ? `case-${update.surveyCaseId}-${update.questionId}`
+            : `general-${update.questionId}`;
+        newDocMap.set(key, combinedDOC);
+      });
+      setDocMap(newDocMap);
+      setHasAnyDOC(true);
+
+      // ✅ UPDATED: Invalidate based on survey type
+      if (templateType === "resident") {
+        const affectedResidents = Array.from(new Set(updates.map(u => u.residentId).filter(Boolean)));
+        await Promise.all(affectedResidents.map((rid) => utils.doc.list.invalidate({ surveyId, residentId: rid })));
+      } else if (templateType === "case") {
+        const affectedCases = Array.from(new Set(updates.map(u => u.surveyCaseId).filter(Boolean)));
+        await Promise.all(affectedCases.map((cid) => utils.doc.list.invalidate({ surveyId, surveyCaseId: cid })));
+      } else if (templateType === "general") {
+        await utils.doc.list.invalidate({ surveyId }); // General DOCs
       }
-    } else if (templateType === "general") {
-      // ✅ NEW: Handle general surveys
-      const generalResponses = allResponses.filter(r => !r.residentId && !r.surveyCaseId);
-      for (const q of questions.data ?? []) {
-        const cell = generalResponses.find(r => r.questionId === q.id);
-        if (cell?.status === "unmet") {
-          updates.push({ questionId: q.id }); // No residentId or surveyCaseId
-        }
-      }
+
+      toast.success("Date of Compliance updated for unmet questions successfully");
+    } catch (e) {
+      console.error("Save combined DOC failed", e);
+      toast.error("Failed to save Date of Compliance");
     }
-
-    if (updates.length === 0) {
-      toast.error("No questions with unmet answers found");
-      return;
-    }
-
-    if (!combinedDOC) return;
-    // Convert Date to YYYY-MM-DD string format
-    const complianceDateString = combinedDOC.toISOString().split('T')[0];
-    if (!complianceDateString) return;
-
-    // ✅ UPDATED: Pass appropriate IDs based on survey type
-    await Promise.all(
-      updates.map((update) => {
-        const docData: any = {
-          surveyId,
-          templateId,
-          questionId: update.questionId,
-          complianceDate: complianceDateString,
-        };
-
-        // Add the appropriate ID field
-        if (update.residentId) {
-          docData.residentId = update.residentId;
-        } else if (update.surveyCaseId) {
-          docData.surveyCaseId = update.surveyCaseId;
-        }
-        // For general surveys, no additional ID is needed
-
-        return docUpsert.mutateAsync(docData);
-      })
-    );
-
-    // Update local state
-    const newDocMap = new Map(docMap);
-    updates.forEach(update => {
-      const key = update.residentId 
-        ? `resident-${update.residentId}-${update.questionId}` 
-        : update.surveyCaseId 
-        ? `case-${update.surveyCaseId}-${update.questionId}`
-        : `general-${update.questionId}`;
-      newDocMap.set(key, combinedDOC);
-    });
-    setDocMap(newDocMap);
-    setHasAnyDOC(true);
-
-    // ✅ UPDATED: Invalidate based on survey type
-    if (templateType === "resident") {
-      const affectedResidents = Array.from(new Set(updates.map(u => u.residentId).filter(Boolean)));
-      await Promise.all(affectedResidents.map((rid) => utils.doc.list.invalidate({ surveyId, residentId: rid })));
-    } else if (templateType === "case") {
-      const affectedCases = Array.from(new Set(updates.map(u => u.surveyCaseId).filter(Boolean)));
-      await Promise.all(affectedCases.map((cid) => utils.doc.list.invalidate({ surveyId, surveyCaseId: cid })));
-    } else if (templateType === "general") {
-      await utils.doc.list.invalidate({ surveyId }); // General DOCs
-    }
-
-    toast.success("Date of Compliance updated for unmet questions successfully");
-  } catch (e) {
-    console.error("Save combined DOC failed", e);
-    toast.error("Failed to save Date of Compliance");
-  }
-}, [survey.data, canOpenPOCSheet, combinedDOC, docUpsert, utils.doc.list, surveyId, questions.data, residents.data, cases.data, byResident, byEntity, allResponses, docMap]);
+  }, [survey.data, canOpenPOCSheet, combinedDOC, docUpsert, utils.doc.list, surveyId, questions.data, residents.data, cases.data, byResident, byEntity, allResponses, docMap]);
 
 
   // Handle adding comment
@@ -1507,7 +1547,7 @@ const handleSaveCombinedDOC = useCallback(async () => {
   // POC control component - UPDATED LOGIC
   const renderPOCControl = () => {
     if (!isLocked) return null;
-    
+
     if (!scoreAllowsPOC) {
       return (
         <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded-lg border border-amber-200">
@@ -1543,15 +1583,15 @@ const handleSaveCombinedDOC = useCallback(async () => {
     // Existing POC sheet logic when pocGenerated is true
     const label = hasAnyPOC ? "View POC" : "Create POC";
     const totalUnmetQuestions = sheetBlocks.length;
-    
+
     // ✅ UPDATED: Count entities based on template type
     const templateType = survey.data?.template?.type;
     const totalUnmetEntities = Array.from(new Set(
-      sheetBlocks.flatMap(block => 
-        block.items.map(item => 
-          templateType === "resident" ? item.residentPcciId : 
-          templateType === "case" ? item.caseNumber : 
-          "general"
+      sheetBlocks.flatMap(block =>
+        block.items.map(item =>
+          templateType === "resident" ? item.residentPcciId :
+            templateType === "case" ? item.caseNumber :
+              "general"
         )
       )
     )).length;
@@ -1627,8 +1667,8 @@ const handleSaveCombinedDOC = useCallback(async () => {
                           <h3 className="font-semibold text-gray-900 mb-1">Questions Requiring Attention</h3>
                           <p className="text-sm text-gray-600 leading-relaxed">
                             The following {totalUnmetQuestions} question{totalUnmetQuestions !== 1 ? 's' : ''}
-                            {totalUnmetQuestions === 1 ? ' has' : ' have'} unmet requirements{templateType !== "general" ? 
-                            ` across ${totalUnmetEntities} ${templateType === "resident" ? "resident" : "case"}${totalUnmetEntities !== 1 ? 's' : ''}` : ""}.
+                            {totalUnmetQuestions === 1 ? ' has' : ' have'} unmet requirements{templateType !== "general" ?
+                              ` across ${totalUnmetEntities} ${templateType === "resident" ? "resident" : "case"}${totalUnmetEntities !== 1 ? 's' : ''}` : ""}.
                             Please review each question and provide a comprehensive Plan of Correction.
                           </p>
                         </div>
@@ -1964,7 +2004,7 @@ const handleSaveCombinedDOC = useCallback(async () => {
               // Check if general responses exist
               const generalResponses = allResponses.filter(r => !r.residentId && !r.surveyCaseId);
               const hasResponses = generalResponses.length > 0;
-              
+
               return (
                 <Link
                   href={`/qisv/surveys/${surveyId}/general`}
@@ -1997,21 +2037,40 @@ const handleSaveCombinedDOC = useCallback(async () => {
               <TableHeader>
                 <TableRow>
                   <TableHead>Case ID</TableHead>
+                  <TableHead className="w-[160px]">Progress</TableHead>
                   <TableHead className="text-right">Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {cases.data.map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell>{r.caseCode}</TableCell>
-                    <TableCell className="text-right">
-                      <Link href={`/qisv/surveys/${surveyId}/case/${r.id}`} className={buttonVariants({ variant: "outline" })}>
-                        Open
-                      </Link>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {cases.data.map((c) => {
+                  const progress = caseProgress.get(c.id) ?? { answered: 0, unanswered: allQuestionIds.length };
+                  const totalQ = allQuestionIds.length || 1;
+                  const pct = Math.round((progress.answered / totalQ) * 100);
+
+                  return (
+                    <TableRow key={c.id}>
+                      <TableCell>{c.caseCode}</TableCell>
+                      <TableCell>
+                        <div className="text-sm">
+                          {progress.answered} answered, {progress.unanswered} pending
+                        </div>
+                        <div className="mt-1 h-2 w-full rounded bg-muted overflow-hidden">
+                          <div className="h-2 bg-primary" style={{ width: `${pct}%` }} />
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Link
+                          href={`/qisv/surveys/${surveyId}/case/${c.id}`}
+                          className={buttonVariants({ variant: "outline" })}
+                        >
+                          Open
+                        </Link>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
+
             </Table>
           </>
         )}
