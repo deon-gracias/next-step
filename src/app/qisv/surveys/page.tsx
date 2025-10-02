@@ -684,47 +684,65 @@ export default function SurveysPage() {
   const hasActiveFilters = selectedDate || dateSortOrder || closedFacilityFilter !== "all" || pendingFacilityFilter !== "all";
 
   // Helper function to get POC status - USES survey_poc table for display status
-  const getPocStatus = (survey: any, scoreData: { score: number; totalPossible: number } | undefined) => {
-    // For unlocked surveys
-    if (!survey.isLocked) {
-      const isCompleted = survey.responses && survey.responses.length > 0;
+  // Helper function to get POC status - USES survey_poc table for display status
+const getPocStatus = (survey: any, scoreData: { score: number; totalPossible: number } | undefined, sectionType: 'completed' | 'pending' = 'completed') => {
+  // ONLY for pending section, check if survey is locked or not
+  if (sectionType === 'pending') {
+    if (survey.isLocked) {
       return {
-        status: isCompleted ? "In Progress" : "POC Not Started",
+        status: "Survey Locked",
         variant: "secondary" as const,
-        className: isCompleted ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-800"
-      };
-    }
-
-    // For locked surveys
-    const scorePercentage = scoreData && scoreData.totalPossible > 0 
-      ? Math.round((scoreData.score / scoreData.totalPossible) * 100)
-      : 0;
-
-    // If score >= 75%, no POC required
-    if (scorePercentage >= 85) {
-      return {
-        status: "No POC Required",
-        variant: "secondary" as const,
-        className: "bg-green-100 text-green-800"
-      };
-    }
-
-    // If score < 75%, check if actual POC exists in survey_poc table (for display only)
-    const pocExists = surveyPocExists.get(survey.id) || false;
-    if (pocExists) {
-      return {
-        status: "POC Completed",
-        variant: "default" as const,
-        className: "bg-blue-100 text-blue-800"
+        className: "bg-gray-100 text-gray-800"
       };
     } else {
       return {
-        status: "POC Pending",
+        status: "Survey In Process",
         variant: "secondary" as const,
-        className: "bg-amber-100 text-amber-800"
+        className: "bg-blue-100 text-blue-800"
       };
     }
-  };
+  }
+
+  // KEEP ALL ORIGINAL LOGIC FOR COMPLETED SECTION
+  if (!survey.isLocked) {
+    const isCompleted = survey.responses && survey.responses.length > 0;
+    return {
+      status: isCompleted ? "In Progress" : "POC Not Started",
+      variant: "secondary" as const,
+      className: isCompleted ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-800"
+    };
+  }
+
+  const scorePercentage = scoreData && scoreData.totalPossible > 0 
+    ? Math.round((scoreData.score / scoreData.totalPossible) * 100)
+    : 0;
+
+  // If score >= 85%, no POC required
+  if (scorePercentage >= 85) {
+    return {
+      status: "No POC Required",
+      variant: "secondary" as const,
+      className: "bg-green-100 text-green-800"
+    };
+  }
+
+  // If score < 85%, check if actual POC exists in survey_poc table (for display only)
+  const pocExists = surveyPocExists.get(survey.id) || false;
+  if (pocExists) {
+    return {
+      status: "POC Completed",
+      variant: "default" as const,
+      className: "bg-blue-100 text-blue-800"
+    };
+  } else {
+    return {
+      status: "POC Pending",
+      variant: "secondary" as const,
+      className: "bg-amber-100 text-amber-800"
+    };
+  }
+};
+
 
   // SIMPLIFIED: Clean hierarchical row components
   const FacilityGroupRow = ({ 
@@ -809,7 +827,7 @@ export default function SurveysPage() {
               const scorePercentage = scoreData && scoreData.totalPossible > 0 
                 ? Math.round((scoreData.score / scoreData.totalPossible) * 100)
                 : 0;
-              const pocStatus = getPocStatus(survey, scoreData);
+              const pocStatus = getPocStatus(survey, scoreData, type === 'pending' ? 'pending' : 'completed');
               
               return (
                 <TableRow key={`${type}-survey-${survey.id}`} className="bg-background">
