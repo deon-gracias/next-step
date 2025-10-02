@@ -53,7 +53,8 @@ import {
   BuildingIcon,
   SaveIcon,
   AlertCircleIcon,
-  TrashIcon
+  TrashIcon,
+  ChevronUpIcon,
 } from "lucide-react";
 import { FacilityHoverCard } from "../../_components/facility-card";
 import { Badge } from "@/components/ui/badge";
@@ -963,26 +964,31 @@ function SurveyorField({
       </div>
       <h3 className="font-semibold text-gray-900">Surveyor {sIndex + 1}</h3>
     </div>
-    <div className="flex items-center gap-2">
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="text-gray-400 hover:text-gray-600"
-        onClick={() => setIsCollapsed(!isCollapsed)}
-      >
-        <ChevronRightIcon className={cn("h-4 w-4 transition-transform", isCollapsed ? "rotate-0" : "rotate-90")} />
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="text-gray-400 hover:text-red-500 hover:bg-red-50"
-        onClick={() => surveyorsField.remove(sIndex)}
-      >
-        <XIcon className="h-4 w-4" />
-      </Button>
-    </div>
+   <div className="flex items-center gap-2">
+  <Button
+    type="button"
+    variant="ghost"
+    size="icon"
+    className="text-gray-400 hover:text-gray-600"
+    onClick={() => setIsCollapsed(!isCollapsed)}
+  >
+    {isCollapsed ? (
+      <ChevronDownIcon className="h-4 w-4" />
+    ) : (
+      <ChevronUpIcon className="h-4 w-4" />
+    )}
+  </Button>
+  <Button
+    type="button"
+    variant="ghost"
+    size="icon"
+    className="text-gray-400 hover:text-red-500 hover:bg-red-50"
+    onClick={() => surveyorsField.remove(sIndex)}
+  >
+    <XIcon className="h-4 w-4" />
+  </Button>
+</div>
+
   </div>
 </CardHeader>
 
