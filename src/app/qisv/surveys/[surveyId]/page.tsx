@@ -884,7 +884,7 @@ export default function SurveyDetailPage() {
       return questions.data.every(q => {
         return cases.data!.every(c => {
           const cell = byEntity.get(`case-${c.id}`)?.get(q.id);
-          return cell?.status && cell.status !== "not_applicable";
+          return cell?.status
         });
       });
     }
@@ -894,7 +894,7 @@ export default function SurveyDetailPage() {
 
       return questions.data.every(q => {
         const response = generalResponses.find(r => r.questionId === q.id);
-        return response?.status && response.status !== "not_applicable";
+        return response?.status
       });
     }
 
