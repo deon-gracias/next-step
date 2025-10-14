@@ -873,7 +873,7 @@ export default function SurveyDetailPage() {
       return questions.data.every(q => {
         return residents.data!.every(r => {
           const cell = byEntity.get(`resident-${r.residentId}`)?.get(q.id);
-          return cell?.status && cell.status !== "not_applicable";
+          return cell?.status
         });
       });
     }
