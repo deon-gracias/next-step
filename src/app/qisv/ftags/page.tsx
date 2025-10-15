@@ -330,7 +330,7 @@ export default function FtagsPage() {
                                     <Checkbox
                                         checked={isAllSelected}
                                         ref={(el) => {
-                                            if (el) (el as HTMLInputElement).indeterminate = isIndeterminate;
+                                            if (el) (el as unknown as HTMLInputElement).indeterminate = isIndeterminate;
                                         }}
                                         onCheckedChange={handleSelectAll}
                                         aria-label="Select all F-Tags"

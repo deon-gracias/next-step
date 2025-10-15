@@ -100,18 +100,28 @@ export const questionRouter = createTRPCRouter({
       };
     }),
 
-  getFtagsByQuestionId: protectedProcedure
-    .input(z.object({ questionId: z.number() }))
+   getFtagsByQuestionIds: protectedProcedure
+    .input(z.object({ questionIds: z.array(z.number().int().positive()).min(1) }))
     .query(async ({ ctx, input }) => {
-      return await ctx.db
+      const rows = await ctx.db
         .select({
+          questionId: questionFtag.questionId,
           id: ftag.id,
           code: ftag.code,
           description: ftag.description,
         })
         .from(questionFtag)
         .innerJoin(ftag, eq(questionFtag.ftagId, ftag.id))
-        .where(eq(questionFtag.questionId, input.questionId));
+        .where(inArray(questionFtag.questionId, input.questionIds));
+
+      // group by questionId
+      const map = new Map<number, { id: number; code: string; description: string }[]>();
+      for (const r of rows) {
+        if (!map.has(r.questionId)) map.set(r.questionId, []);
+        map.get(r.questionId)!.push({ id: r.id, code: r.code, description: r.description ?? '' });
+      }
+
+      return Array.from(map.entries()).map(([questionId, ftags]) => ({ questionId, ftags }));
     }),
 
   list: protectedProcedure

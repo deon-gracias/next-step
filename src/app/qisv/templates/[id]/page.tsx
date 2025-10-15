@@ -46,14 +46,17 @@ import {
 import type { QuestionSelectType } from "@/server/db/schema";
 import { EditQuestionForm } from "../_components/edit-question-form";
 import { toast } from "sonner";
-import { useState } from "react";
+import { useState, type JSXElementConstructor, type Key, type ReactElement, type ReactNode, type ReactPortal } from "react";
 
 function QuestionFtags({ id }: { id: number }) {
-  const { data: ftags, isLoading } = api.question.getFtagsByQuestionId.useQuery(
-    {
-      questionId: id,
-    },
+  // Call the batched endpoint with a single-element array
+  const { data: rows, isLoading } = api.question.getFtagsByQuestionIds.useQuery(
+    { questionIds: Number.isFinite(id) ? [id] : [] },
+    { enabled: Number.isFinite(id) }
   );
+
+  // Unwrap the single row to a flat ftags array
+  const ftags = rows?.[0]?.ftags ?? [];
 
   if (isLoading) {
     return (
@@ -66,8 +69,8 @@ function QuestionFtags({ id }: { id: number }) {
 
   return (
     <div className="flex flex-wrap gap-2">
-      {ftags && ftags.length > 0 ? (
-        ftags.map((e) => (
+      {ftags.length > 0 ? (
+        ftags.map((e: { id: number; code: string }) => (
           <Badge variant="outline" key={e.id}>
             {e.code}
           </Badge>
@@ -78,6 +81,7 @@ function QuestionFtags({ id }: { id: number }) {
     </div>
   );
 }
+
 
 export default function AddQuestionsPage() {
   const params = useParams();
@@ -120,6 +124,9 @@ export default function AddQuestionsPage() {
 
   const totalPoints =
     questions.data?.reduce((sum, q) => sum + q.points, 0) || 0;
+
+  // color logic for total: green when exactly 100, red otherwise
+  const totalColor = totalPoints === 100 ? "text-green-600" : "text-red-600";
 
   const handleEditClick = (question: QuestionSelectType) => {
     setCurrentEditQuestion(question);
@@ -221,8 +228,8 @@ export default function AddQuestionsPage() {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center gap-2 justify-end">
-                            <Button 
-                              size="icon" 
+                            <Button
+                              size="icon"
                               variant="outline"
                               onClick={() => handleEditClick(question)}
                             >
@@ -293,7 +300,7 @@ export default function AddQuestionsPage() {
                     <TableRow>
                       <TableCell>Total</TableCell>
                       <TableCell className="text-right">
-                        {totalPoints}
+                        <span className={`font-semibold ${totalColor}`}>{totalPoints}</span>
                       </TableCell>
                       <TableCell></TableCell>
                       <TableCell></TableCell>
@@ -312,9 +319,9 @@ export default function AddQuestionsPage() {
             <DialogHeader>
               <DialogTitle>Edit Question</DialogTitle>
             </DialogHeader>
-            <EditQuestionForm 
-              question={currentEditQuestion} 
-              currentTotalPoints={totalPoints}
+            <EditQuestionForm
+              question={currentEditQuestion}
+              onSuccessClose={() => setEditDialogOpen(false)} // close after successful save
             />
           </DialogContent>
         </Dialog>

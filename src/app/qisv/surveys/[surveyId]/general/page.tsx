@@ -58,7 +58,7 @@ export default function GeneralSurveyPage() {
     { templateId: survey.data?.templateId ?? -1 },
     { enabled: !!survey.data },
   );
-  
+
   // ✅ FIXED: Query general responses only
   const responsesQuery = api.survey.listResponses.useQuery(
     { surveyId },
@@ -71,6 +71,28 @@ export default function GeneralSurveyPage() {
       refetchInterval: false,
     },
   );
+
+  // Collect question IDs once questions are loaded
+  const questionIds = React.useMemo(
+    () => (questions.data ?? []).map((q) => q.id),
+    [questions.data]
+  );
+
+  // Batch-fetch F-Tags for all questions (requires question.getFtagsByQuestionIds)
+  const ftagsBatch = api.question.getFtagsByQuestionIds.useQuery(
+    { questionIds },
+    { enabled: questionIds.length > 0 }
+  );
+
+  // Build a lookup map: questionId -> [{ id, code, description }]
+  const ftagsMap = React.useMemo(() => {
+    const m = new Map<number, { id: number; code: string; description: string }[]>();
+    for (const row of (ftagsBatch.data ?? [])) {
+      m.set(row.questionId, row.ftags);
+    }
+    return m;
+  }, [ftagsBatch.data]);
+
 
   // Mutations
   const upsertResponses = api.survey.createResponse.useMutation({
@@ -186,11 +208,34 @@ export default function GeneralSurveyPage() {
             return (
               <div key={field.id} className="rounded border p-3 space-y-3">
                 <div className="flex items-start justify-between gap-3">
-                  <p className="font-semibold">
-                    {q?.text ?? `Question ID: ${qid}`}
-                  </p>
-                  <div className="text-xs text-muted-foreground">Points: {qPoints}</div>
+                  <div className="flex-1">
+                    <p className="font-semibold">
+                      {q?.text ?? `Question ID: ${qid}`}
+                    </p>
+
+                    {/* F-Tags chips */}
+                    <div className="mt-1 flex flex-wrap items-center gap-1">
+                      F-Tags:
+                      {(ftagsMap.get(qid) ?? []).map((t) => (
+                        <span
+                          key={t.id}
+                          className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-700"
+                          title={t.description ?? t.code}
+                        >
+                          {t.code}
+                        </span>
+                      ))}
+                      {(ftagsMap.get(qid) ?? []).length === 0 && (
+                        <span className="text-[11px] text-muted-foreground">No F-Tags</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="text-xs text-muted-foreground whitespace-nowrap">
+                    Points: {qPoints}
+                  </div>
                 </div>
+
 
                 <FormField
                   control={form.control}
@@ -238,11 +283,11 @@ export default function GeneralSurveyPage() {
 
           <div className="relative group inline-block">
             <Button type="submit" disabled={isLocked || upsertResponses.isPending}>
-              {upsertResponses.isPending 
-                ? (responsesQuery.data?.length ? "Updating..." : "Saving...") 
-                : isLocked 
-                ? "Locked" 
-                : (responsesQuery.data?.length ? "Update Survey" : "Save Survey")
+              {upsertResponses.isPending
+                ? (responsesQuery.data?.length ? "Updating..." : "Saving...")
+                : isLocked
+                  ? "Locked"
+                  : (responsesQuery.data?.length ? "Update Survey" : "Save Survey")
               }
             </Button>
             {isLocked && (

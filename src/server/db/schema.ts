@@ -9,6 +9,7 @@ import {
   pgEnum,
   date,
   varchar,
+  numeric,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -482,6 +483,111 @@ export const dietaryAnswers = pgTable("dietary_answers", {
   validation_or_completion: text("validation"),
 });
 
+
+// ============== QAL (Facility-level audit) ==============
+
+// QAL Facility (reuse existing "facility" if you prefer; keeping separate provides isolation)
+// If you want to reuse existing "facility", skip this table and reference facility.id below.
+export const qalFacility = pgTable("qal_facility", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  name: text("name").notNull(),
+  location: text("location"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const qalTemplate = pgTable("qal_template", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  name: text("name").notNull(), // "RCO QAL Audit"
+  isActive: boolean("is_active").default(true).notNull(),
+  meta: text("meta"), // optional JSON as string if preferred
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const qalSection = pgTable("qal_section", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  templateId: integer("template_id").notNull().references(() => qalTemplate.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  description: text("description"),
+  sortOrder: integer("sort_order").notNull(),
+  possiblePoints: integer("possible_points").notNull(), // scoring sheet values
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const qalQuestion = pgTable("qal_question", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  sectionId: integer("section_id").notNull().references(() => qalSection.id, { onDelete: "cascade" }),
+  prompt: text("prompt").notNull(),
+  guidance: text("guidance"),
+  weight: integer("weight").default(1), // keep simple; all 1s unless you need weighted items
+  sortOrder: integer("sort_order").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Facility-level survey (no residents)
+export const qalSurvey = pgTable("qal_survey", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  facilityId: integer("facility_id").notNull().references(() => facility.id, { onDelete: "restrict" }), // reuse existing facility table
+  templateId: integer("template_id").notNull().references(() => qalTemplate.id, { onDelete: "restrict" }),
+  auditorUserId: text("auditor_user_id").references(() => user.id, { onDelete: "set null" }),
+  surveyDate: timestamp("survey_date").defaultNow().notNull(),
+  isLocked: boolean("is_locked").default(false).notNull(),
+  totalPossible: numeric("total_possible", { precision: 12, scale: 4 }).default("0"),
+  totalEarned: numeric("total_earned", { precision: 12, scale: 4 }).default("0"),
+  overallPercent: numeric("overall_percent", { precision: 7, scale: 4 }).default("0"), // store *100 if you prefer integer
+  gradeBand: text("grade_band"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Section score row for a survey
+export const qalSurveySection = pgTable("qal_survey_section", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  surveyId: integer("survey_id").notNull().references(() => qalSurvey.id, { onDelete: "cascade" }),
+  sectionId: integer("section_id").notNull().references(() => qalSection.id, { onDelete: "restrict" }),
+  sampleCount: integer("sample_count").default(0).notNull(),
+  passedCount: integer("passed_count").default(0).notNull(),
+  sampleNotes: text("sample_notes"),
+  comments: text("comments"),
+  notApplicable: boolean("not_applicable").default(false).notNull(),
+  earnedPoints: numeric("earned_points", { precision: 12, scale: 4 }).default("0"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Per-survey item results (pass/fail/na)
+export const qalSurveyQuestion = pgTable(
+  "qal_survey_question",
+  {
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    surveyId: integer("survey_id").notNull().references(() => qalSurvey.id, { onDelete: "cascade" }),
+    questionId: integer("question_id").notNull().references(() => qalQuestion.id, { onDelete: "cascade" }),
+    result: text("result").notNull(), // "pass" | "fail" | "na"
+    notes: text("notes"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [
+    unique("uq_qal_survey_question").on(t.surveyId, t.questionId),
+  ],
+);
+
+// QAL POC per section
+export const qalPOC = pgTable("qal_poc", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  surveyId: integer("survey_id").notNull().references(() => qalSurvey.id, { onDelete: "cascade" }),
+  sectionId: integer("section_id").references(() => qalSection.id, { onDelete: "set null" }),
+  pocText: text("poc_text").notNull(),
+  complianceDate: date("compliance_date"),
+  createdByUserId: text("created_by_user_id").references(() => user.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+
 // Resident
 export const residentInsertSchema = createInsertSchema(resident);
 export type ResidentInsertType = z.infer<typeof residentInsertSchema>;
@@ -623,3 +729,54 @@ export type SurveyDOCInsertType = z.infer<typeof surveyDOCInsertSchema>;
 
 export const surveyDOCSelectSchema = createSelectSchema(surveyDOC);
 export type SurveyDOCSelectType = z.infer<typeof surveyDOCSelectSchema>;
+
+
+// QAL Zod
+export const qalFacilityInsertSchema = createInsertSchema(qalFacility);
+export type QALFacilityInsertType = z.infer<typeof qalFacilityInsertSchema>;
+export const qalFacilitySelectSchema = createSelectSchema(qalFacility);
+export type QALFacilitySelectType = z.infer<typeof qalFacilitySelectSchema>;
+
+export const qalTemplateInsertSchema = createInsertSchema(qalTemplate);
+export type QALTemplateInsertType = z.infer<typeof qalTemplateInsertSchema>;
+export const qalTemplateSelectSchema = createSelectSchema(qalTemplate);
+export type QALTemplateSelectType = z.infer<typeof qalTemplateSelectSchema>;
+
+export const qalSectionInsertSchema = createInsertSchema(qalSection);
+export type QALSectionInsertType = z.infer<typeof qalSectionInsertSchema>;
+export const qalSectionSelectSchema = createSelectSchema(qalSection);
+export type QALSectionSelectType = z.infer<typeof qalSectionSelectSchema>;
+
+export const qalQuestionInsertSchema = createInsertSchema(qalQuestion);
+export type QALQuestionInsertType = z.infer<typeof qalQuestionInsertSchema>;
+export const qalQuestionSelectSchema = createSelectSchema(qalQuestion);
+export type QALQuestionSelectType = z.infer<typeof qalQuestionSelectSchema>;
+
+export const qalSurveyInsertSchema = createInsertSchema(qalSurvey);
+export type QALSurveyInsertType = z.infer<typeof qalSurveyInsertSchema>;
+export const qalSurveySelectSchema = createSelectSchema(qalSurvey);
+export type QALSurveySelectType = z.infer<typeof qalSurveySelectSchema>;
+
+export const qalSurveySectionInsertSchema = createInsertSchema(qalSurveySection);
+export type QALSurveySectionInsertType = z.infer<typeof qalSurveySectionInsertSchema>;
+export const qalSurveySectionSelectSchema = createSelectSchema(qalSurveySection);
+export type QALSurveySectionSelectType = z.infer<typeof qalSurveySectionSelectSchema>;
+
+export const qalSurveyQuestionInsertSchema = createInsertSchema(qalSurveyQuestion);
+export type QALSurveyQuestionInsertType = z.infer<typeof qalSurveyQuestionInsertSchema>;
+export const qalSurveyQuestionSelectSchema = createSelectSchema(qalSurveyQuestion);
+export type QALSurveyQuestionSelectType = z.infer<typeof qalSurveyQuestionSelectSchema>;
+
+export const qalPOCInsertSchema = createInsertSchema(qalPOC, {
+  pocText: (schema) => schema.min(1, "POC cannot be empty"),
+});
+export type QALPOCInsertType = z.infer<typeof qalPOCInsertSchema>;
+export const qalPOCSelectSchema = createSelectSchema(qalPOC);
+export type QALPOCSelectType = z.infer<typeof qalPOCSelectSchema>;
+
+export function toDbNumeric(n: number | string | null | undefined): string | null {
+  if (n === null || n === undefined) return null;
+  if (typeof n === "number") return n.toString();
+  return n;
+}
+

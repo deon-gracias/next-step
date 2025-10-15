@@ -771,7 +771,7 @@ const getPocStatus = (survey: any, scoreData: { score: number; totalPossible: nu
           <div className="flex items-center gap-2">
             🏢 {group.facility && <FacilityHoverCard facility={group.facility} />}
             <Badge variant="outline" className="ml-2">
-              {group.totalTemplates} survey{group.totalTemplates !== 1 ? 's' : ''}
+              {group.totalTemplates} template{group.totalTemplates !== 1 ? 's' : ''}
             </Badge>
           </div>
         </TableCell>
@@ -809,7 +809,7 @@ const getPocStatus = (survey: any, scoreData: { score: number; totalPossible: nu
               </TableCell>
               <TableCell>
                 <Badge variant="outline" className="text-xs">
-                  {dateGroup.surveys.length} survey{dateGroup.surveys.length !== 1 ? 's' : ''}
+                  {dateGroup.surveys.length} template{dateGroup.surveys.length !== 1 ? 's' : ''}
                 </Badge>
               </TableCell>
               <TableCell></TableCell>
@@ -908,9 +908,9 @@ const getPocStatus = (survey: any, scoreData: { score: number; totalPossible: nu
 
                       <AlertDialogContent>
                         <AlertDialogHeader>
-                          <AlertDialogTitle>Delete Survey</AlertDialogTitle>
+                          <AlertDialogTitle>Delete Template</AlertDialogTitle>
                           <AlertDialogDescription>
-                            Are you sure you want to delete the survey "
+                            Are you sure you want to delete the template "
                             {surveyToDelete?.id === survey.id ? surveyToDelete?.id : survey.template?.name ?? `Survey ${survey.id}`}
                             "? This action cannot be undone and will delete all associated data.
                           </AlertDialogDescription>

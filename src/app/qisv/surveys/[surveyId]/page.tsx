@@ -238,6 +238,24 @@ export default function SurveyDetailPage() {
     { enabled: Boolean(survey.data?.templateId) }
   );
 
+  const questionIds = (questions.data ?? []).map((q) => q.id);
+
+  const ftagsBatch = api.question.getFtagsByQuestionIds.useQuery(
+    { questionIds },
+    { enabled: questionIds.length > 0 }
+  );
+
+  const ftagsMap = React.useMemo(() => {
+    const m = new Map<number, { id: number; code: string; description: string }[]>();
+    if (ftagsBatch.data) {
+      for (const row of ftagsBatch.data) {
+        m.set(row.questionId, row.ftags);
+      }
+    }
+    return m;
+  }, [ftagsBatch.data]);
+
+
   // Comments
   const comments = api.pocComment.list.useQuery(
     {
@@ -910,13 +928,15 @@ export default function SurveyDetailPage() {
   // ✅ UPDATED: POC sheet blocks for case type (shows case numbers) and general type (shows just unmets)
   const sheetBlocks = useMemo(() => {
     const qrows: QuestionRow[] = (questions.data ?? []) as QuestionRow[];
-    if (qrows.length === 0 || !canOpenPOCSheet) return [] as Array<{
-      qid: number;
-      text: string;
-      ftags: string[];
-      strengthPct: number;
-      items: Array<{ residentPcciId?: string; caseNumber?: string; findings: string | null }>;
-    }>;
+    if (qrows.length === 0 || !canOpenPOCSheet) {
+      return [] as Array<{
+        qid: number;
+        text: string;
+        ftags: string[];
+        strengthPct: number;
+        items: Array<{ residentPcciId?: string; caseNumber?: string; findings: string | null }>;
+      }>;
+    }
 
     const templateType = survey.data?.template?.type;
     const blocks: Array<{
@@ -931,23 +951,23 @@ export default function SurveyDetailPage() {
       const items: Array<{ residentPcciId?: string; caseNumber?: string; findings: string | null }> = [];
 
       if (templateType === "resident") {
-        // ✅ UPDATED: Use resident PCCI ID instead of residentId
-        for (const r of residents.data ?? []) {
+        // Use resident PCCI ID
+        for (const r of (residents.data ?? [])) {
           const cell = byResident.get(r.residentId)?.get(q.id);
           if (cell?.status === "unmet") {
             items.push({ residentPcciId: r.pcciId, findings: cell.findings ?? null });
           }
         }
       } else if (templateType === "case") {
-        // ✅ UPDATED: Use case number instead of case ID
-        for (const c of cases.data ?? []) {
+        // Use caseCode
+        for (const c of (cases.data ?? [])) {
           const cell = byEntity.get(`case-${c.id}`)?.get(q.id);
           if (cell?.status === "unmet") {
             items.push({ caseNumber: c.caseCode, findings: cell.findings ?? null });
           }
         }
       } else if (templateType === "general") {
-        // ✅ NEW: General logic - shows just unmets, no resident/case IDs
+        // General: unmet without entity
         const generalResponses = allResponses.filter(r => !r.residentId && !r.surveyCaseId);
         const cell = generalResponses.find(r => r.questionId === q.id);
         if (cell?.status === "unmet") {
@@ -956,13 +976,28 @@ export default function SurveyDetailPage() {
       }
 
       if (items.length > 0) {
-        const ftags = (q.ftags ?? []).map((f) => f.code);
+        // Get F-Tags from the batched map (built from api.question.getFtagsByQuestionIds)
+        const ftags = (ftagsMap.get(q.id) ?? []).map((f) => f.code);
         const s = questionStrengths.find((x) => x.questionId === q.id)?.strengthPct ?? 0;
         blocks.push({ qid: q.id, text: q.text, ftags, strengthPct: s, items });
       }
     }
+
     return blocks;
-  }, [questions.data, canOpenPOCSheet, byResident, residents.data, cases.data, byEntity, allResponses, questionStrengths, survey.data?.template?.type]);
+    // Added ftagsMap to dependencies so tags appear when loaded
+  }, [
+    questions.data,
+    canOpenPOCSheet,
+    byResident,
+    residents.data,
+    cases.data,
+    byEntity,
+    allResponses,
+    questionStrengths,
+    survey.data?.template?.type,
+    ftagsMap, // <-- add this
+  ]);
+
 
   // Check if all questions are answered
   const allAnswered = surveyCompletion.data?.isComplete ?? false;
@@ -1544,6 +1579,8 @@ export default function SurveyDetailPage() {
     );
   };
 
+
+
   // POC control component - UPDATED LOGIC
   const renderPOCControl = () => {
     if (!isLocked) return null;
@@ -1620,6 +1657,12 @@ export default function SurveyDetailPage() {
                   </div>
                   Plan of Correction
                 </SheetTitle>
+                <div className="text-sm text-muted-foreground mt-1 mr-1">
+                  Template: <span className="font-medium text-foreground">
+                    {survey.data?.template?.name ?? "—"}
+                  </span>
+                </div>
+                <div className="h-px bg-border mt-2" />
                 <SheetDescription className="text-sm text-gray-600 mt-1">
                   {hasAnyPOC ? "Review and update your Plan of Correction" : "Create a Plan of Correction for unmet questions"}
                 </SheetDescription>
@@ -1687,6 +1730,21 @@ export default function SurveyDetailPage() {
                                 <Badge variant="outline" className="bg-red-100 text-red-800 border-red-200">
                                   Question {index + 1}
                                 </Badge>
+                                {/* ftags gg */}
+                                {block.ftags?.length ? (
+                                  <Badge
+                                    variant="secondary"
+                                    className="text-[11px] bg-blue-100 text-gray-800 border-gray-200 flex items-center gap-1"
+                                    title={block.ftags.join(", ")}
+                                  >
+                                    F-Tags:
+                                    <span className="font-mono">
+                                      {block.ftags.slice(0, 3).join(", ")}
+                                      {block.ftags.length > 3 ? "…" : ""}
+                                    </span>
+                                  </Badge>
+                                ) : null}
+
                                 <Badge
                                   variant="secondary"
                                   className={cn(
@@ -1942,6 +2000,7 @@ export default function SurveyDetailPage() {
                     )}
                   >
                     <div className="font-semibold line-clamp-1">{qs.text}</div>
+                    <div className="mt-1 font-bold">Score: {qs.points}</div>
                     <div className="mt-1">Strength: {qs.strengthPct}%</div>
                     <div className="text-muted-foreground">Met: {qs.metCount} ・ Unmet: {qs.unmetCount}</div>
                   </div>
@@ -2078,3 +2137,4 @@ export default function SurveyDetailPage() {
     </>
   );
 }
+

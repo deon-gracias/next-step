@@ -12,6 +12,7 @@ import { casesRouter } from "./routers/case";
 import { pocRouter } from "./routers/poc";
 import { pocCommentRouter } from "./routers/poc-comments";
 import { docRouter } from "./routers/doc";
+import { qalRouter } from "./routers/qal";
 
 /**
  * This is the primary router for your server.
@@ -32,6 +33,7 @@ export const appRouter = createTRPCRouter({
   poc: pocRouter,
   pocComment: pocCommentRouter,
   doc: docRouter,
+  qal: qalRouter,
 });
 
 // export type definition of API

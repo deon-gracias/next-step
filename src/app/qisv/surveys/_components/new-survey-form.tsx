@@ -414,7 +414,7 @@ function TemplateComboBox({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 15;
+  const pageSize = 80;
 
   const debouncedSearch = useDebounce(search, 300);
 
@@ -1091,7 +1091,7 @@ function SurveyorField({
                             </div>
                           </div>
                           <div className="p-2">
-                            {form.watch(`surveyors.${sIndex}.templates.${tIndex}.residentIds`).length < 1 ? (
+                            {(form.watch(`surveyors.${sIndex}.templates.${tIndex}.residentIds`) ?? []).length < 1 ? (
                               <div className="text-muted-foreground py-4 text-center text-xs">
                                 No residents selected
                               </div>
@@ -1390,7 +1390,7 @@ function AddResidentInput({
                 name="pcciId"
                 render={({ field }) => (
                   <FormItem className="flex-1">
-                    <FormLabel className="text-sm">PCC ID</FormLabel>
+                    <FormLabel className="text-sm">PCC ID*</FormLabel>
                     <FormControl>
                       <div className="flex gap-1">
                         <Input
@@ -1419,13 +1419,13 @@ function AddResidentInput({
                 name="name"
                 render={({ field }) => (
                   <FormItem className="flex-1">
-                    <FormLabel className="text-sm">Name</FormLabel>
+                    <FormLabel className="text-sm">Initial*</FormLabel>
                     <FormControl>
                       <Input
                         {...field}
                         disabled={!!searchedResident}
                         className="bg-white disabled:bg-gray-50 h-8"
-                        placeholder="Resident name"
+                        placeholder="Resident Initial"
                       />
                     </FormControl>
                     <FormMessage />
@@ -1437,7 +1437,7 @@ function AddResidentInput({
                 name="roomId"
                 render={({ field }) => (
                   <FormItem className="flex-1">
-                    <FormLabel className="text-sm">Room ID</FormLabel>
+                    <FormLabel className="text-sm">Room No.*</FormLabel>
                     <FormControl>
                       <Input
                         {...field}

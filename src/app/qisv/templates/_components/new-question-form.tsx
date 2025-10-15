@@ -19,17 +19,19 @@ import { api } from "@/trpc/react";
 import { cn } from "@/lib/utils";
 import React from "react";
 import { FtagMultiSelectComboBox } from "./ftag-dropdown";
-import { CasesComboBox } from "./case-dropdown";
-import {
-  type TemplateSelectType,
-} from "@/server/db/schema";
+import { type TemplateSelectType } from "@/server/db/schema";
 
-// Simple schema that matches exactly what the form expects
+// Updated schema:
+// - points can be empty while typing (optional), but on submit must be 1..100.
+// - FTags are OPTIONAL now (no min(1))
 const formSchema = z.object({
   templateId: z.number(),
-  text: z.string().min(1, "Question text is required").min(10, "Question must be at least 10 characters").max(500, "Question must be less than 500 characters"),
-  points: z.number().min(1, "Points must be at least 1").max(100, "Points cannot exceed 100"),
-  ftagIds: z.array(z.number()).min(1, "At least one FTag is required"),
+  text: z.string()
+    .min(1, "Question text is required")
+    .min(10, "Question must be at least 10 characters")
+    .max(500, "Question must be less than 500 characters"),
+  points: z.number().min(1, "Points must be at least 1").max(100, "Points cannot exceed 100").optional(),
+  ftagIds: z.array(z.number()).optional(), // optional
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -53,7 +55,7 @@ export function AddQuestionForm({
       void apiUtils.question.invalidate();
       form.reset({
         templateId: template.id,
-        points: 1,
+        points: undefined,
         text: "",
         ftagIds: [],
       });
@@ -68,7 +70,7 @@ export function AddQuestionForm({
     resolver: zodResolver(formSchema),
     defaultValues: {
       templateId: template.id,
-      points: 1,
+      points: undefined,
       text: "",
       ftagIds: [],
     },
@@ -77,14 +79,20 @@ export function AddQuestionForm({
 
   const onSubmit = async (data: FormData) => {
     try {
-      await mutation.mutateAsync(data);
+      if (data.points === undefined || Number.isNaN(data.points)) {
+        toast.error("Please enter points between 1 and 100.");
+        return;
+      }
+      await mutation.mutateAsync({
+        ...data,
+        points: data.points,
+        // Ensure optional ftagIds is sent as [] when undefined
+        ftagIds: data.ftagIds ?? [],
+      });
     } catch (error) {
       console.error("Question creation failed:", error);
     }
   };
-
-  const currentPoints = form.watch("points");
-  const projectedTotal = currentTotalPoints + currentPoints;
 
   return (
     <Form {...form}>
@@ -126,39 +134,30 @@ export function AddQuestionForm({
                 <FormControl>
                   <Input
                     type="number"
-                    placeholder="Enter points (0-100)"
-                    {...field}
+                    placeholder="Enter points (1–100)"
+                    value={field.value === undefined ? "" : String(field.value)}
                     onChange={(e) => {
-                      const value = e.target.value;
-                      if (value === "") {
-                        field.onChange(0);
+                      const raw = e.target.value.trim();
+                      if (raw === "") {
+                        field.onChange(undefined);
                         return;
                       }
-                      // Remove leading zeros and convert to number
-                      const cleanValue = value.replace(/^0+(?=\d)/, '') || '0';
-                      const numValue = parseInt(cleanValue, 10);
-                      field.onChange(numValue);
+                      const n = Number(raw);
+                      field.onChange(Number.isNaN(n) ? undefined : n);
                     }}
-                    value={field.value === 0 ? "" : field.value.toString()}
-                    min="0"
+                    min="1"
                     max="100"
                     className={cn(
                       form.formState.errors.points && "border-destructive"
                     )}
                   />
-
                 </FormControl>
                 <FormMessage />
               </FormItem>
             )}
           />
 
-          <div className="flex flex-col justify-end space-y-2">
-            <div className="text-sm text-muted-foreground">
-              <div>Current Total: <span className="font-mono">{currentTotalPoints}</span></div>
-              <div>Projected Total: <span className="font-mono font-medium">{projectedTotal}</span></div>
-            </div>
-          </div>
+          {/* Current/Projected totals intentionally removed */}
         </div>
 
         <FormField
@@ -166,25 +165,23 @@ export function AddQuestionForm({
           name="ftagIds"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>
-                FTags <span className="text-destructive">*</span>
-              </FormLabel>
+              {/* Removed red star because FTags are optional */}
+              <FormLabel>FTags</FormLabel>
               <FormControl>
                 <FtagMultiSelectComboBox
-                  selectedItems={field.value}
+                  selectedItems={field.value ?? []}
                   onChange={(items) => field.onChange(items)}
                 />
               </FormControl>
               <FormMessage />
-              <FormDescription>
-                Select at least one FTag for this question
-              </FormDescription>
+              {/* Removed “Select at least one FTag for this question” */}
             </FormItem>
           )}
         />
 
         <Button
           type="submit"
+          // Do not block submit based on FTags; only disable during mutation or invalid required fields
           disabled={mutation.isPending || !form.formState.isValid}
           className="mt-4"
         >
