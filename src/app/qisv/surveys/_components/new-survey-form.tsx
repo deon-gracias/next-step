@@ -414,7 +414,7 @@ function TemplateComboBox({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 80;
+  const pageSize = 15;
 
   const debouncedSearch = useDebounce(search, 300);
 
@@ -504,8 +504,8 @@ function TemplateComboBox({
             </div>
           ) : availableTemplates.length === 0 ? (
             <div className="p-4 text-center text-muted-foreground">
-              {debouncedSearch ? "No templates found matching your search." : 
-               excludeTemplateIds.length > 0 ? "No more templates available. All others are already selected." : "No templates available."}
+              {debouncedSearch ? "No templates found matching your search." :
+                excludeTemplateIds.length > 0 ? "No more templates available. All others are already selected." : "No templates available."}
             </div>
           ) : (
             <div className="p-2">
@@ -757,43 +757,43 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
       </div>
 
       {/* Offline Protection Info + Clear Data Button */}
-<div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-    <div className="flex items-start gap-3">
-      <AlertCircleIcon className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
-      <div className="text-amber-800">
-        <strong>Offline Protection:</strong> Your form data is automatically saved locally. 
-        Even if you refresh the page or lose internet connection, your progress won't be lost.
+      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <AlertCircleIcon className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div className="text-amber-800">
+              <strong>Offline Protection:</strong> Your form data is automatically saved locally.
+              Even if you refresh the page or lose internet connection, your progress won't be lost.
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              // Clear localStorage
+              clearStorage();
+
+              // Reset form to fresh state
+              const freshFormData: NewMultiSurveyCreateInputType = {
+                surveyDate: new Date(),
+                facilityId: -1,
+                surveyors: [],
+              };
+
+              form.reset(freshFormData);
+              surveyorsField.replace([]);
+
+              // Show success message
+              toast.success("All data cleared! Form has been reset.");
+            }}
+            className="border-red-200 text-red-700 hover:bg-red-50 hover:border-red-300 whitespace-nowrap"
+          >
+            <TrashIcon className="h-4 w-4 mr-2" />
+            Clear All Data
+          </Button>
+        </div>
       </div>
-    </div>
-    <Button
-      type="button"
-      variant="outline"
-      size="sm"
-      onClick={() => {
-        // Clear localStorage
-        clearStorage();
-        
-        // Reset form to fresh state
-        const freshFormData: NewMultiSurveyCreateInputType = {
-          surveyDate: new Date(),
-          facilityId: -1,
-          surveyors: [],
-        };
-        
-        form.reset(freshFormData);
-        surveyorsField.replace([]);
-        
-        // Show success message
-        toast.success("All data cleared! Form has been reset.");
-      }}
-      className="border-red-200 text-red-700 hover:bg-red-50 hover:border-red-300 whitespace-nowrap"
-    >
-      <TrashIcon className="h-4 w-4 mr-2" />
-      Clear All Data
-    </Button>
-  </div>
-</div>
 
       {/* Survey Details - Compact layout with reduced spacing */}
       <Card className="border-2 border-blue-100 bg-gradient-to-r from-blue-50/30 to-indigo-50/30">
@@ -957,255 +957,255 @@ function SurveyorField({
       className="border-2 border-amber-100 bg-gradient-to-r from-amber-50/40 to-orange-50/40 shadow-sm"
     >
       <CardHeader className="border-b border-amber-100">
-  <div className="flex items-center justify-between">
-    <div className="flex items-center gap-3">
-      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-100">
-        <UserIcon className="h-4 w-4 text-amber-600" />
-      </div>
-      <h3 className="font-semibold text-gray-900">Surveyor {sIndex + 1}</h3>
-    </div>
-   <div className="flex items-center gap-2">
-  <Button
-    type="button"
-    variant="ghost"
-    size="icon"
-    className="text-gray-400 hover:text-gray-600"
-    onClick={() => setIsCollapsed(!isCollapsed)}
-  >
-    {isCollapsed ? (
-      <ChevronDownIcon className="h-4 w-4" />
-    ) : (
-      <ChevronUpIcon className="h-4 w-4" />
-    )}
-  </Button>
-  <Button
-    type="button"
-    variant="ghost"
-    size="icon"
-    className="text-gray-400 hover:text-red-500 hover:bg-red-50"
-    onClick={() => surveyorsField.remove(sIndex)}
-  >
-    <XIcon className="h-4 w-4" />
-  </Button>
-</div>
-
-  </div>
-</CardHeader>
-
-{!isCollapsed && (
-      <CardContent className="pt-6 space-y-4">
-        {/* Surveyor Select */}
-        <Form {...form}>
-          <FormField
-            control={form.control}
-            name={`surveyors.${sIndex}.surveyorId`}
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>User</FormLabel>
-                <FormControl>
-                  <UserComboBox
-                    selectedItem={field.value}
-                    onSelect={(item) => field.onChange(item)}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </Form>
-
-        {/* Templates */}
-        <div className="space-y-3">
-          {templatesField.fields.map((template, tIndex) => (
-            <Card
-              key={template.id}
-              className="border border-purple-200 bg-gradient-to-r from-purple-50/50 to-violet-50/50 shadow-sm"
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-100">
+              <UserIcon className="h-4 w-4 text-amber-600" />
+            </div>
+            <h3 className="font-semibold text-gray-900">Surveyor {sIndex + 1}</h3>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="text-gray-400 hover:text-gray-600"
+              onClick={() => setIsCollapsed(!isCollapsed)}
             >
-              <CardHeader className="pb-3 border-b border-purple-100">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-purple-100">
-                      <ClipboardListIcon className="h-3 w-3 text-purple-600" />
+              {isCollapsed ? (
+                <ChevronDownIcon className="h-4 w-4" />
+              ) : (
+                <ChevronUpIcon className="h-4 w-4" />
+              )}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="text-gray-400 hover:text-red-500 hover:bg-red-50"
+              onClick={() => surveyorsField.remove(sIndex)}
+            >
+              <XIcon className="h-4 w-4" />
+            </Button>
+          </div>
+
+        </div>
+      </CardHeader>
+
+      {!isCollapsed && (
+        <CardContent className="pt-6 space-y-4">
+          {/* Surveyor Select */}
+          <Form {...form}>
+            <FormField
+              control={form.control}
+              name={`surveyors.${sIndex}.surveyorId`}
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>User</FormLabel>
+                  <FormControl>
+                    <UserComboBox
+                      selectedItem={field.value}
+                      onSelect={(item) => field.onChange(item)}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </Form>
+
+          {/* Templates */}
+          <div className="space-y-3">
+            {templatesField.fields.map((template, tIndex) => (
+              <Card
+                key={template.id}
+                className="border border-purple-200 bg-gradient-to-r from-purple-50/50 to-violet-50/50 shadow-sm"
+              >
+                <CardHeader className="pb-3 border-b border-purple-100">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-purple-100">
+                        <ClipboardListIcon className="h-3 w-3 text-purple-600" />
+                      </div>
+                      <h4 className="font-medium text-gray-900">Template {tIndex + 1}</h4>
                     </div>
-                    <h4 className="font-medium text-gray-900">Template {tIndex + 1}</h4>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 text-gray-400 hover:text-red-500 hover:bg-red-50"
+                      onClick={() => templatesField.remove(tIndex)}
+                    >
+                      <XIcon className="h-3 w-3" />
+                    </Button>
                   </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 text-gray-400 hover:text-red-500 hover:bg-red-50"
-                    onClick={() => templatesField.remove(tIndex)}
-                  >
-                    <XIcon className="h-3 w-3" />
-                  </Button>
-                </div>
-              </CardHeader>
+                </CardHeader>
 
-              <CardContent className="pt-4 space-y-4">
-                {/* Template Select */}
-                <Form {...form}>
-                  <FormField
-                    control={form.control}
-                    name={`surveyors.${sIndex}.templates.${tIndex}.template`}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Template</FormLabel>
-                        <FormControl>
-                          <TemplateComboBox
-                            withValue
-                            selectedItem={field.value}
-                            onSelect={(item) => field.onChange(item)}
-                            excludeTemplateIds={getExcludedTemplateIds(tIndex)}
+                <CardContent className="pt-4 space-y-4">
+                  {/* Template Select */}
+                  <Form {...form}>
+                    <FormField
+                      control={form.control}
+                      name={`surveyors.${sIndex}.templates.${tIndex}.template`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Template</FormLabel>
+                          <FormControl>
+                            <TemplateComboBox
+                              withValue
+                              selectedItem={field.value}
+                              onSelect={(item) => field.onChange(item)}
+                              excludeTemplateIds={getExcludedTemplateIds(tIndex)}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </Form>
+
+                  {/* CONDITIONAL RENDERING BASED ON TEMPLATE TYPE */}
+                  {form.watch(`surveyors.${sIndex}.templates.${tIndex}.template`) && (
+                    <>
+                      {/* RESIDENT TYPE: Show Add Resident form and Selected Residents */}
+                      {form.watch(`surveyors.${sIndex}.templates.${tIndex}.template`)?.type === "resident" && (
+                        <div className="space-y-4">
+                          {/* Add Resident Form */}
+                          <AddResidentInput
+                            facilityId={form.getValues("facilityId")}
+                            value={form.getValues(`surveyors.${sIndex}.templates.${tIndex}.residentIds`)}
+                            onChange={(value) =>
+                              form.setValue(
+                                `surveyors.${sIndex}.templates.${tIndex}.residentIds`,
+                                Array.from(new Set(value)),
+                              )
+                            }
                           />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </Form>
 
-                {/* CONDITIONAL RENDERING BASED ON TEMPLATE TYPE */}
-                {form.watch(`surveyors.${sIndex}.templates.${tIndex}.template`) && (
-                  <>
-                    {/* RESIDENT TYPE: Show Add Resident form and Selected Residents */}
-                    {form.watch(`surveyors.${sIndex}.templates.${tIndex}.template`)?.type === "resident" && (
-                      <div className="space-y-4">
-                        {/* Add Resident Form */}
-                        <AddResidentInput
-                          facilityId={form.getValues("facilityId")}
-                          value={form.getValues(`surveyors.${sIndex}.templates.${tIndex}.residentIds`)}
-                          onChange={(value) =>
-                            form.setValue(
-                              `surveyors.${sIndex}.templates.${tIndex}.residentIds`,
-                              Array.from(new Set(value)),
-                            )
-                          }
-                        />
-
-                        {/* Selected Residents Display */}
-                        <div className="rounded-lg border border-teal-200 bg-teal-50/30 overflow-hidden">
-                          <div className="bg-teal-100/50 px-4 py-2 border-b border-teal-200">
-                            <div className="flex items-center gap-2">
-                              <UsersIcon className="h-4 w-4 text-teal-600" />
-                              <span className="text-sm font-medium text-teal-800">Selected Residents</span>
+                          {/* Selected Residents Display */}
+                          <div className="rounded-lg border border-teal-200 bg-teal-50/30 overflow-hidden">
+                            <div className="bg-teal-100/50 px-4 py-2 border-b border-teal-200">
+                              <div className="flex items-center gap-2">
+                                <UsersIcon className="h-4 w-4 text-teal-600" />
+                                <span className="text-sm font-medium text-teal-800">Selected Residents</span>
+                              </div>
+                            </div>
+                            <div className="p-2">
+                              {form.watch(`surveyors.${sIndex}.templates.${tIndex}.residentIds`).length < 1 ? (
+                                <div className="text-muted-foreground py-4 text-center text-xs">
+                                  No residents selected
+                                </div>
+                              ) : (
+                                <div className="space-y-2">
+                                  {form
+                                    .watch(`surveyors.${sIndex}.templates.${tIndex}.residentIds`)
+                                    .sort((curr, next) => (curr > next ? 1 : 0))
+                                    .map((id) => (
+                                      <ResidentRowById
+                                        key={id}
+                                        id={id}
+                                        handleRemove={() => {
+                                          form.setValue(
+                                            `surveyors.${sIndex}.templates.${tIndex}.residentIds`,
+                                            form
+                                              .getValues(`surveyors.${sIndex}.templates.${tIndex}.residentIds`)
+                                              .filter((i) => i !== id),
+                                          );
+                                        }}
+                                        compact={true}
+                                      />
+                                    ))}
+                                </div>
+                              )}
                             </div>
                           </div>
-                          <div className="p-2">
-                            {(form.watch(`surveyors.${sIndex}.templates.${tIndex}.residentIds`) ?? []).length < 1 ? (
-                              <div className="text-muted-foreground py-4 text-center text-xs">
-                                No residents selected
-                              </div>
-                            ) : (
-                              <div className="space-y-2">
-                                {form
-                                  .watch(`surveyors.${sIndex}.templates.${tIndex}.residentIds`)
-                                  .sort((curr, next) => (curr > next ? 1 : 0))
-                                  .map((id) => (
-                                    <ResidentRowById
-                                      key={id}
-                                      id={id}
-                                      handleRemove={() => {
-                                        form.setValue(
-                                          `surveyors.${sIndex}.templates.${tIndex}.residentIds`,
-                                          form
-                                            .getValues(`surveyors.${sIndex}.templates.${tIndex}.residentIds`)
-                                            .filter((i) => i !== id),
-                                        );
-                                      }}
-                                      compact={true}
-                                    />
-                                  ))}
-                              </div>
-                            )}
-                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
 
-                    {/* CASE TYPE: Show Case Codes form */}
-                    {form.watch(`surveyors.${sIndex}.templates.${tIndex}.template`)?.type === "case" && (
-                      <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-3">
-                        <Form {...form}>
-                          <FormField
-                            control={form.control}
-                            name={`surveyors.${sIndex}.templates.${tIndex}.caseCodes`}
-                            render={({ field }) => {
-                              const ref = useRef<HTMLInputElement>(null);
-                              return (
-                                <FormItem>
-                                  <FormLabel className="text-sm font-medium">Cases</FormLabel>
-                                  <div className="flex items-center gap-2">
-                                    <FormControl>
-                                      <Input
-                                        ref={ref}
-                                        className="bg-white"
-                                        placeholder="Enter case code"
-                                      />
-                                    </FormControl>
-                                    <Button
-                                      type="button"
-                                      size="icon"
-                                      variant="secondary"
-                                      className="bg-slate-200 hover:bg-slate-300"
-                                      onClick={() => {
-                                        if (ref.current?.value && ref.current.value.trim()) {
-                                          field.onChange([
-                                            ...field.value,
-                                            ref.current.value.trim(),
-                                          ]);
-                                          ref.current.value = "";
-                                        }
-                                      }}
-                                    >
-                                      <PlusIcon className="h-4 w-4" />
-                                    </Button>
-                                  </div>
-                                  <div className="flex flex-wrap gap-1 mt-2">
-                                    {field.value.map((e, i) => (
-                                      <Badge
+                      {/* CASE TYPE: Show Case Codes form */}
+                      {form.watch(`surveyors.${sIndex}.templates.${tIndex}.template`)?.type === "case" && (
+                        <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-3">
+                          <Form {...form}>
+                            <FormField
+                              control={form.control}
+                              name={`surveyors.${sIndex}.templates.${tIndex}.caseCodes`}
+                              render={({ field }) => {
+                                const ref = useRef<HTMLInputElement>(null);
+                                return (
+                                  <FormItem>
+                                    <FormLabel className="text-sm font-medium">Cases</FormLabel>
+                                    <div className="flex items-center gap-2">
+                                      <FormControl>
+                                        <Input
+                                          ref={ref}
+                                          className="bg-white"
+                                          placeholder="Enter case code"
+                                        />
+                                      </FormControl>
+                                      <Button
+                                        type="button"
+                                        size="icon"
                                         variant="secondary"
-                                        key={i}
-                                        className="bg-slate-200 cursor-pointer hover:bg-slate-300"
+                                        className="bg-slate-200 hover:bg-slate-300"
                                         onClick={() => {
-                                          field.onChange(field.value.filter((_, index) => index !== i));
+                                          if (ref.current?.value && ref.current.value.trim()) {
+                                            field.onChange([
+                                              ...field.value,
+                                              ref.current.value.trim(),
+                                            ]);
+                                            ref.current.value = "";
+                                          }
                                         }}
                                       >
-                                        {e} <XIcon className="h-3 w-3 ml-1" />
-                                      </Badge>
-                                    ))}
-                                  </div>
-                                  <FormMessage />
-                                </FormItem>
-                              );
-                            }}
-                          />
-                        </Form>
-                      </div>
-                    )}
+                                        <PlusIcon className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                    <div className="flex flex-wrap gap-1 mt-2">
+                                      {field.value.map((e, i) => (
+                                        <Badge
+                                          variant="secondary"
+                                          key={i}
+                                          className="bg-slate-200 cursor-pointer hover:bg-slate-300"
+                                          onClick={() => {
+                                            field.onChange(field.value.filter((_, index) => index !== i));
+                                          }}
+                                        >
+                                          {e} <XIcon className="h-3 w-3 ml-1" />
+                                        </Badge>
+                                      ))}
+                                    </div>
+                                    <FormMessage />
+                                  </FormItem>
+                                );
+                              }}
+                            />
+                          </Form>
+                        </div>
+                      )}
 
-                  </>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
 
-          {/* Add Template Button */}
-          <Button
-            variant="outline"
-            type="button"
-            className="w-full border-dashed border-2 border-purple-200 text-purple-700 hover:bg-purple-50 hover:border-purple-300"
-            onClick={() =>
-              templatesField.append({
-                caseCodes: [],
-                residentIds: [],
-              })
-            }
-          >
-            <PlusIcon className="mr-2 h-4 w-4" /> Add Template
-          </Button>
-        </div>
-            </CardContent>
-    )}
+            {/* Add Template Button */}
+            <Button
+              variant="outline"
+              type="button"
+              className="w-full border-dashed border-2 border-purple-200 text-purple-700 hover:bg-purple-50 hover:border-purple-300"
+              onClick={() =>
+                templatesField.append({
+                  caseCodes: [],
+                  residentIds: [],
+                })
+              }
+            >
+              <PlusIcon className="mr-2 h-4 w-4" /> Add Template
+            </Button>
+          </div>
+        </CardContent>
+      )}
     </Card>
   );
 }
@@ -1390,7 +1390,7 @@ function AddResidentInput({
                 name="pcciId"
                 render={({ field }) => (
                   <FormItem className="flex-1">
-                    <FormLabel className="text-sm">PCC ID*</FormLabel>
+                    <FormLabel className="text-sm">PCC ID *</FormLabel>
                     <FormControl>
                       <div className="flex gap-1">
                         <Input
@@ -1419,13 +1419,13 @@ function AddResidentInput({
                 name="name"
                 render={({ field }) => (
                   <FormItem className="flex-1">
-                    <FormLabel className="text-sm">Initial*</FormLabel>
+                    <FormLabel className="text-sm">Initials</FormLabel>
                     <FormControl>
                       <Input
                         {...field}
                         disabled={!!searchedResident}
                         className="bg-white disabled:bg-gray-50 h-8"
-                        placeholder="Resident Initial"
+                        placeholder="Resident Initials"
                       />
                     </FormControl>
                     <FormMessage />
@@ -1437,7 +1437,7 @@ function AddResidentInput({
                 name="roomId"
                 render={({ field }) => (
                   <FormItem className="flex-1">
-                    <FormLabel className="text-sm">Room No.*</FormLabel>
+                    <FormLabel className="text-sm">Room No. *</FormLabel>
                     <FormControl>
                       <Input
                         {...field}
@@ -1464,14 +1464,14 @@ function AddResidentInput({
               type="submit"
               className="w-full bg-indigo-600 hover:bg-indigo-700 h-8"
               disabled={
-                !form.watch("pcciId") ||
-                !form.watch("name") ||
-                residentMutation.isPending
+                residentMutation.isPending ||
+                !(form.watch("pcciId")?.trim?.().length > 0) ||
+                !(String(form.watch("roomId") ?? "").trim().length > 0)
               }
             >
-              <PlusIcon className="mr-2 h-3 w-3" />
               {searchedResident ? "Add Existing Resident" : "Create & Add Resident"}
             </Button>
+
           </form>
         </Form>
       </CardContent>
