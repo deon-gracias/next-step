@@ -414,7 +414,7 @@ function TemplateComboBox({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 15;
+  const pageSize = 35;
 
   const debouncedSearch = useDebounce(search, 300);
 
@@ -1211,6 +1211,7 @@ function SurveyorField({
 }
 
 // ResidentRowById component - only cross icon for removal
+// ResidentRowById component - showing name, room, and PCC ID
 function ResidentRowById({
   id,
   handleRemove,
@@ -1220,24 +1221,33 @@ function ResidentRowById({
   handleRemove: () => void;
   compact?: boolean;
 }) {
-  const apiUtils = api.useUtils();
   const resident = api.resident.byId.useQuery({ id });
-  const deleteResident = api.resident.delete.useMutation();
+
+  // Helper function to get initials from name
+  const getInitials = (name: string) => {
+    return name
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase())
+      .join('');
+  };
 
   if (compact) {
-    // Compact view for selected residents - only cross icon
+    // Compact view for selected residents - includes PCC ID with initials
     return (
       <div className="flex items-center gap-2 p-2 bg-blue-50 rounded-md">
         <div className="flex h-4 w-4 items-center justify-center rounded-full bg-blue-100">
           <UserIcon className="h-2 w-2 text-blue-600" />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="font-medium text-xs truncate">
-            {!resident.data ? <Skeleton className="h-3 w-16" /> : resident.data.name}
-          </div>
-          <div className="text-xs text-muted-foreground">
-            {!resident.data ? <Skeleton className="h-2 w-12" /> : `Room: ${resident.data.roomId}`}
-          </div>
+          {!resident.data ? (
+            <Skeleton className="h-4 w-32" />
+          ) : (
+            <div className="text-xs">
+              <span className="font-medium">
+                PCC ID: {resident.data.pcciId || getInitials(resident.data.name || "")} - Room {resident.data.roomId || "N/A"}
+              </span>
+            </div>
+          )}
         </div>
         {/* Only cross icon, no delete button */}
         <Button
@@ -1255,6 +1265,9 @@ function ResidentRowById({
   // Original table row view (not used in this context)
   return null;
 }
+
+
+
 
 // AddResidentInput component with PCC ID, Name, Room ID on same line
 function AddResidentInput({
