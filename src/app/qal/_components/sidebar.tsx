@@ -54,14 +54,7 @@ const navItems = [
     icon: BuildingIcon,
     resource: null,
     // resource: "facility", // reuse facility permission if you already gate it
-  },
-  {
-    name: "Reports",
-    href: "/qal/reports",
-    icon: BarChart3Icon,
-    resource: null,
-    // resource: "qal_survey", // same as surveys (read)
-  },
+  }
 ];
 
 export function QALSidebar(props: React.ComponentProps<typeof Sidebar>) {
