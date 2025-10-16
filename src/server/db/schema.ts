@@ -508,10 +508,10 @@ export const qalTemplate = pgTable("qal_template", {
 export const qalSection = pgTable("qal_section", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   templateId: integer("template_id").notNull().references(() => qalTemplate.id, { onDelete: "cascade" }),
-  title: text("title").notNull(),
+  title: text("title").notNull(), // "Admissions", etc.
   description: text("description"),
   sortOrder: integer("sort_order").notNull(),
-  possiblePoints: integer("possible_points").notNull(), // scoring sheet values
+  possiblePoints: integer("possible_points").notNull(), // e.g., 35, 5, 10
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -519,10 +519,11 @@ export const qalSection = pgTable("qal_section", {
 export const qalQuestion = pgTable("qal_question", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   sectionId: integer("section_id").notNull().references(() => qalSection.id, { onDelete: "cascade" }),
-  prompt: text("prompt").notNull(),
-  guidance: text("guidance"),
-  weight: integer("weight").default(1), // keep simple; all 1s unless you need weighted items
+  prompt: text("prompt").notNull(), // audit item text
+  guidance: text("guidance"), // additional instructions
   sortOrder: integer("sort_order").notNull(),
+  fixedSample: integer("fixed_sample").notNull(), // e.g., 3 for Admissions items
+  possiblePoints: numeric("possible_points", { precision: 12, scale: 4 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -548,12 +549,17 @@ export const qalSurveySection = pgTable("qal_survey_section", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   surveyId: integer("survey_id").notNull().references(() => qalSurvey.id, { onDelete: "cascade" }),
   sectionId: integer("section_id").notNull().references(() => qalSection.id, { onDelete: "restrict" }),
-  sampleCount: integer("sample_count").default(0).notNull(),
-  passedCount: integer("passed_count").default(0).notNull(),
-  sampleNotes: text("sample_notes"),
-  comments: text("comments"),
-  notApplicable: boolean("not_applicable").default(false).notNull(),
+  
+  // Scoring fields
+  fixedSample: integer("fixed_sample").notNull(), // copied from section total
+  passedCount: integer("passed_count"), // user input or "NA"
+  isNotApplicable: boolean("is_not_applicable").default(false),
   earnedPoints: numeric("earned_points", { precision: 12, scale: 4 }).default("0"),
+  
+  // Testing Sample & Comments
+  testingSample: text("testing_sample"), // PCC IDs, dates JSON or text
+  comments: text("comments"),
+  
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -572,6 +578,23 @@ export const qalSurveyQuestion = pgTable(
   },
   (t) => [
     unique("uq_qal_survey_question").on(t.surveyId, t.questionId),
+  ],
+);
+
+export const qalQuestionResponse = pgTable(
+  "qal_question_response",
+  {
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    surveyId: integer("survey_id").notNull().references(() => qalSurvey.id, { onDelete: "cascade" }),
+    questionId: integer("question_id").notNull().references(() => qalQuestion.id, { onDelete: "cascade" }),
+    passedCount: integer("passed_count"), // for this specific question
+    isNotApplicable: boolean("is_not_applicable").default(false),
+    testingSample: text("testing_sample"),
+    comments: text("comments"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    unique("uq_qal_question_response").on(t.surveyId, t.questionId),
   ],
 );
 

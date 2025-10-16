@@ -68,6 +68,7 @@
     "react-day-picker": "^9.8.1",
     "react-dom": "^19.0.0",
     "react-hook-form": "^7.61.1",
+    "react-to-pdf": "^2.0.1",
     "resend": "^4.8.0",
     "server-only": "^0.0.1",
     "sonner": "^2.0.6",
