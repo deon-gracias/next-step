@@ -773,108 +773,194 @@ export default function SurveyDetailPage() {
   // ✅ FIXED: Score calculation for resident, case, AND general surveys
   // ✅ FIXED: Score calculation for resident, case, AND general surveys
   // ✅ DEBUG: Score calculation with logging - REPLACE YOUR CURRENT overallScore useMemo
-  const { overallScore, maxTemplatePoints, overallPercent } = useMemo(() => {
-    const qs: QuestionRow[] = (questions.data ?? []) as QuestionRow[];
-    let awarded = 0;
+  // const { overallScore, maxTemplatePoints, overallPercent } = useMemo(() => {
+  //   const qs: QuestionRow[] = (questions.data ?? []) as QuestionRow[];
+  //   let awarded = 0;
 
-    // ✅ DEBUG: Log what we're working with
-    console.log("=== SCORE DEBUG ===");
-    console.log("Survey type:", survey.data?.template?.type);
-    console.log("Questions count:", qs.length);
-    console.log("Residents data:", residents.data);
-    console.log("Cases data:", cases.data);
-    console.log("All responses:", allResponses);
-    console.log("byEntity keys:", Array.from(byEntity.keys()));
+  //   // ✅ DEBUG: Log what we're working with
+  //   console.log("=== SCORE DEBUG ===");
+  //   console.log("Survey type:", survey.data?.template?.type);
+  //   console.log("Questions count:", qs.length);
+  //   console.log("Residents data:", residents.data);
+  //   console.log("Cases data:", cases.data);
+  //   console.log("All responses:", allResponses);
+  //   console.log("byEntity keys:", Array.from(byEntity.keys()));
 
-    for (const q of qs) {
-      let anyUnmetOrUnanswered = false;
-      let anyMet = false;
+  //   for (const q of qs) {
+  //     let anyUnmetOrUnanswered = false;
+  //     let anyMet = false;
 
-      console.log(`\n--- Question ${q.id} (${q.points} points) ---`);
+  //     console.log(`\n--- Question ${q.id} (${q.points} points) ---`);
 
-      if (survey.data?.template?.type === "resident") {
-        // Check resident responses
-        for (const r of residents.data ?? []) {
-          const entityKey = `resident-${r.residentId}`;
-          const cell = byEntity.get(entityKey)?.get(q.id);
-          console.log(`Resident ${r.residentId}: entityKey=${entityKey}, cell=`, cell);
+  //     if (survey.data?.template?.type === "resident") {
+  //       // Check resident responses
+  //       for (const r of residents.data ?? []) {
+  //         const entityKey = `resident-${r.residentId}`;
+  //         const cell = byEntity.get(entityKey)?.get(q.id);
+  //         console.log(`Resident ${r.residentId}: entityKey=${entityKey}, cell=`, cell);
 
-          if (!cell?.status) {
-            anyUnmetOrUnanswered = true;
-            console.log(`  -> UNANSWERED`);
-            break;
-          }
-          if (cell.status === "unmet") {
-            anyUnmetOrUnanswered = true;
-            console.log(`  -> UNMET`);
-            break;
-          }
-          if (cell.status === "met") {
-            anyMet = true;
-            console.log(`  -> MET`);
-          }
-        }
-      }
-      else if (survey.data?.template?.type === "case") {
-        // Check case responses
-        for (const c of cases.data ?? []) {
-          const entityKey = `case-${c.id}`;
-          const cell = byEntity.get(entityKey)?.get(q.id);
-          console.log(`Case ${c.id}: entityKey=${entityKey}, cell=`, cell);
+  //         if (!cell?.status) {
+  //           anyUnmetOrUnanswered = true;
+  //           console.log(`  -> UNANSWERED`);
+  //           break;
+  //         }
+  //         if (cell.status === "unmet") {
+  //           anyUnmetOrUnanswered = true;
+  //           console.log(`  -> UNMET`);
+  //           break;
+  //         }
+  //         if (cell.status === "met") {
+  //           anyMet = true;
+  //           console.log(`  -> MET`);
+  //         }
+  //       }
+  //     }
+  //     else if (survey.data?.template?.type === "case") {
+  //       // Check case responses
+  //       for (const c of cases.data ?? []) {
+  //         const entityKey = `case-${c.id}`;
+  //         const cell = byEntity.get(entityKey)?.get(q.id);
+  //         console.log(`Case ${c.id}: entityKey=${entityKey}, cell=`, cell);
 
-          if (!cell?.status) {
-            anyUnmetOrUnanswered = true;
-            console.log(`  -> UNANSWERED`);
-            break;
-          }
-          if (cell.status === "unmet") {
-            anyUnmetOrUnanswered = true;
-            console.log(`  -> UNMET`);
-            break;
-          }
-          if (cell.status === "met") {
-            anyMet = true;
-            console.log(`  -> MET`);
-          }
-        }
-      }
-      else if (survey.data?.template?.type === "general") {
-        // ✅ FIXED: Check general responses using correct field name
-        const generalResponses = allResponses.filter(r => !r.residentId && !r.surveyCaseId);
-        const cell = generalResponses.find(r => r.questionId === q.id);
-        console.log(`General question ${q.id}: cell=`, cell);
+  //         if (!cell?.status) {
+  //           anyUnmetOrUnanswered = true;
+  //           console.log(`  -> UNANSWERED`);
+  //           break;
+  //         }
+  //         if (cell.status === "unmet") {
+  //           anyUnmetOrUnanswered = true;
+  //           console.log(`  -> UNMET`);
+  //           break;
+  //         }
+  //         if (cell.status === "met") {
+  //           anyMet = true;
+  //           console.log(`  -> MET`);
+  //         }
+  //       }
+  //     }
+  //     else if (survey.data?.template?.type === "general") {
+  //       // ✅ FIXED: Check general responses using correct field name
+  //       const generalResponses = allResponses.filter(r => !r.residentId && !r.surveyCaseId);
+  //       const cell = generalResponses.find(r => r.questionId === q.id);
+  //       console.log(`General question ${q.id}: cell=`, cell);
 
-        if (!cell || !cell.status) {
+  //       if (!cell || !cell.status) {
+  //         anyUnmetOrUnanswered = true;
+  //         console.log(`  -> UNANSWERED`);
+  //       } else if (cell.status === "unmet") {
+  //         anyUnmetOrUnanswered = true;
+  //         console.log(`  -> UNMET`);
+  //       } else if (cell.status === "met") { // ✅ FIXED: Use .status instead of .requirementsMetOrUnmet
+  //         anyMet = true;
+  //         console.log(`  -> MET`);
+  //       }
+  //     }
+
+
+  //     // Award points if question is fully met
+  //     const shouldAward = !anyUnmetOrUnanswered && anyMet;
+  //     console.log(`Question ${q.id} summary: anyUnmetOrUnanswered=${anyUnmetOrUnanswered}, anyMet=${anyMet}, shouldAward=${shouldAward}`);
+
+  //     if (shouldAward) {
+  //       awarded += q.points ?? 0;
+  //       console.log(`  -> AWARDED ${q.points} points (total now: ${awarded})`);
+  //     }
+  //   }
+
+  //   const max = qs.reduce((s, q) => s + (q.points ?? 0), 0);
+  //   const pct = max > 0 ? Math.round((awarded / max) * 100) : 0;
+
+  //   console.log(`\nFINAL SCORE: ${awarded}/${max} (${pct}%)`);
+  //   console.log("=== END DEBUG ===\n");
+
+  //   return { overallScore: awarded, maxTemplatePoints: max, overallPercent: pct };
+  // }, [questions.data, byEntity, residents.data, cases.data, allResponses, survey.data?.template?.type]);
+
+  // ✅ UPDATED: Add the allNA condition here
+const { overallScore, maxTemplatePoints, overallPercent } = useMemo(() => {
+  const qs: QuestionRow[] = (questions.data ?? []) as QuestionRow[];
+  let awarded = 0;
+
+  for (const q of qs) {
+    let anyUnmetOrUnanswered = false;
+    let anyMet = false;
+    let allNA = true; // ✅ ADD THIS LINE
+
+    if (survey.data?.template?.type === "resident") {
+      for (const r of residents.data ?? []) {
+        const entityKey = `resident-${r.residentId}`;
+        const cell = byEntity.get(entityKey)?.get(q.id);
+
+        if (!cell?.status) {
           anyUnmetOrUnanswered = true;
-          console.log(`  -> UNANSWERED`);
-        } else if (cell.status === "unmet") {
+          allNA = false; // ✅ ADD THIS
+          break;
+        }
+        if (cell.status === "unmet") {
           anyUnmetOrUnanswered = true;
-          console.log(`  -> UNMET`);
-        } else if (cell.status === "met") { // ✅ FIXED: Use .status instead of .requirementsMetOrUnmet
+          allNA = false; // ✅ ADD THIS
+          break;
+        }
+        if (cell.status === "met") {
           anyMet = true;
-          console.log(`  -> MET`);
+          allNA = false; // ✅ ADD THIS
+        }
+        // ✅ ADD THIS: N/A doesn't change anyUnmetOrUnanswered or anyMet, keeps allNA true
+      }
+    }
+    else if (survey.data?.template?.type === "case") {
+      for (const c of cases.data ?? []) {
+        const entityKey = `case-${c.id}`;
+        const cell = byEntity.get(entityKey)?.get(q.id);
+
+        if (!cell?.status) {
+          anyUnmetOrUnanswered = true;
+          allNA = false; // ✅ ADD THIS
+          break;
+        }
+        if (cell.status === "unmet") {
+          anyUnmetOrUnanswered = true;
+          allNA = false; // ✅ ADD THIS
+          break;
+        }
+        if (cell.status === "met") {
+          anyMet = true;
+          allNA = false; // ✅ ADD THIS
         }
       }
+    }
+    else if (survey.data?.template?.type === "general") {
+      const generalResponses = allResponses.filter(r => !r.residentId && !r.surveyCaseId);
+      const cell = generalResponses.find(r => r.questionId === q.id);
 
-
-      // Award points if question is fully met
-      const shouldAward = !anyUnmetOrUnanswered && anyMet;
-      console.log(`Question ${q.id} summary: anyUnmetOrUnanswered=${anyUnmetOrUnanswered}, anyMet=${anyMet}, shouldAward=${shouldAward}`);
-
-      if (shouldAward) {
-        awarded += q.points ?? 0;
-        console.log(`  -> AWARDED ${q.points} points (total now: ${awarded})`);
+      if (!cell || !cell.status) {
+        anyUnmetOrUnanswered = true;
+        allNA = false; // ✅ ADD THIS
+      } else if (cell.status === "unmet") {
+        anyUnmetOrUnanswered = true;
+        allNA = false; // ✅ ADD THIS
+      } else if (cell.status === "met") {
+        anyMet = true;
+        allNA = false; // ✅ ADD THIS
       }
     }
 
-    const max = qs.reduce((s, q) => s + (q.points ?? 0), 0);
-    const pct = max > 0 ? Math.round((awarded / max) * 100) : 0;
+    // ✅ CHANGE THIS LINE:
+    // OLD: const shouldAward = !anyUnmetOrUnanswered && anyMet;
+    // NEW:
+    const shouldAward = !anyUnmetOrUnanswered && (anyMet || allNA);
 
-    console.log(`\nFINAL SCORE: ${awarded}/${max} (${pct}%)`);
-    console.log("=== END DEBUG ===\n");
+    if (shouldAward) {
+      awarded += q.points ?? 0;
+    }
+  }
 
-    return { overallScore: awarded, maxTemplatePoints: max, overallPercent: pct };
-  }, [questions.data, byEntity, residents.data, cases.data, allResponses, survey.data?.template?.type]);
+  const max = qs.reduce((s, q) => s + (q.points ?? 0), 0);
+  const pct = max > 0 ? Math.round((awarded / max) * 100) : 0;
+
+  return { overallScore: awarded, maxTemplatePoints: max, overallPercent: pct };
+}, [questions.data, byEntity, residents.data, cases.data, allResponses, survey.data?.template?.type]);
+
 
 
 
@@ -1975,7 +2061,7 @@ export default function SurveyDetailPage() {
 
         <Separator />
 
-        {(survey.data.template?.type === "resident") && (
+        {(survey.data?.template?.type === "resident" || survey.data?.template?.type === "case") && (
           <>
             {/* Template Information */}
             <div className="mb-4">
@@ -2007,6 +2093,11 @@ export default function SurveyDetailPage() {
                 ))}
               </div>
             </div>
+            </>
+        )}
+
+        {(survey.data.template?.type === "resident") && (
+          <>
 
             {/* Residents */}
             <div className="mb-3 flex items-center justify-between">
@@ -2082,14 +2173,14 @@ export default function SurveyDetailPage() {
         {survey.data.template?.type === "case" && (
           <>
             {/* Template Information */}
-            <div className="mb-4">
+            {/* <div className="mb-4">
               <h2 className="text-xl font-bold">
                 {survey.data.template?.name || `Template #${survey.data.templateId}`}
               </h2>
               <p className="text-sm text-muted-foreground">
                 {allQuestionIds.length} questions • {cases.data.length} cases
               </p>
-            </div>
+            </div> */}
 
             <h2 className="mb-3 text-xl font-semibold">Cases</h2>
             <Table>

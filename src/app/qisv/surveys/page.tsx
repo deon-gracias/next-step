@@ -72,7 +72,7 @@ export default function SurveysPage() {
   const assignedFacility = api.user.getForOrg.useQuery({});
 
   const page = Number(searchParams.get("page") ?? 1);
-  const pageSize = Number(searchParams.get("pageSize") ?? 100); 
+  const pageSize = Number(searchParams.get("pageSize") ?? 100);
 
   // Get all surveys
   const surveys = api.survey.list.useQuery(
@@ -139,7 +139,7 @@ export default function SurveysPage() {
 
       try {
         const scoresMap = new Map<number, { score: number; totalPossible: number }>();
-        
+
         // Calculate score for each survey using UPDATED logic to include all survey types
         await Promise.all(
           surveys.data.map(async (survey) => {
@@ -155,21 +155,21 @@ export default function SurveysPage() {
               }
 
               // ✅ UPDATED: Fetch responses for RESIDENTS, CASES, AND GENERAL
-              const allResponses: Array<{ 
-                residentId: number | null; 
+              const allResponses: Array<{
+                residentId: number | null;
                 surveyCaseId: number | null;
-                questionId: number; 
-                status: string | null; 
-                findings: string | null 
+                questionId: number;
+                status: string | null;
+                findings: string | null
               }> = [];
-              
+
               // Fetch resident responses
               if (residents && residents.length > 0) {
                 await Promise.all(
                   residents.map(async (r) => {
-                    const rows = await utils.survey.listResponses.fetch({ 
-                      surveyId: survey.id, 
-                      residentId: r.residentId 
+                    const rows = await utils.survey.listResponses.fetch({
+                      surveyId: survey.id,
+                      residentId: r.residentId
                     });
                     for (const rr of rows ?? []) {
                       allResponses.push({
@@ -188,9 +188,9 @@ export default function SurveysPage() {
               if (cases && cases.length > 0) {
                 await Promise.all(
                   cases.map(async (c) => {
-                    const rows = await utils.survey.listResponses.fetch({ 
-                      surveyId: survey.id, 
-                      surveyCaseId: c.id 
+                    const rows = await utils.survey.listResponses.fetch({
+                      surveyId: survey.id,
+                      surveyCaseId: c.id
                     });
                     for (const rr of rows ?? []) {
                       allResponses.push({
@@ -207,7 +207,7 @@ export default function SurveysPage() {
 
               // ✅ NEW: Fetch general responses (no resident or case ID)
               if ((!residents || residents.length === 0) && (!cases || cases.length === 0)) {
-                const rows = await utils.survey.listResponses.fetch({ 
+                const rows = await utils.survey.listResponses.fetch({
                   surveyId: survey.id,
                   residentId: null,
                   surveyCaseId: null
@@ -226,33 +226,39 @@ export default function SurveysPage() {
               // ✅ UPDATED: Create byEntity map to handle residents, cases, AND general
               const byEntity = new Map<string, Map<number, { status: string | null; findings: string | null }>>();
               for (const r of allResponses) {
-                const entityKey = r.residentId 
-                  ? `resident-${r.residentId}` 
-                  : r.surveyCaseId 
-                  ? `case-${r.surveyCaseId}` 
-                  : 'general'; // ✅ NEW: Handle general responses
+                const entityKey = r.residentId
+                  ? `resident-${r.residentId}`
+                  : r.surveyCaseId
+                    ? `case-${r.surveyCaseId}`
+                    : 'general'; // ✅ NEW: Handle general responses
                 const inner = byEntity.get(entityKey) ?? new Map();
                 inner.set(r.questionId, { status: r.status, findings: r.findings });
                 byEntity.set(entityKey, inner);
               }
 
               // ✅ UPDATED: Score calculation - handle all three survey types
+              // ✅ UPDATED: Score calculation - handle all three survey types + N/A logic
               let awarded = 0;
               for (const q of questions) {
                 let anyUnmetOrUnanswered = false;
                 let anyMet = false;
-                
+                let allNA = true; // ✅ ADD THIS LINE
+
                 // ✅ NEW: Handle general surveys (no residents or cases)
                 if ((!residents || residents.length === 0) && (!cases || cases.length === 0)) {
                   // This is a general survey
                   const cell = byEntity.get('general')?.get(q.id);
                   if (!cell?.status) {
                     anyUnmetOrUnanswered = true;
+                    allNA = false; // ✅ ADD THIS
                   } else if (cell.status === "unmet") {
                     anyUnmetOrUnanswered = true;
+                    allNA = false; // ✅ ADD THIS
                   } else if (cell.status === "met") {
                     anyMet = true;
+                    allNA = false; // ✅ ADD THIS
                   }
+                  // ✅ N/A keeps allNA = true
                 } else {
                   // Check resident responses
                   if (residents && residents.length > 0) {
@@ -260,44 +266,59 @@ export default function SurveysPage() {
                       const cell = byEntity.get(`resident-${r.residentId}`)?.get(q.id);
                       if (!cell?.status) {
                         anyUnmetOrUnanswered = true;
+                        allNA = false; // ✅ ADD THIS
                         break;
                       }
                       if (cell.status === "unmet") {
                         anyUnmetOrUnanswered = true;
+                        allNA = false; // ✅ ADD THIS
                         break;
                       }
-                      if (cell.status === "met") anyMet = true;
+                      if (cell.status === "met") {
+                        anyMet = true;
+                        allNA = false; // ✅ ADD THIS
+                      }
+                      // ✅ N/A keeps allNA = true
                     }
                   }
-                  
+
                   // Check case responses
                   if (!anyUnmetOrUnanswered && cases && cases.length > 0) {
                     for (const c of cases) {
                       const cell = byEntity.get(`case-${c.id}`)?.get(q.id);
                       if (!cell?.status) {
                         anyUnmetOrUnanswered = true;
+                        allNA = false; // ✅ ADD THIS
                         break;
                       }
                       if (cell.status === "unmet") {
                         anyUnmetOrUnanswered = true;
+                        allNA = false; // ✅ ADD THIS
                         break;
                       }
-                      if (cell.status === "met") anyMet = true;
+                      if (cell.status === "met") {
+                        anyMet = true;
+                        allNA = false; // ✅ ADD THIS
+                      }
+                      // ✅ N/A keeps allNA = true
                     }
                   }
                 }
-                
-                // Award points only if no unmet/unanswered AND at least one met
-                if (!anyUnmetOrUnanswered && anyMet) {
+
+                // ✅ CHANGE THIS LINE:
+                // OLD: Award points only if no unmet/unanswered AND at least one met
+                // NEW: Award points if no unmet/unanswered AND (at least one met OR all N/A)
+                if (!anyUnmetOrUnanswered && (anyMet || allNA)) {
                   awarded += q.points ?? 0;
                 }
               }
 
+
               const max = questions.reduce((s, q) => s + (q.points ?? 0), 0);
-              
-              scoresMap.set(survey.id, { 
-                score: awarded, 
-                totalPossible: max 
+
+              scoresMap.set(survey.id, {
+                score: awarded,
+                totalPossible: max
               });
 
             } catch (error) {
@@ -328,7 +349,7 @@ export default function SurveysPage() {
 
       try {
         const pocExistsMap = new Map<number, boolean>();
-        
+
         // Check each survey for actual POC existence in survey_poc table
         await Promise.all(
           surveys.data.map(async (survey) => {
@@ -336,7 +357,7 @@ export default function SurveysPage() {
               // Get residents and cases for this survey
               const residents = await utils.survey.listResidents.fetch({ surveyId: survey.id });
               const cases = await utils.survey.listCases.fetch({ surveyId: survey.id });
-              
+
               let hasPOC = false;
 
               // ✅ NEW: Handle general surveys (no residents or cases)
@@ -420,10 +441,10 @@ export default function SurveysPage() {
   // Helper function to check if survey date matches selected date (ignoring time)
   const doesDateMatch = (surveyDate: string | Date | null | undefined, selectedDate: Date): boolean => {
     if (!surveyDate || !selectedDate) return false;
-    
+
     try {
       let surveyDateObj: Date;
-      
+
       // Handle different date formats
       if (typeof surveyDate === 'string') {
         // Try parsing ISO format first (YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)
@@ -431,16 +452,16 @@ export default function SurveysPage() {
       } else {
         surveyDateObj = surveyDate;
       }
-      
+
       // Check if date is valid
       if (isNaN(surveyDateObj.getTime()) || isNaN(selectedDate.getTime())) {
         return false;
       }
-      
+
       // Compare year, month, and day only (ignoring time)
       return surveyDateObj.getFullYear() === selectedDate.getFullYear() &&
-             surveyDateObj.getMonth() === selectedDate.getMonth() &&
-             surveyDateObj.getDate() === selectedDate.getDate();
+        surveyDateObj.getMonth() === selectedDate.getMonth() &&
+        surveyDateObj.getDate() === selectedDate.getDate();
     } catch (error) {
       console.warn('Date comparison error:', error);
       return false;
@@ -469,7 +490,7 @@ export default function SurveysPage() {
         console.log(`Survey ${survey.id} (${survey.surveyDate}) matches ${format(selectedDate, "yyyy-MM-dd")}:`, matches);
         return matches;
       });
-      
+
       console.log('After date filter:', filtered.length, 'surveys remain');
     }
 
@@ -478,11 +499,11 @@ export default function SurveysPage() {
       filtered.sort((a, b) => {
         const dateA = new Date(a.surveyDate || 0);
         const dateB = new Date(b.surveyDate || 0);
-        
+
         if (isNaN(dateA.getTime()) && isNaN(dateB.getTime())) return 0;
         if (isNaN(dateA.getTime())) return 1;
         if (isNaN(dateB.getTime())) return -1;
-        
+
         return dateSortOrder === "asc" ? dateA.getTime() - dateB.getTime() : dateB.getTime() - dateA.getTime();
       });
     }
@@ -497,7 +518,7 @@ export default function SurveysPage() {
       return 'pending';
     }
 
-    const scorePercentage = scoreData && scoreData.totalPossible > 0 
+    const scorePercentage = scoreData && scoreData.totalPossible > 0
       ? Math.round((scoreData.score / scoreData.totalPossible) * 100)
       : 0;
 
@@ -521,7 +542,7 @@ export default function SurveysPage() {
     filteredSurveys.forEach(survey => {
       const scoreData = surveyScores.get(survey.id);
       const category = getSurveyCategory(survey, scoreData);
-      
+
       if (category === 'completed') {
         completedSurveys.push(survey);
       } else {
@@ -534,15 +555,15 @@ export default function SurveysPage() {
       total: filteredSurveys.length,
       completed: completedSurveys.length,
       pending: pendingSurveys.length,
-      completedSurveys: completedSurveys.map(s => ({ 
-        id: s.id, 
-        isLocked: s.isLocked, 
+      completedSurveys: completedSurveys.map(s => ({
+        id: s.id,
+        isLocked: s.isLocked,
         pocGenerated: s.pocGenerated, // Used for grouping
         actualPocExists: surveyPocExists.get(s.id) // Used for display
       })),
-      pendingSurveys: pendingSurveys.map(s => ({ 
-        id: s.id, 
-        isLocked: s.isLocked, 
+      pendingSurveys: pendingSurveys.map(s => ({
+        id: s.id,
+        isLocked: s.isLocked,
         pocGenerated: s.pocGenerated, // Used for grouping
         actualPocExists: surveyPocExists.get(s.id) // Used for display
       }))
@@ -571,7 +592,7 @@ export default function SurveysPage() {
         }
 
         const facilityGroup = facilityMap.get(facilityId)!;
-        
+
         // Get or create date group within facility
         if (!facilityGroup.dates.has(dateKey)) {
           facilityGroup.dates.set(dateKey, {
@@ -584,7 +605,7 @@ export default function SurveysPage() {
         }
 
         const dateGroup = facilityGroup.dates.get(dateKey)!;
-        
+
         // Add survey to date group
         dateGroup.surveys.push(survey);
         dateGroup.totalTemplates++;
@@ -644,13 +665,13 @@ export default function SurveysPage() {
 
   // Filter groups
   const filteredClosedGroups = React.useMemo(() => {
-    return groupedSurveys.closed.filter(group => 
+    return groupedSurveys.closed.filter(group =>
       closedFacilityFilter === "all" || String(group.facilityId) === closedFacilityFilter
     );
   }, [groupedSurveys.closed, closedFacilityFilter]);
 
   const filteredPendingGroups = React.useMemo(() => {
-    return groupedSurveys.pending.filter(group => 
+    return groupedSurveys.pending.filter(group =>
       pendingFacilityFilter === "all" || String(group.facilityId) === pendingFacilityFilter
     );
   }, [groupedSurveys.pending, pendingFacilityFilter]);
@@ -659,7 +680,7 @@ export default function SurveysPage() {
   const facilityOptions = React.useMemo(() => {
     const allFacilities = [...groupedSurveys.closed, ...groupedSurveys.pending];
     const uniqueFacilities = new Map();
-    
+
     allFacilities.forEach(group => {
       if (!uniqueFacilities.has(group.facilityId)) {
         uniqueFacilities.set(group.facilityId, {
@@ -685,80 +706,80 @@ export default function SurveysPage() {
 
   // Helper function to get POC status - USES survey_poc table for display status
   // Helper function to get POC status - USES survey_poc table for display status
-const getPocStatus = (survey: any, scoreData: { score: number; totalPossible: number } | undefined, sectionType: 'completed' | 'pending' = 'completed') => {
-  // ONLY for pending section, check if survey is locked or not
-  if (sectionType === 'pending') {
-    if (survey.isLocked) {
+  const getPocStatus = (survey: any, scoreData: { score: number; totalPossible: number } | undefined, sectionType: 'completed' | 'pending' = 'completed') => {
+    // ONLY for pending section, check if survey is locked or not
+    if (sectionType === 'pending') {
+      if (survey.isLocked) {
+        return {
+          status: "Survey Locked",
+          variant: "secondary" as const,
+          className: "bg-gray-100 text-gray-800"
+        };
+      } else {
+        return {
+          status: "Survey In Process",
+          variant: "secondary" as const,
+          className: "bg-blue-100 text-blue-800"
+        };
+      }
+    }
+
+    // KEEP ALL ORIGINAL LOGIC FOR COMPLETED SECTION
+    if (!survey.isLocked) {
+      const isCompleted = survey.responses && survey.responses.length > 0;
       return {
-        status: "Survey Locked",
+        status: isCompleted ? "In Progress" : "POC Not Started",
         variant: "secondary" as const,
-        className: "bg-gray-100 text-gray-800"
+        className: isCompleted ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-800"
+      };
+    }
+
+    const scorePercentage = scoreData && scoreData.totalPossible > 0
+      ? Math.round((scoreData.score / scoreData.totalPossible) * 100)
+      : 0;
+
+    // If score >= 85%, no POC required
+    if (scorePercentage >= 85) {
+      return {
+        status: "No POC Required",
+        variant: "secondary" as const,
+        className: "bg-green-100 text-green-800"
+      };
+    }
+
+    // If score < 85%, check if actual POC exists in survey_poc table (for display only)
+    const pocExists = surveyPocExists.get(survey.id) || false;
+    if (pocExists) {
+      return {
+        status: "POC Completed",
+        variant: "default" as const,
+        className: "bg-blue-100 text-blue-800"
       };
     } else {
       return {
-        status: "Survey In Process",
+        status: "POC Pending",
         variant: "secondary" as const,
-        className: "bg-blue-100 text-blue-800"
+        className: "bg-amber-100 text-amber-800"
       };
     }
-  }
-
-  // KEEP ALL ORIGINAL LOGIC FOR COMPLETED SECTION
-  if (!survey.isLocked) {
-    const isCompleted = survey.responses && survey.responses.length > 0;
-    return {
-      status: isCompleted ? "In Progress" : "POC Not Started",
-      variant: "secondary" as const,
-      className: isCompleted ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-800"
-    };
-  }
-
-  const scorePercentage = scoreData && scoreData.totalPossible > 0 
-    ? Math.round((scoreData.score / scoreData.totalPossible) * 100)
-    : 0;
-
-  // If score >= 85%, no POC required
-  if (scorePercentage >= 85) {
-    return {
-      status: "No POC Required",
-      variant: "secondary" as const,
-      className: "bg-green-100 text-green-800"
-    };
-  }
-
-  // If score < 85%, check if actual POC exists in survey_poc table (for display only)
-  const pocExists = surveyPocExists.get(survey.id) || false;
-  if (pocExists) {
-    return {
-      status: "POC Completed",
-      variant: "default" as const,
-      className: "bg-blue-100 text-blue-800"
-    };
-  } else {
-    return {
-      status: "POC Pending",
-      variant: "secondary" as const,
-      className: "bg-amber-100 text-amber-800"
-    };
-  }
-};
+  };
 
 
   // SIMPLIFIED: Clean hierarchical row components
-  const FacilityGroupRow = ({ 
-    group, 
-    type, 
-    isExpanded, 
-    onToggle 
-  }: { 
-    group: GroupedSurvey; 
+  const FacilityGroupRow = ({
+    group,
+    type,
+    isExpanded,
+    onToggle
+  }: {
+    group: GroupedSurvey;
     type: 'closed' | 'pending';
     isExpanded: boolean;
     onToggle: () => void;
   }) => (
     <>
       {/* LEVEL 1: FACILITY ROW - Simple and Clean */}
-      <TableRow 
+      <TableRow
         className="bg-muted/50 hover:bg-muted/70 cursor-pointer font-medium"
         onClick={onToggle}
       >
@@ -783,17 +804,17 @@ const getPocStatus = (survey: any, scoreData: { score: number; totalPossible: nu
           </Badge>
         </TableCell>
       </TableRow>
-      
+
       {/* LEVEL 2: DATE GROUPS - Slightly Indented */}
       {isExpanded && Array.from(group.dates.entries()).map(([dateKey, dateGroup]) => {
         const expandKey = `${group.facilityId}-${dateKey}`;
-        const isDateExpanded = type === 'closed' 
-          ? expandedClosedDates.has(expandKey) 
+        const isDateExpanded = type === 'closed'
+          ? expandedClosedDates.has(expandKey)
           : expandedPendingDates.has(expandKey);
-        
+
         return (
           <React.Fragment key={dateKey}>
-            <TableRow 
+            <TableRow
               className="bg-muted/30 hover:bg-muted/50 cursor-pointer"
               onClick={() => toggleDateExpanded(group.facilityId, dateKey, type)}
             >
@@ -820,15 +841,15 @@ const getPocStatus = (survey: any, scoreData: { score: number; totalPossible: nu
                 </Badge>
               </TableCell>
             </TableRow>
-            
+
             {/* LEVEL 3: SURVEY ROWS - More Indented */}
             {isDateExpanded && dateGroup.surveys.map((survey) => {
               const scoreData = surveyScores.get(survey.id);
-              const scorePercentage = scoreData && scoreData.totalPossible > 0 
+              const scorePercentage = scoreData && scoreData.totalPossible > 0
                 ? Math.round((scoreData.score / scoreData.totalPossible) * 100)
                 : 0;
               const pocStatus = getPocStatus(survey, scoreData, type === 'pending' ? 'pending' : 'completed');
-              
+
               return (
                 <TableRow key={`${type}-survey-${survey.id}`} className="bg-background">
                   <TableCell className="text-right font-mono tabular-nums pl-12">
@@ -861,13 +882,13 @@ const getPocStatus = (survey: any, scoreData: { score: number; totalPossible: nu
                     <div className="flex items-center gap-2">
                       {scoreData ? (
                         <div className="flex flex-col items-center">
-                          <Badge 
-                            variant="outline" 
+                          <Badge
+                            variant="outline"
                             className={cn(
                               "font-mono",
                               scorePercentage >= 80 ? "bg-green-100 text-green-800 border-green-300" :
-                              scorePercentage >= 60 ? "bg-yellow-100 text-yellow-800 border-yellow-300" :
-                              "bg-red-100 text-red-800 border-red-300"
+                                scorePercentage >= 60 ? "bg-yellow-100 text-yellow-800 border-yellow-300" :
+                                  "bg-red-100 text-red-800 border-red-300"
                             )}
                           >
                             {scoreData.score}/{scoreData.totalPossible}
@@ -970,9 +991,9 @@ const getPocStatus = (survey: any, scoreData: { score: number; totalPossible: nu
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-semibold">Filters</h3>
                 {hasActiveFilters && (
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={clearAllFilters}
                     className="text-muted-foreground hover:text-foreground"
                   >
@@ -981,7 +1002,7 @@ const getPocStatus = (survey: any, scoreData: { score: number; totalPossible: nu
                   </Button>
                 )}
               </div>
-              
+
               <div className="flex flex-wrap items-center gap-3">
                 {/* Date Picker */}
                 <div className="flex items-center gap-2">
