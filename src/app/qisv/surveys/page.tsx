@@ -44,6 +44,7 @@ import {
   AlertDialogAction,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
+import { Combobox } from "@/components/ui/combobox";
 
 const PAGE_SIZES = [10, 50, 100];
 
@@ -73,6 +74,12 @@ export default function SurveysPage() {
 
   const page = Number(searchParams.get("page") ?? 1);
   const pageSize = Number(searchParams.get("pageSize") ?? 100);
+
+  const [closedTemplateFilter, setClosedTemplateFilter] = React.useState<string>("all");
+  const [pendingTemplateFilter, setPendingTemplateFilter] = React.useState<string>("all");
+  const [closedStatusFilter, setClosedStatusFilter] = React.useState<string>("all");
+  const [pendingStatusFilter, setPendingStatusFilter] = React.useState<string>("all");
+
 
   // Get all surveys
   const surveys = api.survey.list.useQuery(
@@ -584,7 +591,13 @@ export default function SurveysPage() {
             facilityId,
             facilityName,
             facility: survey.facility,
-            dates: new Map(),
+            dates: new Map<string, {
+              date: string;
+              surveys: any[];
+              totalTemplates: number;
+              completedSurveys: number;
+              pocCount: number;
+            }>(),
             totalTemplates: 0,
             completedSurveys: 0,
             pocCount: 0,
@@ -665,16 +678,89 @@ export default function SurveysPage() {
 
   // Filter groups
   const filteredClosedGroups = React.useMemo(() => {
-    return groupedSurveys.closed.filter(group =>
-      closedFacilityFilter === "all" || String(group.facilityId) === closedFacilityFilter
-    );
-  }, [groupedSurveys.closed, closedFacilityFilter]);
+    return groupedSurveys.closed
+      .map(group => ({
+        ...group,
+        dates: new Map(
+          Array.from(group.dates.entries())
+            .map(([dateKey, dateGroup]): [string, typeof dateGroup] => {
+              if (!dateGroup || typeof dateGroup === 'string') {
+                return [dateKey, {
+                  date: dateKey,
+                  surveys: [],
+                  totalTemplates: 0,
+                  completedSurveys: 0,
+                  pocCount: 0
+                }];
+              }
+
+              const filteredSurveys = dateGroup.surveys.filter(survey => {
+                const matchesFacility = closedFacilityFilter === "all" || String(group.facilityId) === closedFacilityFilter;
+                const matchesTemplate = closedTemplateFilter === "all" || String(survey.templateId) === closedTemplateFilter;
+
+                // POC Status filtering
+                const pocExists = surveyPocExists.get(survey.id) || false;
+                const scoreData = surveyScores.get(survey.id);
+                const scorePercentage = scoreData && scoreData.totalPossible > 0
+                  ? Math.round((scoreData.score / scoreData.totalPossible) * 100)
+                  : 0;
+                const isPocCompleted = pocExists || scorePercentage >= 85;
+
+                const matchesStatus = closedStatusFilter === "all" ||
+                  (closedStatusFilter === "poc-completed" && isPocCompleted) ||
+                  (closedStatusFilter === "poc-pending" && !isPocCompleted);
+
+                return matchesFacility && matchesTemplate && matchesStatus;
+              });
+
+              return [dateKey, { ...dateGroup, surveys: filteredSurveys }];
+            })
+            .filter((entry): entry is [string, { surveys: any[]; date: string; totalTemplates: number; completedSurveys: number; pocCount: number; }] =>
+              entry[1] && Array.isArray(entry[1].surveys) && entry[1].surveys.length > 0
+            )
+        )
+      }))
+      .filter(group => group.dates.size > 0);
+  }, [groupedSurveys.closed, closedFacilityFilter, closedTemplateFilter, closedStatusFilter, surveyPocExists, surveyScores]);
+
+
 
   const filteredPendingGroups = React.useMemo(() => {
-    return groupedSurveys.pending.filter(group =>
-      pendingFacilityFilter === "all" || String(group.facilityId) === pendingFacilityFilter
-    );
-  }, [groupedSurveys.pending, pendingFacilityFilter]);
+    return groupedSurveys.pending
+      .map(group => ({
+        ...group,
+        dates: new Map(
+          Array.from(group.dates.entries())
+            .map(([dateKey, dateGroup]): [string, typeof dateGroup] => {
+              if (typeof dateGroup === 'string') {
+                return [dateKey, {
+                  date: dateKey,
+                  surveys: [],
+                  totalTemplates: 0,
+                  completedSurveys: 0,
+                  pocCount: 0
+                }];
+              }
+              const filteredSurveys = dateGroup.surveys.filter(survey => {
+                const matchesFacility = pendingFacilityFilter === "all" || String(group.facilityId) === pendingFacilityFilter;
+                const matchesTemplate = pendingTemplateFilter === "all" || String(survey.templateId) === pendingTemplateFilter;
+                const matchesStatus = pendingStatusFilter === "all" ||
+                  (pendingStatusFilter === "locked" && survey.isLocked) ||
+                  (pendingStatusFilter === "unlocked" && !survey.isLocked);
+                return matchesFacility && matchesTemplate && matchesStatus;
+              });
+              return [dateKey, { ...dateGroup, surveys: filteredSurveys }];
+            })
+            .filter((entry): entry is [string, { surveys: any[]; date: string; totalTemplates: number; completedSurveys: number; pocCount: number; }] => {
+              const [_, dateGroup] = entry;
+              return typeof dateGroup !== 'string' && dateGroup.surveys.length > 0;
+            })
+        )
+      }))
+      .filter(group => group.dates.size > 0);
+  }, [groupedSurveys.pending, pendingFacilityFilter, pendingTemplateFilter, pendingStatusFilter]);
+
+
 
   // Build facility options for filters
   const facilityOptions = React.useMemo(() => {
@@ -693,16 +779,40 @@ export default function SurveysPage() {
     return Array.from(uniqueFacilities.values());
   }, [groupedSurveys]);
 
+  const templateOptions = React.useMemo(() => {
+    const allSurveys = [...surveys.data ?? []];
+    const uniqueTemplates = new Map();
+    allSurveys.forEach(survey => {
+      if (survey.template && survey.templateId) {
+        uniqueTemplates.set(survey.templateId, {
+          id: survey.templateId,
+          name: survey.template.name || `Template ${survey.templateId}`
+        });
+      }
+    });
+    return Array.from(uniqueTemplates.values());
+  }, [surveys.data]);
+
+
   // Clear all filters
   const clearAllFilters = () => {
     setSelectedDate(undefined);
     setDateSortOrder(null);
     setClosedFacilityFilter("all");
     setPendingFacilityFilter("all");
+    setClosedTemplateFilter("all");
+    setPendingTemplateFilter("all");
+    setClosedStatusFilter("all");
+    setPendingStatusFilter("all");
   };
 
+
   // Check if any filters are active
-  const hasActiveFilters = selectedDate || dateSortOrder || closedFacilityFilter !== "all" || pendingFacilityFilter !== "all";
+  const hasActiveFilters = selectedDate || dateSortOrder ||
+    closedFacilityFilter !== "all" || pendingFacilityFilter !== "all" ||
+    closedTemplateFilter !== "all" || pendingTemplateFilter !== "all" ||
+    closedStatusFilter !== "all" || pendingStatusFilter !== "all";
+
 
   // Helper function to get POC status - USES survey_poc table for display status
   // Helper function to get POC status - USES survey_poc table for display status
@@ -1097,19 +1207,39 @@ export default function SurveysPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Select value={closedFacilityFilter} onValueChange={setClosedFacilityFilter}>
-                    <SelectTrigger className="h-8 w-44 bg-white">
-                      <SelectValue placeholder="Filter by facility" />
+                    <SelectTrigger className="h-8 w-36 bg-white">
+                      <SelectValue placeholder="All Facilities" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Facilities</SelectItem>
                       {facilityOptions.map((f) => (
-                        <SelectItem key={f.id} value={String(f.id)}>
-                          {f.name}
-                        </SelectItem>
+                        <SelectItem key={f.id} value={String(f.id)}>{f.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+
+                  <Combobox
+                    options={templateOptions}
+                    value={closedTemplateFilter}
+                    onChange={setClosedTemplateFilter}
+                    placeholder="All Templates"
+                    className="w-40"
+                  />
+
+
+                  <Select value={closedStatusFilter} onValueChange={setClosedStatusFilter}>
+                    <SelectTrigger className="h-8 w-32 bg-white">
+                      <SelectValue placeholder="POC Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Status</SelectItem>
+                      <SelectItem value="poc-completed">POC Completed</SelectItem>
+                      <SelectItem value="poc-pending">POC Pending</SelectItem>
+                    </SelectContent>
+                  </Select>
+
                 </div>
+
               </div>
 
               <Table>
@@ -1171,19 +1301,39 @@ export default function SurveysPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Select value={pendingFacilityFilter} onValueChange={setPendingFacilityFilter}>
-                    <SelectTrigger className="h-8 w-44 bg-white">
-                      <SelectValue placeholder="Filter by facility" />
+                    <SelectTrigger className="h-8 w-36 bg-white">
+                      <SelectValue placeholder="All Facilities" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Facilities</SelectItem>
                       {facilityOptions.map((f) => (
-                        <SelectItem key={f.id} value={String(f.id)}>
-                          {f.name}
-                        </SelectItem>
+                        <SelectItem key={f.id} value={String(f.id)}>{f.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+
+                  <Combobox
+                    options={templateOptions}
+                    value={pendingTemplateFilter}
+                    onChange={setPendingTemplateFilter}
+                    placeholder="All Templates"
+                    className="w-40"
+                  />
+
+
+
+                  <Select value={pendingStatusFilter} onValueChange={setPendingStatusFilter}>
+                    <SelectTrigger className="h-8 w-28 bg-white">
+                      <SelectValue placeholder="All Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Status</SelectItem>
+                      <SelectItem value="locked">Locked</SelectItem>
+                      <SelectItem value="unlocked">Unlocked</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
+
               </div>
 
               <Table>

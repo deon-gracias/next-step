@@ -40,6 +40,8 @@ export const templateRouter = createTRPCRouter({
         ...templateSelectSchema.partial().shape,
         ...paginationInputSchema.shape,
         withPoints: z.boolean().default(false),
+        type: z.enum(['resident', 'general', 'case']).optional(),     // add this line for type filter
+        search: z.string().optional(),   // add this line for name search
       }),
     )
     .query(async ({ ctx, input }) => {
@@ -47,7 +49,8 @@ export const templateRouter = createTRPCRouter({
 
       const conditions = [];
       if (input.id !== undefined) conditions.push(eq(template.id, input.id));
-      if (input.name) conditions.push(ilike(template.name, `%${input.name}%`));
+      if (input.search) conditions.push(ilike(template.name, `%${input.search}%`));
+      if (input.type) conditions.push(eq(template.type, input.type)); 
 
       const whereClause =
         conditions.length > 0 ? and(...conditions) : undefined;

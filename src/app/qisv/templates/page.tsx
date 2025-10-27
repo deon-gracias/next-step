@@ -60,6 +60,7 @@ import {
 } from "@/components/ui/alert-dialog";
 
 import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
 
 // Score Badge Component with conditional styling
 function ScoreBadge({ score }: { score: number }) {
@@ -86,6 +87,7 @@ function ScoreBadge({ score }: { score: number }) {
 
 const PAGE_SIZES = [10, 50, 100];
 
+
 export default function TemplatePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -96,9 +98,15 @@ export default function TemplatePage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [templateToDelete, setTemplateToDelete] = useState<{ id: number; name: string } | null>(null);
 
+  type TemplateType = "general" | "resident" | "case";
+const [templateType, setTemplateType] = useState<TemplateType | null>(null);
+const [search, setSearch] = useState<string>("");
+
   const templates = api.template.list.useQuery({
     page,
     pageSize,
+    type: templateType || undefined,
+    search: search || undefined,
   });
 
   const utils = api.useUtils();
@@ -177,6 +185,34 @@ export default function TemplatePage() {
             </Dialog>
           )}
         </div>
+
+        <div className="mb-4 flex flex-col sm:flex-row gap-3 sm:items-center">
+  <div className="flex items-center gap-2">
+    <Label>Type:</Label>
+    <Select onValueChange={v => setTemplateType(v === "all" ? null : v as TemplateType)} value={templateType ?? "all"}>
+  <SelectTrigger className="w-[120px]">
+    <SelectValue placeholder="All Types" />
+  </SelectTrigger>
+  <SelectContent>
+    <SelectItem value="all">All Types</SelectItem>
+    <SelectItem value="general">General</SelectItem>
+    <SelectItem value="resident">Resident</SelectItem>
+    <SelectItem value="case">Case</SelectItem>
+  </SelectContent>
+</Select>
+
+  </div>
+  <div className="flex-1">
+    <Input
+      type="text"
+      placeholder="Search by name..."
+      className="w-full sm:w-[260px]"
+      value={search}
+      onChange={e => setSearch(e.target.value)}
+    />
+  </div>
+</div>
+
 
         <div className="rounded-lg border">
           <Table>

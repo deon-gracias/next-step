@@ -117,21 +117,21 @@ async function main() {
   }
 
   const facilityData = [
-    { name: "Dexter House HealthCare", address: "120 Main Street, Malden, MA 02148", facilityCode: "1004" },
-    { name: "Fall River HealthCare", address: "1748 Highland Avenue, Fall River, MA 02720", facilityCode: "1022" },
-    { name: "Fitchburg HealthCare", address: "1199 John Fitch Highway, Fitchburg, MA 01420", facilityCode: "1005" },
-    { name: "Garden Place HealthCare", address: "193 Pleasant Street, Attleboro, MA 02703", facilityCode: "1006" },
-    { name: "Lee HealthCare", address: "620 Laurel Street, Lee, MA 01238", facilityCode: "1024" },
-    { name: "Melrose HealthCare", address: "40 Martin Street, Melrose, MA 02176", facilityCode: "1009" },
-    { name: "Norwood HealthCare", address: "460 Washington Street, Norwood, MA 02062", facilityCode: "1010" },
-    { name: "Oakhill HealthCare", address: "76 North Street, Middleboro, MA 02346", facilityCode: "1011" },
-    { name: "Plymouth Harborside HealthCare", address: "19 Obery Street, Plymouth, MA 02360", facilityCode: "1012" },
-    { name: "The Elmhurst HealthCare", address: "743 Main Street, Melrose, MA 02176", facilityCode: "1013" },
-    { name: "The Hermitage HealthCare", address: "383 Mill Street, Worcester, MA 01602", facilityCode: "1014" },
+    { name: "Dexter House Healthcare", address: "120 Main Street, Malden, MA 02148", facilityCode: "1004" },
+    { name: "Fall River Healthcare", address: "1748 Highland Avenue, Fall River, MA 02720", facilityCode: "1022" },
+    { name: "Fitchburg Healthcare", address: "1199 John Fitch Highway, Fitchburg, MA 01420", facilityCode: "1005" },
+    { name: "Garden Place Healthcare", address: "193 Pleasant Street, Attleboro, MA 02703", facilityCode: "1006" },
+    { name: "Lee Healthcare", address: "620 Laurel Street, Lee, MA 01238", facilityCode: "1024" },
+    { name: "Melrose Healthcare", address: "40 Martin Street, Melrose, MA 02176", facilityCode: "1009" },
+    { name: "Norwood Healthcare", address: "460 Washington Street, Norwood, MA 02062", facilityCode: "1010" },
+    { name: "Oakhill Healthcare", address: "76 North Street, Middleboro, MA 02346", facilityCode: "1011" },
+    { name: "Plymouth Harborside Healthcare", address: "19 Obery Street, Plymouth, MA 02360", facilityCode: "1012" },
+    { name: "The Elmhurst Healthcare", address: "743 Main Street, Melrose, MA 02176", facilityCode: "1013" },
+    { name: "The Hermitage Healthcare", address: "383 Mill Street, Worcester, MA 01602", facilityCode: "1014" },
     { name: "The Landing at Laurel Lake", address: "620 Laurel Street, Lee, MA 01238", facilityCode: "1025" },
-    { name: "Wedgemere HealthCare", address: "146 Dean Street, Taunton, MA 02780", facilityCode: "1015" },
-    { name: "West Newton HealthCare", address: "25 Armory Street, West Newton, MA 02465", facilityCode: "1016" },
-    { name: "Westborough HealthCare", address: "8 Colonial Drive, Westborough, MA 01581", facilityCode: "1030" },
+    { name: "Wedgemere Healthcare", address: "146 Dean Street, Taunton, MA 02780", facilityCode: "1015" },
+    { name: "West Newton Healthcare", address: "25 Armory Street, West Newton, MA 02465", facilityCode: "1016" },
+    { name: "Westborough Healthcare", address: "8 Colonial Drive, Westborough, MA 01581", facilityCode: "1030" },
   ];
 
   const facilities = await db
@@ -236,7 +236,7 @@ async function main() {
 
   // ✅ CASE TYPE TEMPLATES
   // Abuse Prohibition (from Abuse-QISVF001.docx)
-  packs.push({
+ packs.push({
     template: { name: "Abuse Prohibition", type: "case" },
     questions: [
       { text: "There was written evidence of how the facility handled alleged violations, per review of the investigation file and handled internally.", points: 10, ftags: ["F600","F609"] },
@@ -251,7 +251,7 @@ async function main() {
 
   // ✅ GENERAL TYPE TEMPLATES
   // Dining and Food Service (from Dining-and-Food-Service-QISVF004.docx)
-  packs.push({
+ packs.push({
     template: { name: "Dining and Food Service", type: "general" },
     questions: [
       { text: "A homelike environment was provided during the dining services that enhanced the resident's quality of life.", points: 2, ftags: ["F584"] },
@@ -283,45 +283,45 @@ async function main() {
   });
 
   // Environment
-  packs.push({
+ packs.push({
     template: { name: "Environment", type: "general" },
     questions: [
       { text: "Sound levels were comfortable on nursing units and in common areas.", points: 2, ftags: ["F584"] },
       { text: "Room air temperatures were comfortable. Temperatures were between 71° and 81°F.", points: 2, ftags: ["F584"] },
       { text: "Lighting levels were adequate and comfortable for individual resident and staff needs.", points: 2, ftags: ["F584"] },
-      { text: "Communication system exists to alert Maintenance Department for needed repairs.", points: 2, ftags: ["F584"] },
-      { text: "Clean utility room clean/orderly; nothing stored under sink; only clean items.", points: 3, ftags: ["F584","F880"] },
-      { text: "Ice machine was clean and properly functioning.", points: 3, ftags: ["F584","F880"] },
-      { text: "Shower and tub rooms clean and odor free; nothing stored inappropriately.", points: 3, ftags: ["F584","F880"] },
-      { text: "Privacy provided; shower curtains clean/proper; grab bars near tubs/showers/toilets.", points: 3, ftags: ["F583","F584"] },
-      { text: "Showers and tub rooms free of improperly stored items, chemicals, and hazardous products.", points: 3, ftags: ["F584"] },
-      { text: "Clean linen covered/stored; soiled linen appropriately covered.", points: 4, ftags: ["F880"] },
-      { text: "Water temperature ≤110° in sinks/baths/showers; daily log maintained.", points: 4, ftags: ["F584","F689"] },
-      { text: "Detailed plans/procedures for disasters, fire, weather emergencies, missing residents.", points: 3, ftags: ["F584"] },
-      { text: "Halls uncluttered; items on one side of hall.", points: 3, ftags: ["F584"] },
-      { text: "Handrails on both sides of hall clean, secure, free of sharp/rough edges.", points: 3, ftags: ["F584","F689"] },
-      { text: "Floors in common areas and resident rooms clean and in good repair.", points: 3, ftags: ["F584"] },
-      { text: "Walls and doors in common areas and resident rooms clean, stain-free, in good repair.", points: 3, ftags: ["F584"] },
-      { text: "Ceiling tiles intact and stain-free; fixtures clean, secure, in good repair.", points: 3, ftags: ["F584"] },
-      { text: "Resident rooms, bathrooms and common areas free of unpleasant odors.", points: 3, ftags: ["F584"] },
-      { text: "Cleaning products not left on top of unattended housekeeping carts.", points: 4, ftags: ["F689"] },
-      { text: "Resident call lights operable, visible, accessible.", points: 3, ftags: ["F919"] },
-      { text: "Dining and activity areas adequately furnished with sufficient space.", points: 2, ftags: ["F920"] },
-      { text: "Each resident room has privacy curtains in good repair.", points: 3, ftags: ["F583"] },
-      { text: "Each resident room furnished with functional furniture in good repair.", points: 2, ftags: ["F910"] },
-      { text: "Individual closet space with clothes racks and shelves.", points: 4, ftags: ["F910"] },
-      { text: "Bed brakes on resident beds intact and operable.", points: 3, ftags: ["F908"] },
-      { text: "Linen clean, stain-free, and in good repair.", points: 2, ftags: ["F880"] },
-      { text: "Resident rooms contain personal belongings to extent possible.", points: 3, ftags: ["F584"] },
-      { text: "Chemicals stored appropriately, labeled; no aerosols in utility room.", points: 3, ftags: ["F689"] },
-      { text: 'Items stored 3" off the floor and 18" from sprinkler heads in all areas.', points: 3, ftags: ["F584"] },
-      { text: "Paper goods stored separately from any chemicals.", points: 2, ftags: ["F689"] },
-      { text: "MSDS available for hazardous chemicals; accessible; staff aware of location.", points: 2, ftags: ["F689"] },
-      { text: "Eye wash stations present, accessible, maintained per manufacturer, functioning.", points: 2, ftags: ["F584"] },
-      { text: "Environment pest-free; pest control log describes actions/locations for each visit.", points: 2, ftags: ["F925"] },
-      { text: "Wet floor signs used correctly; only 1/2 corridor mopped at a time; arrow points to wet side.", points: 3, ftags: ["F689"] },
-      { text: "Sharps containers available; not filled past 2/3rds mark.", points: 3, ftags: ["F689"] },
-      { text: "Mechanical lift and resident equipment maintained; safe operating condition.", points: 2, ftags: ["F908"] },
+      { text: "There was a communication system within the facility to alert the Maintenance Department that a repair was needed.", points: 2, ftags: ["F584"] },
+      { text: "The clean utility room was clean and orderly with nothing stored under the sink. There were only clean items in the room.", points: 3, ftags: ["F584","F880"] },
+      { text: "The ice machine was clean and properly functioning.", points: 3, ftags: ["F584","F880"] },
+      { text: "The shower and tub room were clean and odor free. There is nothing stored in the shower or tub room, i.e. equipment, clothing, etc.", points: 3, ftags: ["F584","F880"] },
+      { text: "Privacy was provided for residents. Shower curtains were available and wide enough to go around the shower. The curtains were clean and properly hung. Grab bars were near tubs, showers, and toilets.", points: 3, ftags: ["F583","F584"] },
+      { text: "Showers and tub rooms were free of improperly stored items, chemicals, and hazardous products.", points: 3, ftags: ["F584"] },
+      { text: "All clean linen was covered or stored in a closet or covered linen cart. All soiled linen was storeds in an appropriately covered container.", points: 4, ftags: ["F880"] },
+      { text: "The water temperature in resident sinks, baths and showers was no higher than 110. There was a daily log of temperatures.", points: 4, ftags: ["F584","F689"] },
+      { text: "There were detailed plans and procedures to meet disasters, fire and weather emergencies and missing residents.", points: 3, ftags: ["F584"] },
+      { text: "The halls were uncluttered. All items were on one side of the hall.", points: 3, ftags: ["F584"] },
+      { text: "Resident handrails on both sides of the hall were clean, secure and free of sharp or rough edges.", points: 3, ftags: ["F584","F689"] },
+      { text: "Floors in common areas and resident rooms were clean, and in good repair.", points: 3, ftags: ["F584"] },
+      { text: "Walls and doors in common areas and in resident rooms were clean, free of stains and in good repair.", points: 3, ftags: ["F584"] },
+      { text: "The ceiling tiles were intact and stain-free. Ceiling light fixtures were clean, secure, and in good repair.", points: 3, ftags: ["F584"] },
+      { text: "Resident rooms, bathrooms and common areas were free of unpleasant odors.", points: 3, ftags: ["F584"] },
+      { text: "Cleaning products were not left on top of housekeeping carts when unattended.", points: 4, ftags: ["F689"] },
+      { text: "Resident call lights were operable, visible and accessible to the resident, staff and family.", points: 3, ftags: ["F919"] },
+      { text: "Dining and resident activity areas were adequately furnished and had sufficient space to accommodate care and activity.", points: 2, ftags: ["F920"] },
+      { text: "Each resident room has privacy curtains that are in good repair.", points: 3, ftags: ["F583"] },
+      { text: "Each resident room was furnished with functional furniture in good repair.", points: 2, ftags: ["F910"] },
+      { text: "There were Individual closet space with clothes racks and shelves.", points: 4, ftags: ["F910"] },
+      { text: "Bed brakes on resident beds were intact and operable.", points: 3, ftags: ["F908"] },
+      { text: "The linen was clean, stain-free, and in good repair.", points: 2, ftags: ["F880"] },
+      { text: "Resident rooms contained personal belongings to the extent possible.", points: 3, ftags: ["F584"] },
+      { text: "Chemicals in the utility room were stored appropriately, labeled with contents and hazard warnings. No aerosols were present.", points: 3, ftags: ["F689"] },
+      { text: 'Items were stored 3" off the floor and 18" from sprinkler heads in all areas.', points: 3, ftags: ["F584"] },
+      { text: "Paper goods were stored separately from any chemicals.", points: 2, ftags: ["F689"] },
+      { text: "There was a current MSD available for hazardous chemicals used in the facility. It was readily accessible for staff use. Staff were aware of its location.", points: 2, ftags: ["F689"] },
+      { text: "Eye wash stations were present and not behind locked doors. Staff were aware of their locations. They were maintained in acordance to manufacturer recommendations and functioning.", points: 2, ftags: ["F584"] },
+      { text: "The environment was pest-free. There was no evidence of rodent or insect infestation. There is a pest control log with a description of what was done and where for each visit.", points: 2, ftags: ["F925"] },
+      { text: "Wet floor signs were used when indicated. Only 1/2 width of a corridor was wet mopped at one time. Wet floor signs had an arrow that pointed to the wet side.", points: 3, ftags: ["F689"] },
+      { text: "Sharps containers (for needles, razors, or any sharp objects) were readily available. Containers were not filled past the 2/3rds mark.", points: 3, ftags: ["F689"] },
+      { text: "There was evidence that mechanical lift and resident equipment was maintained and in safe operating condition.", points: 2, ftags: ["F908"] },
     ],
   });
 
@@ -342,6 +342,25 @@ async function main() {
     ],
   });
 
+  packs.push({
+    template: { name: "Investigative Protocol - Infection Control", type: "general" },
+    questions: [
+        { text: "The facility had a system to prevent, monitor and investigate causes of infection.", points: 5, ftags: ["F880"] },
+        { text: "The infection control line listings are maintained monthly and contain the elements.", points: 15, ftags: ["F880"] },
+        { text: "There is evidence of monthly infection surveillance including analysis of infections for trend identification.", points: 15, ftags: ["F880"] },
+        { text: "Precaution room, have a sign on the door for the type of precaution. Staff can verbalize this type of infection.", points: 10, ftags: ["F880"] },
+        { text: "Handwashing was being conducted as appropriate. Hand hygiene was properly cleaned, changed and stored.", points: 8, ftags: ["F880"] },
+        { text: "Staff hand/linen appropriately to prevent the spread of infection (observed, dirty laundry was stored separately, (observ laundry area))", points: 5, ftags: ["F880"] },
+        { text: "Staff were washing their hands and equipment appropriately with soap/alcohol/wipes/appropriate cleaner.", points: 5, ftags: ["F880"] },
+        { text: "Gloves were not worn with residents that live gloves, and didn't see using dirty gloves with patients weekly and bagged when not in use. O2 filters are clean.", points: 10, ftags: ["F880"] },
+        { text: "Nebulizer tubing was changed weekly and bagged or in the locked upon in use.", points: 7, ftags: ["F880"] },
+        { text: "Feeding tube, piston syringes and Tubs Feeding bottles are changed and dated Q 24-hours.", points: 5, ftags: ["F880"] },
+        { text: "Feeding tube, piston syringes and Tubs Feeding bottles which had been opened or in use had lids, are not overflowing and are removed from the unit during meals.", points: 5, ftags: ["F880"] },
+        { text: "Are glucometers cleaned between resident use?", points: 5, ftags: ["F880"] }
+    ],
+});
+
+
   // Kitchen Observations (from Kitchen-Observations-QISVF0012.docx)
   packs.push({
     template: { name: "Kitchen Observations", type: "general" },
@@ -356,7 +375,7 @@ async function main() {
       { text: "Trays, dinnerware and utensils were in good condition.", points: 2, ftags: ["F812"] },
       { text: "Tray covers or appropriate trays were used.", points: 2, ftags: ["F550"] },
       { text: "The time span between the evening meal and the following day's breakfast was 14 hours or less.", points: 4, ftags: ["F809"] },
-      { text: "Meal times were acceptable to the majority of the residents in the facility.", points: 4, ftags: ["F809"] },
+      { text: "Meal times were acceptable to the majority of the residents in the facility. This was supported through Resident Council minutes.", points: 4, ftags: ["F809"] },
       { text: "Fire extinguisher was available and up to date.", points: 4, ftags: ["F908"] },
       { text: "Garbage and refuse was disposed of properly, including in the Dumpster area.", points: 5, ftags: ["F814"] },
       { text: "Disaster meal plan was current and posted.", points: 2, ftags: ["F812"] },
@@ -415,7 +434,7 @@ async function main() {
       { text: "Dietary storage area was clean and orderly.", points: 1, ftags: ["F812"] },
       { text: "Storage shelves were free of dust, food residue and rust.", points: 1, ftags: ["F812"] },
       { text: "No dented cans were found.", points: 1, ftags: ["F812"] },
-      { text: "Dry foods were stored off the floor and stock rotated. Dry foods were stored at least 18\" from ceiling.", points: 2, ftags: ["F812"] },
+      { text: "Dry foods were stored off the floor and stock rotated. Dry foods were stored at least 18'' from ceiling.", points: 2, ftags: ["F812"] },
       { text: "All open items were labeled and dated.", points: 2, ftags: ["F812"] },
       { text: "No expired food was present in the kitchen.", points: 4, ftags: ["F812"] },
       { text: "The mop closet was clean and neat, with mops/brooms stored off the floor. Mops are not stored in water in the mop closet.", points: 2, ftags: ["F812"] },
@@ -433,22 +452,22 @@ async function main() {
   packs.push({
     template: { name: "Medication Pass Administration and Documentation", type: "general" },
     questions: [
-      { text: "Nurse washed hands prior to pass and after each contact (approved hand-cleaning allowed).", points: 10, ftags: ["F880"] },
-      { text: "MAR reviewed prior to preparing medications.", points: 5, ftags: ["F758"] },
-      { text: "All medication orders had name, strength, frequency, route, PRN reason.", points: 5, ftags: ["F758"] },
-      { text: "Resident identified prior to administration.", points: 5, ftags: ["F758"] },
-      { text: "Appropriate vitals taken/documented when warranted.", points: 5, ftags: ["F758"] },
-      { text: "Special preparation/administration directions followed (e.g., liquids shaken).", points: 5, ftags: ["F758"] },
-      { text: "Only medications identified as crushable were crushed.", points: 5, ftags: ["F758"] },
-      { text: "Six R's followed (right resident, med, dose, route, time, documented).", points: 15, ftags: ["F758"] },
-      { text: "Same nurse prepared and administered; stayed until taken.", points: 5, ftags: ["F758"] },
-      { text: "All medications documented per policy.", points: 5, ftags: ["F758"] },
-      { text: "Injection sites documented on MAR.", points: 5, ftags: ["F758"] },
-      { text: "Used needles/syringes not recapped/broken; disposed in puncture-resistant container.", points: 5, ftags: ["F758"] },
-      { text: "Refused/omitted meds documented with reason on MAR.", points: 5, ftags: ["F758"] },
-      { text: "PRN meds: reason and result documented on MAR.", points: 5, ftags: ["F758"] },
-      { text: "Pass completed within 1 hour before/after designated time.", points: 10, ftags: ["F758"] },
-      { text: "Self-administration: order, assessment, and care plan present.", points: 5, ftags: ["F554"] },
+      { text: "The nurse washed hands prior to the start of the medication pass and after each resident contact. The nurse may use an approved hand-cleaning product.", points: 10, ftags: ["F880"] },
+      { text: "The MAR was reviewed prior to preparing the resident's medication.", points: 5, ftags: ["F758"] },
+      { text: "All medication orders contained the name, strength, frequency, route of administration and reason for PRN usage.", points: 5, ftags: ["F758"] },
+      { text: "The resident was identified prior to the administration of medication.", points: 5, ftags: ["F758"] },
+      { text: "Appropriate vital signs were taken and documented prior to preparing and administering the medication as warranted.", points: 5, ftags: ["F758"] },
+      { text: "Any special directions for preparation and administration of the medications were followed, such as liquids shaken, given with food, etc.", points: 5, ftags: ["F758"] },
+      { text: "Only those medications identified as crushable were crushed.", points: 5, ftags: ["F758"] },
+      { text: "The six R's were followed: Right resident received the right medication in the right dosage, via the right route, at the right time, documented).", points: 15, ftags: ["F758"] },
+      { text: "The same nurse who prepared the medication administered the medication and stayed with the resident until taken.", points: 5, ftags: ["F758"] },
+      { text: "All medications were documented per facility policy and procedure.", points: 5, ftags: ["F758"] },
+      { text: "Any injection sites were documented on the MAR.", points: 5, ftags: ["F758"] },
+      { text: "Used needles and syringes were not recapped or broken by hand and were disposed of in a suitable puncture-resistant container.", points: 5, ftags: ["F758"] },
+      { text: "Any medications that were refused or omitted were documented on the MAR along with the reason for the refusal and/or omission.", points: 5, ftags: ["F758"] },
+      { text: "Reason and result of PRN medications were documented on the MAR.", points: 5, ftags: ["F758"] },
+      { text: "The medication pass was completed within one (1) hour before or after the designated time of administration.", points: 10, ftags: ["F758"] },
+      { text: "Self Administration: Was order present, Was assessment present, Was care plan present.", points: 5, ftags: ["F554"] },
     ],
   });
 
@@ -462,7 +481,7 @@ async function main() {
       { text: "The medication carts were locked when not in use, unattended, or not in the nurse's direct view.", points: 5, ftags: ["F689","F761"] },
       { text: "The keys to the medication room and the medication cart were in the possession of authorized personnel only.", points: 5, ftags: ["F761"] },
       { text: "The refrigerator temp was conducted twice daily if vaccines are present.", points: 5, ftags: ["F761","F880"] },
-      { text: "The medication room refrigerator was clean. No food items were stored in this refrigerator. There is a thermometer in the refrigerator at 36° to 46°F.", points: 5, ftags: ["F761","F880"] },
+      { text: "The medication room refrigerator was clean. No food items were stored in this refrigerator. There is a thermometer in the refrigerator at 36° to 46°F. If the fridge temperature was out of range, there is documentation of action taken", points: 5, ftags: ["F761","F880"] },
       { text: "The medication room and medication cart were free of any pre-poured medications.", points: 5, ftags: ["F758"] },
       { text: "All oral medications, nasal inhalers, injections, externals, eye drops, and nasal drops were stored separately.", points: 5, ftags: ["F761"] },
       { text: "Expired medications were not found in the medication room or medication carts.", points: 10, ftags: ["F761"] },
@@ -470,29 +489,30 @@ async function main() {
       { text: "The narcotic count was correct and is completed by two (2) licensed nurses every shift and recorded.", points: 5, ftags: ["F755","R1250"] },
       { text: "All Schedule II drugs were double-locked.", points: 5, ftags: ["F761"] },
       { text: "There is documentation of regularly occurring narcotic destruction at least monthly.", points: 5, ftags: ["F755"] },
-      { text: "Multi-dose vials which have been opened or accessed should be dated and discarded within 28 days unless the manufacturer specifies a different date.", points: 15, ftags: ["F761"] },
+      { text: "Multi-dose vials which have been opened or accessed (e.g., needle-punctured) should be dated and discarded within 28 days unless the manufacturer specifies a different (shorter or longer) date for that opened vial.", points: 15, ftags: ["F761"] },
       { text: "Kits were not open or if open have been reordered per pharmacy protocol.", points: 5, ftags: ["F761"] },
       { text: "All discontinued medications were disposed of properly, following state requirements. Discontinued medications were not stored in the medication cart.", points: 5, ftags: ["F761"] },
     ],
   });
 
+
   // Nursing Unit Observation
   packs.push({
     template: { name: "Nursing Unit Observation", type: "general" },
     questions: [
-      { text: "No confidential resident info left in view (charts, MARs, labs, notes, etc.).", points: 8, ftags: ["F583"] },
-      { text: "Each CNA received pertinent info for assigned residents.", points: 7, ftags: ["F656"] },
-      { text: "Emergency cart and suction available, checked daily, documented.", points: 7, ftags: ["F658"] },
-      { text: "Emergency oxygen available/ready with gauge; wrench with tank.", points: 7, ftags: ["F658"] },
-      { text: "Oxygen stored appropriately; 'Oxygen – No Smoking' signs posted where stored/in use.", points: 8, ftags: ["F921"] },
-      { text: "Infectious waste handled appropriately, covered, biohazard-labeled, stored locked.", points: 10, ftags: ["F921"] },
-      { text: "Hazardous products stored locked when not in use or under direct supervision in use.", points: 8, ftags: ["F689","F921"] },
-      { text: "Open sterile pour bottles dated/initialed; discarded ≤24h; treatment creams labeled/intact.", points: 12, ftags: ["F880"] },
-      { text: "Staff knock and announce before entering resident rooms.", points: 7, ftags: ["F583"] },
-      { text: "Call lights answered timely.", points: 8, ftags: ["F550","F689"] },
-      { text: "Bedpans/urinals/graduates clean and stored appropriately.", points: 4, ftags: ["F880"] },
-      { text: "No personal items left in shower room.", points: 7, ftags: ["F880"] },
-      { text: "Food items in rooms stored properly in sealed containers.", points: 7, ftags: ["F812"] },
+      { text: "There was no confidential resident information lying out in view on visitors, such as open charts, MARs, treatment sheets, labs, progress notes, etc.).", points: 8, ftags: ["F583"] },
+      { text: "Each CNA received pertinent information regarding the residents they were assigned to for the day.", points: 7, ftags: ["F656"] },
+      { text: "There was an emergency cart and suction machine available, checked daily, and documented.", points: 7, ftags: ["F658"] },
+      { text: "Emergency oxygen is available and ready for use with a gauge and is applicable. There was a wrench with the tank.", points: 7, ftags: ["F658"] },
+      { text: "Oxygen was stored appropriately. 'Oxygen – No Smoking' signs were posted where oxygen was stored or in use.", points: 8, ftags: ["F921"] },
+      { text: "Infectious waste was handled appropriately, covered and marked as biohazard waste, and stored in a locked area.", points: 10, ftags: ["F921"] },
+      { text: "Hazardous products were stored in a locked area when not in use and were under constant direct supervision when being used.", points: 8, ftags: ["F689","F921"] },
+      { text: "Open pour bottles of sterile solution, such as normal saline and sterile water, were dated and initialed when opened, and discarded no more than 24 hours after opening. Treatment creams were appropriately labeled for individual use and all treatment packaging was intact.", points: 12, ftags: ["F880"] },
+      { text: "Facility staff were observed knocking on resident's doors and announcing themselves prior to  entering the resident's room.", points: 7, ftags: ["F583"] },
+      { text: "Call lights were answered in a timely manner.", points: 8, ftags: ["F550","F689"] },
+      { text: "Bedpans, urinals, and graduates for measuring output were clean and stored appropriately.", points: 4, ftags: ["F880"] },
+      { text: "No personal items left in the shower room.", points: 7, ftags: ["F880"] },
+      { text: "All food items in the resident's rooms were stored properly in sealed containers.", points: 7, ftags: ["F812"] },
     ],
   });
 

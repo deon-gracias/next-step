@@ -33,6 +33,7 @@ import { format } from "date-fns";
 // Import jsPDF - you'll need to install it: npm install jspdf html2canvas
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import { ftag } from "@/server/db/schema";
 
 // Local minimal types to avoid any
 type StatusVal = "met" | "unmet" | "not_applicable";
@@ -46,6 +47,7 @@ type QuestionStrength = {
   strengthPct: number;
   metCount: number;
   unmetCount: number;
+  ftags: { id: number; code: string; description: string }[];
 };
 
 // Helper component to display facility information
@@ -671,40 +673,143 @@ export default function SurveyDetailPage() {
   }, [allResponses]);
 
   // ✅ Updated: Question strengths calculation including case responses
-  const questionStrengths: QuestionStrength[] = useMemo(() => {
-    const qrows: QuestionRow[] = (questions.data ?? []) as QuestionRow[];
-    if (qrows.length === 0) return [];
+const questionStrengths: QuestionStrength[] = useMemo(() => {
+  const qrows: QuestionRow[] = (questions.data ?? []) as QuestionRow[];
+  if (qrows.length === 0) return [];
 
-    const metByQ = new Map<number, number>();
-    const unmetByQ = new Map<number, number>();
+  const out: QuestionStrength[] = [];
 
-    for (const q of qrows) {
-      metByQ.set(q.id, 0);
-      unmetByQ.set(q.id, 0);
+  for (const q of qrows) {
+    const questionPoints = q.points ?? 0;
+    let anyUnmet = false;
+    let anyMet = false;
+    let allNA = true;
+
+    if (survey.data?.template?.type === "resident") {
+      // Check all resident responses for this question
+      for (const r of (residents.data ?? [])) {
+        const entityKey = `resident-${r.residentId}`;
+        const cell = byEntity.get(entityKey)?.get(q.id);
+        
+        if (!cell?.status) {
+          allNA = false;
+          continue;
+        }
+        
+        if (cell.status === "unmet") {
+          anyUnmet = true;
+          allNA = false;
+          break;
+        }
+        if (cell.status === "met") {
+          anyMet = true;
+          allNA = false;
+        }
+        if (cell.status === "not_applicable") {
+          // NA doesn't change flags
+        }
+      }
+    } else if (survey.data?.template?.type === "case") {
+      // Check all case responses for this question
+      for (const c of (cases.data ?? [])) {
+        const entityKey = `case-${c.id}`;
+        const cell = byEntity.get(entityKey)?.get(q.id);
+        
+        if (!cell?.status) {
+          allNA = false;
+          continue;
+        }
+        
+        if (cell.status === "unmet") {
+          anyUnmet = true;
+          allNA = false;
+          break;
+        }
+        if (cell.status === "met") {
+          anyMet = true;
+          allNA = false;
+        }
+      }
     }
 
+    // Apply scoring logic: if any unmet = 0, if all met or all NA = full points
+    const shouldAward = !anyUnmet && (anyMet || allNA);
+    const awarded = shouldAward ? questionPoints : 0;
+
+    // Calculate strength percentage
+    const strengthPct = questionPoints > 0 ? Math.round((awarded / questionPoints) * 100) : 0;
+
+    // Count met/unmet for display
+    let metCount = 0, unmetCount = 0;
     for (const r of allResponses) {
-      if (!metByQ.has(r.questionId)) continue;
-      if (r.status === "met") metByQ.set(r.questionId, (metByQ.get(r.questionId) ?? 0) + 1);
-      else if (r.status === "unmet") unmetByQ.set(r.questionId, (unmetByQ.get(r.questionId) ?? 0) + 1);
+      if (r.questionId !== q.id) continue;
+      if (r.status === "met") metCount++;
+      else if (r.status === "unmet") unmetCount++;
     }
 
-    const out: QuestionStrength[] = [];
-    for (const q of qrows) {
-      const met = metByQ.get(q.id) ?? 0;
-      const unmet = unmetByQ.get(q.id) ?? 0;
-      const denom = met + unmet;
-      out.push({
-        questionId: q.id,
-        text: q.text,
-        points: q.points ?? 0,
-        strengthPct: denom === 0 ? 0 : Math.round((met / denom) * 100),
-        metCount: met,
-        unmetCount: unmet,
-      });
+    out.push({
+      questionId: q.id,
+      text: q.text,
+      points: awarded, // ← This is now the earned score
+      strengthPct,
+      metCount,
+      unmetCount,
+      ftags: ftagsMap.get(q.id) ?? [],
+    });
+  }
+
+  return out;
+}, [questions.data, allResponses, byEntity, residents.data, cases.data, survey.data?.template?.type, ftagsMap]);
+
+
+  // Add after allResponses, questions, etc are available
+const generalStrengths = React.useMemo(() => {
+  if (survey.data?.template?.type !== "general" || !questions.data || !allResponses) return [];
+
+  const generalResponses = allResponses.filter(r => !r.residentId && !r.surveyCaseId);
+
+  return (questions.data ?? []).map(q => {
+    const resp = generalResponses.find(r => r.questionId === q.id);
+    const questionPoints = q.points ?? 0;
+
+    let metCount = 0, unmetCount = 0, naCount = 0;
+    let anyUnmet = false;
+    let anyMet = false;
+    let allNA = false;
+
+    if (resp) {
+      if (resp.status === "met") {
+        metCount = 1;
+        anyMet = true;
+      } else if (resp.status === "unmet") {
+        unmetCount = 1;
+        anyUnmet = true;
+      } else if (resp.status === "not_applicable") {
+        naCount = 1;
+        allNA = true;
+      }
     }
-    return out;
-  }, [questions.data, allResponses]);
+
+    // Apply scoring logic
+    const shouldAward = !anyUnmet && (anyMet || allNA);
+    const awarded = shouldAward ? questionPoints : 0;
+    const strengthPct = questionPoints > 0 ? Math.round((awarded / questionPoints) * 100) : 0;
+
+    return {
+      questionId: q.id,
+      text: q.text,
+      points: questionPoints,
+      awarded, // ← This is the earned score
+      strengthPct,
+      metCount,
+      unmetCount,
+      naCount,
+      ftags: ftagsMap.get(q.id) ?? [],
+    };
+  });
+}, [survey.data?.template?.type, questions.data, allResponses, ftagsMap]);
+
+
 
   const ResidentInitial = ({ residentId }: { residentId: number }) => {
     const resident = api.resident.byId.useQuery({ id: residentId });
@@ -877,89 +982,89 @@ export default function SurveyDetailPage() {
   // }, [questions.data, byEntity, residents.data, cases.data, allResponses, survey.data?.template?.type]);
 
   // ✅ UPDATED: Add the allNA condition here
-const { overallScore, maxTemplatePoints, overallPercent } = useMemo(() => {
-  const qs: QuestionRow[] = (questions.data ?? []) as QuestionRow[];
-  let awarded = 0;
+  const { overallScore, maxTemplatePoints, overallPercent } = useMemo(() => {
+    const qs: QuestionRow[] = (questions.data ?? []) as QuestionRow[];
+    let awarded = 0;
 
-  for (const q of qs) {
-    let anyUnmetOrUnanswered = false;
-    let anyMet = false;
-    let allNA = true; // ✅ ADD THIS LINE
+    for (const q of qs) {
+      let anyUnmetOrUnanswered = false;
+      let anyMet = false;
+      let allNA = true; // ✅ ADD THIS LINE
 
-    if (survey.data?.template?.type === "resident") {
-      for (const r of residents.data ?? []) {
-        const entityKey = `resident-${r.residentId}`;
-        const cell = byEntity.get(entityKey)?.get(q.id);
+      if (survey.data?.template?.type === "resident") {
+        for (const r of residents.data ?? []) {
+          const entityKey = `resident-${r.residentId}`;
+          const cell = byEntity.get(entityKey)?.get(q.id);
 
-        if (!cell?.status) {
+          if (!cell?.status) {
+            anyUnmetOrUnanswered = true;
+            allNA = false; // ✅ ADD THIS
+            break;
+          }
+          if (cell.status === "unmet") {
+            anyUnmetOrUnanswered = true;
+            allNA = false; // ✅ ADD THIS
+            break;
+          }
+          if (cell.status === "met") {
+            anyMet = true;
+            allNA = false; // ✅ ADD THIS
+          }
+          // ✅ ADD THIS: N/A doesn't change anyUnmetOrUnanswered or anyMet, keeps allNA true
+        }
+      }
+      else if (survey.data?.template?.type === "case") {
+        for (const c of cases.data ?? []) {
+          const entityKey = `case-${c.id}`;
+          const cell = byEntity.get(entityKey)?.get(q.id);
+
+          if (!cell?.status) {
+            anyUnmetOrUnanswered = true;
+            allNA = false; // ✅ ADD THIS
+            break;
+          }
+          if (cell.status === "unmet") {
+            anyUnmetOrUnanswered = true;
+            allNA = false; // ✅ ADD THIS
+            break;
+          }
+          if (cell.status === "met") {
+            anyMet = true;
+            allNA = false; // ✅ ADD THIS
+          }
+        }
+      }
+      else if (survey.data?.template?.type === "general") {
+        const generalResponses = allResponses.filter(r => !r.residentId && !r.surveyCaseId);
+        const cell = generalResponses.find(r => r.questionId === q.id);
+
+        if (!cell || !cell.status) {
           anyUnmetOrUnanswered = true;
           allNA = false; // ✅ ADD THIS
-          break;
-        }
-        if (cell.status === "unmet") {
+        } else if (cell.status === "unmet") {
           anyUnmetOrUnanswered = true;
           allNA = false; // ✅ ADD THIS
-          break;
-        }
-        if (cell.status === "met") {
+        } else if (cell.status === "met") {
           anyMet = true;
           allNA = false; // ✅ ADD THIS
         }
-        // ✅ ADD THIS: N/A doesn't change anyUnmetOrUnanswered or anyMet, keeps allNA true
       }
-    }
-    else if (survey.data?.template?.type === "case") {
-      for (const c of cases.data ?? []) {
-        const entityKey = `case-${c.id}`;
-        const cell = byEntity.get(entityKey)?.get(q.id);
 
-        if (!cell?.status) {
-          anyUnmetOrUnanswered = true;
-          allNA = false; // ✅ ADD THIS
-          break;
-        }
-        if (cell.status === "unmet") {
-          anyUnmetOrUnanswered = true;
-          allNA = false; // ✅ ADD THIS
-          break;
-        }
-        if (cell.status === "met") {
-          anyMet = true;
-          allNA = false; // ✅ ADD THIS
-        }
-      }
-    }
-    else if (survey.data?.template?.type === "general") {
-      const generalResponses = allResponses.filter(r => !r.residentId && !r.surveyCaseId);
-      const cell = generalResponses.find(r => r.questionId === q.id);
+      // ✅ CHANGE THIS LINE:
+      // OLD: const shouldAward = !anyUnmetOrUnanswered && anyMet;
+      // NEW:
+      const shouldAward = !anyUnmetOrUnanswered && (anyMet || allNA);
 
-      if (!cell || !cell.status) {
-        anyUnmetOrUnanswered = true;
-        allNA = false; // ✅ ADD THIS
-      } else if (cell.status === "unmet") {
-        anyUnmetOrUnanswered = true;
-        allNA = false; // ✅ ADD THIS
-      } else if (cell.status === "met") {
-        anyMet = true;
-        allNA = false; // ✅ ADD THIS
+      if (shouldAward) {
+        awarded += q.points ?? 0;
       }
     }
 
-    // ✅ CHANGE THIS LINE:
-    // OLD: const shouldAward = !anyUnmetOrUnanswered && anyMet;
-    // NEW:
-    const shouldAward = !anyUnmetOrUnanswered && (anyMet || allNA);
+    const max = qs.reduce((s, q) => s + (q.points ?? 0), 0);
+    const pct = max > 0 ? Math.round((awarded / max) * 100) : 0;
 
-    if (shouldAward) {
-      awarded += q.points ?? 0;
-    }
-  }
-
-  const max = qs.reduce((s, q) => s + (q.points ?? 0), 0);
-  const pct = max > 0 ? Math.round((awarded / max) * 100) : 0;
-
-  return { overallScore: awarded, maxTemplatePoints: max, overallPercent: pct };
-}, [questions.data, byEntity, residents.data, cases.data, allResponses, survey.data?.template?.type]);
+    return { overallScore: awarded, maxTemplatePoints: max, overallPercent: pct };
+  }, [questions.data, byEntity, residents.data, cases.data, allResponses, survey.data?.template?.type]);
 
 
 
@@ -2061,6 +2166,61 @@ const { overallScore, maxTemplatePoints, overallPercent } = useMemo(() => {
 
         <Separator />
 
+        {survey.data?.template?.type === "general" && generalStrengths.length > 0 && (
+          <>
+            <div className="mb-4">
+              <h2 className="text-xl font-bold">
+                {survey.data.template?.name || `Template #${survey.data.templateId}`}
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                {allQuestionIds.length} questions
+              </p>
+            </div>
+            <div className="rounded-md border p-3 mb-8">
+              <div className="text-sm font-medium mb-2">Question Strengths</div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                {generalStrengths.map(qs => (
+                  <div
+                    key={qs.questionId}
+                    className={cn(
+                      "border px-3 py-2 rounded-md text-xs",
+                      qs.strengthPct < 85 ? "bg-amber-50 border-amber-200" : "bg-muted"
+                    )}
+                  >
+                    <div className="font-semibold line-clamp-1">{qs.text}</div>
+                    <div className="mt-1 flex flex-wrap items-center gap-1">
+                      {qs.ftags && qs.ftags.length > 0
+                        ? (
+                          <>
+                            F-Tags:
+                            {qs.ftags.map(ftag => (
+                              <span
+                                key={ftag.id}
+                                className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-medium text-gray-700"
+                                title={ftag.description ?? ftag.code}
+                              >
+                                {ftag.code}
+                              </span>
+                            ))}
+                          </>
+                        )
+                        : <span className="text-[11px] text-muted-foreground">No F-Tags</span>
+                      }
+                    </div>
+                    <div className="mt-1 font-bold">Score: {qs.points}</div>
+
+                    <div className="mt-1">Strength: {qs.strengthPct}%</div>
+                    <div className="text-muted-foreground">
+                      Met: {qs.metCount} ・ Unmet: {qs.unmetCount} ・ N/A: {qs.naCount}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+
+
         {(survey.data?.template?.type === "resident" || survey.data?.template?.type === "case") && (
           <>
             {/* Template Information */}
@@ -2086,6 +2246,25 @@ const { overallScore, maxTemplatePoints, overallPercent } = useMemo(() => {
                     )}
                   >
                     <div className="font-semibold line-clamp-1">{qs.text}</div>
+                    <div className="mt-1 flex flex-wrap items-center gap-1">
+                      {qs.ftags && qs.ftags.length > 0
+                        ? (
+                          <>
+                            F-Tags:
+                            {qs.ftags.map(ftag => (
+                              <span
+                                key={ftag.id}
+                                className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-medium text-gray-700"
+                                title={ftag.description ?? ftag.code}
+                              >
+                                {ftag.code}
+                              </span>
+                            ))}
+                          </>
+                        )
+                        : <span className="text-[11px] text-muted-foreground">No F-Tags</span>
+                      }
+                    </div>
                     <div className="mt-1 font-bold">Score: {qs.points}</div>
                     <div className="mt-1">Strength: {qs.strengthPct}%</div>
                     <div className="text-muted-foreground">Met: {qs.metCount} ・ Unmet: {qs.unmetCount}</div>
@@ -2093,7 +2272,7 @@ const { overallScore, maxTemplatePoints, overallPercent } = useMemo(() => {
                 ))}
               </div>
             </div>
-            </>
+          </>
         )}
 
         {(survey.data.template?.type === "resident") && (

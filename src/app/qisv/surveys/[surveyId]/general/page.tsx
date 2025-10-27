@@ -209,7 +209,7 @@ export default function GeneralSurveyPage() {
               <div key={field.id} className="rounded border p-3 space-y-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1">
-                    <p className="font-semibold">
+                    <p className="">
                       {q?.text ?? `Question ID: ${qid}`}
                     </p>
 
