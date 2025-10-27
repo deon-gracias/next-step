@@ -1228,7 +1228,7 @@ export default function SurveysPage() {
 
 
                   <Select value={closedStatusFilter} onValueChange={setClosedStatusFilter}>
-                    <SelectTrigger className="h-8 w-32 bg-white">
+                    <SelectTrigger className="h-8 w-40 bg-white">
                       <SelectValue placeholder="POC Status" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1323,7 +1323,7 @@ export default function SurveysPage() {
 
 
                   <Select value={pendingStatusFilter} onValueChange={setPendingStatusFilter}>
-                    <SelectTrigger className="h-8 w-28 bg-white">
+                    <SelectTrigger className="h-8 w-40 bg-white">
                       <SelectValue placeholder="All Status" />
                     </SelectTrigger>
                     <SelectContent>
