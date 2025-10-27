@@ -243,6 +243,33 @@ createSurvey: protectedProcedure
   }),
 
 
+  // Add this to your qalRouter in server/api/routers/qal.ts
+
+deleteSurvey: protectedProcedure
+  .input(z.object({ id: z.number().int().positive() }))
+  .mutation(async ({ ctx, input }) => {
+    // Delete all related data first (cascade)
+    
+    // Delete question responses
+    await ctx.db
+      .delete(qalQuestionResponse)
+      .where(eq(qalQuestionResponse.surveyId, input.id));
+    
+    // Delete section responses
+    await ctx.db
+      .delete(qalSurveySection)
+      .where(eq(qalSurveySection.surveyId, input.id));
+    
+    // Delete survey
+    await ctx.db
+      .delete(qalSurvey)
+      .where(eq(qalSurvey.id, input.id));
+    
+    return { success: true };
+  }),
+
+
+
 
   listSurveys: protectedProcedure
     .input(

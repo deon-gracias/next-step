@@ -7,6 +7,8 @@ import {
   LayoutDashboardIcon,
   LayoutListIcon,
   BarChart3Icon,
+  PersonStandingIcon,
+  User2,
 } from "lucide-react";
 
 import { OrganizationSwitcher } from "@/components/org-switcher";
@@ -54,6 +56,12 @@ const navItems = [
     icon: BuildingIcon,
     resource: null,
     // resource: "facility", // reuse facility permission if you already gate it
+  },
+  {
+    name: "Users",
+    href: "/qal/users",
+    icon: User2,
+    resource: null,
   }
 ];
 

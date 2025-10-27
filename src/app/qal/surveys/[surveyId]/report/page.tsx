@@ -144,7 +144,7 @@ export default function QALReportPage() {
                 />
                 <InfoRow 
                   label="Administrator:" 
-                  value="" 
+                  value={survey.administrator || "N/A"} 
                 />
               </div>
 
@@ -156,15 +156,15 @@ export default function QALReportPage() {
                 />
                 <InfoRow 
                   label="Operations:" 
-                  value="" 
+                  value={survey.surveyType === "onsite" ? "On-Site" : "Off-Site"} 
                 />
                 <InfoRow 
                   label="Business Office Manager:" 
-                  value="" 
+                 value={survey.businessOfficeManager || ""} 
                 />
                 <InfoRow 
                   label="Business Office Assistant or Designee:" 
-                  value="" 
+                  value={survey.assistantBusinessOfficeManager || ""} 
                 />
               </div>
             </div>
