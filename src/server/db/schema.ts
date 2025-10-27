@@ -327,7 +327,7 @@ export const surveyPOC = pgTable(
   },
   (table) => [
     // ✅ FIXED: Add all three constraint types
-    
+
     // Resident POCs: One POC per survey+resident+template+question
     unique("unique_resident_poc").on(
       table.surveyId,
@@ -335,7 +335,7 @@ export const surveyPOC = pgTable(
       table.templateId,
       table.questionId,
     ),
-    
+
     // ✅ NEW: Case POCs: One POC per survey+case+template+question
     unique("unique_case_poc").on(
       table.surveyId,
@@ -343,7 +343,7 @@ export const surveyPOC = pgTable(
       table.templateId,
       table.questionId,
     ),
-    
+
     // ✅ NEW: General POCs: One POC per survey+question (no resident/case)
     unique("unique_general_poc").on(
       table.surveyId,
@@ -419,7 +419,7 @@ export const surveyDOC = pgTable(
   },
   (table) => [
     // ✅ FIXED: Add all three constraint types
-    
+
     // Resident DOCs
     unique("unique_resident_doc").on(
       table.surveyId,
@@ -427,7 +427,7 @@ export const surveyDOC = pgTable(
       table.templateId,
       table.questionId
     ),
-    
+
     // ✅ NEW: Case DOCs
     unique("unique_case_doc").on(
       table.surveyId,
@@ -435,7 +435,7 @@ export const surveyDOC = pgTable(
       table.templateId,
       table.questionId
     ),
-    
+
     // ✅ NEW: General DOCs
     unique("unique_general_doc").on(
       table.surveyId,
@@ -528,6 +528,8 @@ export const qalQuestion = pgTable("qal_question", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+export const surveyTypeEnum = pgEnum("survey_type", ["onsite", "offsite"]);
+
 // Facility-level survey (no residents)
 export const qalSurvey = pgTable("qal_survey", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
@@ -535,6 +537,10 @@ export const qalSurvey = pgTable("qal_survey", {
   templateId: integer("template_id").notNull().references(() => qalTemplate.id, { onDelete: "restrict" }),
   auditorUserId: text("auditor_user_id").references(() => user.id, { onDelete: "set null" }),
   surveyDate: timestamp("survey_date").defaultNow().notNull(),
+   surveyType: surveyTypeEnum("survey_type").notNull().default("onsite"),
+  administrator: text("administrator"),
+  businessOfficeManager: text("business_office_manager"),
+  assistantBusinessOfficeManager: text("assistant_business_office_manager"),
   isLocked: boolean("is_locked").default(false).notNull(),
   totalPossible: numeric("total_possible", { precision: 12, scale: 4 }).default("0"),
   totalEarned: numeric("total_earned", { precision: 12, scale: 4 }).default("0"),
@@ -549,17 +555,17 @@ export const qalSurveySection = pgTable("qal_survey_section", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   surveyId: integer("survey_id").notNull().references(() => qalSurvey.id, { onDelete: "cascade" }),
   sectionId: integer("section_id").notNull().references(() => qalSection.id, { onDelete: "restrict" }),
-  
+
   // Scoring fields
   fixedSample: integer("fixed_sample").notNull(), // copied from section total
   passedCount: integer("passed_count"), // user input or "NA"
   isNotApplicable: boolean("is_not_applicable").default(false),
   earnedPoints: numeric("earned_points", { precision: 12, scale: 4 }).default("0"),
-  
+
   // Testing Sample & Comments
   testingSample: text("testing_sample"), // PCC IDs, dates JSON or text
   comments: text("comments"),
-  
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -587,7 +593,8 @@ export const qalQuestionResponse = pgTable(
     id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
     surveyId: integer("survey_id").notNull().references(() => qalSurvey.id, { onDelete: "cascade" }),
     questionId: integer("question_id").notNull().references(() => qalQuestion.id, { onDelete: "cascade" }),
-    passedCount: integer("passed_count"), // for this specific question
+    sampleSize: integer("sample_size").default(0), // ✅ ADD THIS LINE
+    passedCount: integer("passed_count"),
     isNotApplicable: boolean("is_not_applicable").default(false),
     testingSample: text("testing_sample"),
     comments: text("comments"),
@@ -597,6 +604,7 @@ export const qalQuestionResponse = pgTable(
     unique("uq_qal_question_response").on(t.surveyId, t.questionId),
   ],
 );
+
 
 // QAL POC per section
 export const qalPOC = pgTable("qal_poc", {

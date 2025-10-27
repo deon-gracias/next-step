@@ -12,6 +12,10 @@ import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { CalendarIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
@@ -27,80 +31,85 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { authClient } from "@/components/providers/auth-client";
-// ✅ ADD THIS: Import your auth hook
 
 export default function QALSurveysIndex() {
   const utils = api.useUtils();
-  
-  // ✅ GET CURRENT USER
   const session = authClient.useSession();
 
-  // Facilities from the shared facility table
   const facilities = api.facility.list.useQuery({ page: 1, pageSize: 100 });
-
-  // Templates for dropdown
   const templates = api.qal.listTemplates.useQuery();
 
-  // Page filter (optional)
   const [facilityId, setFacilityId] = useState<number | undefined>(undefined);
-
-  // Surveys listing
   const surveys = api.qal.listSurveys.useQuery({ facilityId });
-
-  // Create survey
   const create = api.qal.createSurvey.useMutation();
 
-  // Dialog state
   const [open, setOpen] = useState(false);
   const [selectedFacilityId, setSelectedFacilityId] = useState<number | undefined>(undefined);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<number | undefined>(undefined);
-  const [surveyDate, setSurveyDate] = useState<string>(
-    format(new Date(), "yyyy-MM-dd")
-  );
+  const [surveyDate, setSurveyDate] = useState<Date | undefined>(new Date());
+  const [surveyType, setSurveyType] = useState<"onsite" | "offsite">("onsite");
+  const [administrator, setAdministrator] = useState("");
+  const [businessOfficeManager, setBusinessOfficeManager] = useState("");
+  const [assistantBusinessOfficeManager, setAssistantBusinessOfficeManager] = useState("");
 
   const handleOpenCreate = () => {
     const firstFacility = facilities.data?.data?.[0]?.id;
-    const firstTemplate = templates.data?.[0]?.id;
     setSelectedFacilityId(firstFacility);
-    setSelectedTemplateId(firstTemplate);
-    setSurveyDate(format(new Date(), "yyyy-MM-dd"));
+    setSurveyDate(new Date());
+    setSurveyType("onsite");
+    setAdministrator("");
+    setBusinessOfficeManager("");
+    setAssistantBusinessOfficeManager("");
     setOpen(true);
   };
 
   const handleConfirmCreate = async () => {
-    // ✅ CHECK FOR LOGGED IN USER
     if (!session?.data?.user?.id) {
       toast.error("You must be logged in to create a survey");
       return;
     }
 
     if (!selectedFacilityId) {
-      toast.error("Select a facility");
+      toast.error("Please select a facility");
       return;
     }
-    if (!selectedTemplateId) {
-      toast.error("Select a template");
-      return;
-    }
+
     if (!surveyDate) {
-      toast.error("Select a survey date");
+      toast.error("Please select a survey date");
+      return;
+    }
+
+    if (!administrator.trim()) {
+      toast.error("Administrator name is required");
+      return;
+    }
+
+    if (!businessOfficeManager.trim()) {
+      toast.error("Business Office Manager name is required");
+      return;
+    }
+
+    const firstActiveTemplate = templates.data?.find(t => t.isActive)?.id;
+    if (!firstActiveTemplate) {
+      toast.error("No active template found");
       return;
     }
 
     try {
-      // ✅ USE REAL USER ID FROM SESSION
       const sv = await create.mutateAsync({
         facilityId: selectedFacilityId,
-        templateId: selectedTemplateId,
-        surveyDate: new Date(surveyDate),
-        auditorUserId: session.data.user.id, // ← Real user ID
+        templateId: firstActiveTemplate,
+        surveyDate: surveyDate,
+        auditorUserId: session.data.user.id,
+        surveyType: surveyType,
+        administrator: administrator.trim(),
+        businessOfficeManager: businessOfficeManager.trim(),
+        assistantBusinessOfficeManager: assistantBusinessOfficeManager.trim() || undefined,
       });
 
       await utils.qal.listSurveys.invalidate();
-      toast.success("Survey created");
+      toast.success("Survey created successfully");
       setOpen(false);
 
-      // Navigate to survey detail
       window.location.href = `/qal/surveys/${sv.id}`;
     } catch (e: any) {
       toast.error(e?.message ?? "Failed to create survey");
@@ -135,7 +144,7 @@ export default function QALSurveysIndex() {
           </Select>
           <Button 
             onClick={handleOpenCreate} 
-            disabled={templates.isLoading || !session?.data?.user?.id} // ✅ Disable if not logged in
+            disabled={templates.isLoading || !session?.data?.user?.id}
           >
             New Survey
           </Button>
@@ -193,7 +202,7 @@ export default function QALSurveysIndex() {
                       </TableCell>
                       <TableCell className="text-right">
                         <Link
-                          href={`/qal/surveys/${s.id}/facility/${s.facilityId}`}
+                          href={`/qal/surveys/${s.id}`}
                           className={buttonVariants({ variant: "outline", size: "sm" })}
                         >
                           Open
@@ -215,41 +224,17 @@ export default function QALSurveysIndex() {
         </CardContent>
       </Card>
 
-      {/* Create Survey Dialog */}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Create New QAL Survey</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            {/* Template Selection */}
-            <div className="space-y-2">
-              <Label htmlFor="template">Template</Label>
-              <Select
-                value={selectedTemplateId?.toString() ?? "none"}
-                onValueChange={(val) =>
-                  setSelectedTemplateId(val === "none" ? undefined : Number(val))
-                }
-              >
-                <SelectTrigger id="template">
-                  <SelectValue placeholder="Select template" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none" disabled>
-                    Select template
-                  </SelectItem>
-                  {templates.data?.map((t) => (
-                    <SelectItem key={t.id} value={t.id.toString()}>
-                      {t.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
             {/* Facility Selection */}
             <div className="space-y-2">
-              <Label htmlFor="facility">Facility</Label>
+              <Label htmlFor="facility">
+                Facility <span className="text-red-500">*</span>
+              </Label>
               <Select
                 value={selectedFacilityId?.toString() ?? "none"}
                 onValueChange={(val) =>
@@ -274,12 +259,94 @@ export default function QALSurveysIndex() {
 
             {/* Survey Date */}
             <div className="space-y-2">
-              <Label htmlFor="date">Survey Date</Label>
+              <Label>
+                Survey Date <span className="text-red-500">*</span>
+              </Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !surveyDate && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {surveyDate ? format(surveyDate, "PPP") : <span>Pick a date</span>}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                  <Calendar
+                    mode="single"
+                    selected={surveyDate}
+                    onSelect={setSurveyDate}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            {/* Survey Type - On-Site/Off-Site */}
+            <div className="space-y-2">
+              <Label>
+                Survey Type <span className="text-red-500">*</span>
+              </Label>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant={surveyType === "onsite" ? "default" : "outline"}
+                  className="flex-1"
+                  onClick={() => setSurveyType("onsite")}
+                >
+                  On-Site
+                </Button>
+                <Button
+                  type="button"
+                  variant={surveyType === "offsite" ? "default" : "outline"}
+                  className="flex-1"
+                  onClick={() => setSurveyType("offsite")}
+                >
+                  Off-Site
+                </Button>
+              </div>
+            </div>
+
+            {/* Administrator */}
+            <div className="space-y-2">
+              <Label htmlFor="administrator">
+                Administrator <span className="text-red-500">*</span>
+              </Label>
               <Input
-                id="date"
-                type="date"
-                value={surveyDate}
-                onChange={(e) => setSurveyDate(e.target.value)}
+                id="administrator"
+                placeholder="Enter administrator name"
+                value={administrator}
+                onChange={(e) => setAdministrator(e.target.value)}
+              />
+            </div>
+
+            {/* Business Office Manager */}
+            <div className="space-y-2">
+              <Label htmlFor="bom">
+                Business Office Manager <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="bom"
+                placeholder="Enter business office manager name"
+                value={businessOfficeManager}
+                onChange={(e) => setBusinessOfficeManager(e.target.value)}
+              />
+            </div>
+
+            {/* Assistant Business Office Manager */}
+            <div className="space-y-2">
+              <Label htmlFor="abom">
+                Assistant Business Office Manager <span className="text-muted-foreground">(Optional)</span>
+              </Label>
+              <Input
+                id="abom"
+                placeholder="Enter assistant BOM name (optional)"
+                value={assistantBusinessOfficeManager}
+                onChange={(e) => setAssistantBusinessOfficeManager(e.target.value)}
               />
             </div>
           </div>

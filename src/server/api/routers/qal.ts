@@ -12,16 +12,11 @@ import {
 } from "@/server/db/schema";
 import { and, eq, inArray, asc, desc } from "drizzle-orm";
 
-// Helper to convert number to DB numeric string
 function toDbNumeric(value: number): string {
   return value.toFixed(4);
 }
 
 export const qalRouter = createTRPCRouter({
-  // ===========================
-  // TEMPLATE MANAGEMENT
-  // ===========================
-  
   createTemplate: protectedProcedure
     .input(
       z.object({
@@ -61,7 +56,6 @@ export const qalRouter = createTRPCRouter({
 
       if (!template) throw new Error("Template not found");
 
-      // Get sections with questions
       const sections = await ctx.db
         .select()
         .from(qalSection)
@@ -88,10 +82,6 @@ export const qalRouter = createTRPCRouter({
         sections: sectionsWithQuestions,
       };
     }),
-
-  // ===========================
-  // SECTION MANAGEMENT
-  // ===========================
 
   createSection: protectedProcedure
     .input(
@@ -150,10 +140,6 @@ export const qalRouter = createTRPCRouter({
       return { success: true };
     }),
 
-  // ===========================
-  // QUESTION MANAGEMENT
-  // ===========================
-
   createQuestion: protectedProcedure
     .input(
       z.object({
@@ -161,7 +147,7 @@ export const qalRouter = createTRPCRouter({
         prompt: z.string().min(1),
         guidance: z.string().optional(),
         fixedSample: z.number().int().min(0),
-        possiblePoints: z.number().min(0), // ✅ ADDED
+        possiblePoints: z.number().min(0),
         sortOrder: z.number().int().min(0),
       })
     )
@@ -173,7 +159,7 @@ export const qalRouter = createTRPCRouter({
           prompt: input.prompt,
           guidance: input.guidance || null,
           fixedSample: input.fixedSample,
-          possiblePoints: toDbNumeric(input.possiblePoints), // ✅ ADDED
+          possiblePoints: toDbNumeric(input.possiblePoints),
           sortOrder: input.sortOrder,
         })
         .returning();
@@ -188,7 +174,7 @@ export const qalRouter = createTRPCRouter({
         prompt: z.string().min(1).optional(),
         guidance: z.string().optional(),
         fixedSample: z.number().int().min(0).optional(),
-        possiblePoints: z.number().min(0).optional(), // ✅ ADDED
+        possiblePoints: z.number().min(0).optional(),
         sortOrder: z.number().int().min(0).optional(),
       })
     )
@@ -197,7 +183,7 @@ export const qalRouter = createTRPCRouter({
 
       const updateData: any = updates;
       if (possiblePoints !== undefined) {
-        updateData.possiblePoints = toDbNumeric(possiblePoints); // ✅ ADDED
+        updateData.possiblePoints = toDbNumeric(possiblePoints);
       }
 
       const [updated] = await ctx.db
@@ -219,38 +205,44 @@ export const qalRouter = createTRPCRouter({
       return { success: true };
     }),
 
-  // ===========================
-  // SURVEY MANAGEMENT
-  // ===========================
-
-  createSurvey: protectedProcedure
-    .input(
-      z.object({
-        templateId: z.number().int().positive(),
-        facilityId: z.number().int().positive(),
-        surveyDate: z.date(),
-        auditorUserId: z.string(),
+createSurvey: protectedProcedure
+  .input(
+    z.object({
+      templateId: z.number().int().positive(),
+      facilityId: z.number().int().positive(),
+      surveyDate: z.date(),
+      auditorUserId: z.string(),
+      surveyType: z.enum(["onsite", "offsite"]), // ✅ ADD THIS
+      administrator: z.string().min(1, "Administrator is required"),
+      businessOfficeManager: z.string().min(1, "Business Office Manager is required"),
+      assistantBusinessOfficeManager: z.string().optional(),
+    })
+  )
+  .mutation(async ({ ctx, input }) => {
+    const [survey] = await ctx.db
+      .insert(qalSurvey)
+      .values({
+        templateId: input.templateId,
+        facilityId: input.facilityId,
+        surveyDate: input.surveyDate,
+        auditorUserId: input.auditorUserId,
+        surveyType: input.surveyType, // ✅ ADD THIS
+        administrator: input.administrator,
+        businessOfficeManager: input.businessOfficeManager,
+        assistantBusinessOfficeManager: input.assistantBusinessOfficeManager || null,
+        isLocked: false,
+        totalPossible: "0",
+        totalEarned: "0",
+        overallPercent: "0",
       })
-    )
-    .mutation(async ({ ctx, input }) => {
-      const [survey] = await ctx.db
-        .insert(qalSurvey)
-        .values({
-          templateId: input.templateId,
-          facilityId: input.facilityId,
-          surveyDate: input.surveyDate,
-          auditorUserId: input.auditorUserId,
-          isLocked: false,
-          totalPossible: "0",
-          totalEarned: "0",
-          overallPercent: "0",
-        })
-        .returning();
+      .returning();
 
-      if (!survey) throw new Error("Failed to create survey");
+    if (!survey) throw new Error("Failed to create survey");
 
-      return survey;
-    }),
+    return survey;
+  }),
+
+
 
   listSurveys: protectedProcedure
     .input(
@@ -284,14 +276,12 @@ export const qalRouter = createTRPCRouter({
 
       if (!survey) throw new Error("Survey not found");
 
-      // Get template sections
       const sections = await ctx.db
         .select()
         .from(qalSection)
         .where(eq(qalSection.templateId, survey.templateId))
         .orderBy(asc(qalSection.sortOrder));
 
-      // Get section responses
       const sectionResponses = await ctx.db
         .select()
         .from(qalSurveySection)
@@ -302,7 +292,6 @@ export const qalRouter = createTRPCRouter({
         response: sectionResponses.find((r) => r.sectionId === section.id) || null,
       }));
 
-      // Get facility
       const [fac] = await ctx.db
         .select()
         .from(facility)
@@ -324,7 +313,6 @@ export const qalRouter = createTRPCRouter({
       })
     )
     .query(async ({ ctx, input }) => {
-      // Get section metadata
       const [section] = await ctx.db
         .select()
         .from(qalSection)
@@ -333,14 +321,12 @@ export const qalRouter = createTRPCRouter({
 
       if (!section) throw new Error("Section not found");
 
-      // Get questions for this section
       const questions = await ctx.db
         .select()
         .from(qalQuestion)
         .where(eq(qalQuestion.sectionId, input.sectionId))
         .orderBy(asc(qalQuestion.sortOrder));
 
-      // Get section response if exists
       const [sectionResponse] = await ctx.db
         .select()
         .from(qalSurveySection)
@@ -352,7 +338,6 @@ export const qalRouter = createTRPCRouter({
         )
         .limit(1);
 
-      // Get individual question responses
       const questionResponses = await ctx.db
         .select()
         .from(qalQuestionResponse)
@@ -376,15 +361,12 @@ export const qalRouter = createTRPCRouter({
       };
     }),
 
-  // ===========================
-  // RESPONSE SAVING & SCORING
-  // ===========================
-
   saveQuestionResponse: protectedProcedure
     .input(
       z.object({
         surveyId: z.number().int().positive(),
         questionId: z.number().int().positive(),
+        sampleSize: z.number().int().min(0).optional(),
         passedCount: z.number().int().min(0).nullable(),
         isNotApplicable: z.boolean().optional(),
         testingSample: z.string().optional(),
@@ -392,7 +374,6 @@ export const qalRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      // Get question to find section
       const [question] = await ctx.db
         .select()
         .from(qalQuestion)
@@ -401,7 +382,6 @@ export const qalRouter = createTRPCRouter({
 
       if (!question) throw new Error("Question not found");
 
-      // Upsert response
       const existing = await ctx.db
         .select()
         .from(qalQuestionResponse)
@@ -413,36 +393,34 @@ export const qalRouter = createTRPCRouter({
         )
         .limit(1);
 
+      const updateData: any = {
+        passedCount: input.passedCount,
+        isNotApplicable: input.isNotApplicable ?? false,
+        testingSample: input.testingSample || null,
+        comments: input.comments || null,
+      };
+
+      if (input.sampleSize !== undefined) {
+        updateData.sampleSize = input.sampleSize;
+      }
+
       if (existing.length > 0 && existing[0]) {
         await ctx.db
           .update(qalQuestionResponse)
-          .set({
-            passedCount: input.passedCount,
-            isNotApplicable: input.isNotApplicable ?? false,
-            testingSample: input.testingSample || null,
-            comments: input.comments || null,
-          })
+          .set(updateData)
           .where(eq(qalQuestionResponse.id, existing[0].id));
       } else {
         await ctx.db.insert(qalQuestionResponse).values({
           surveyId: input.surveyId,
           questionId: input.questionId,
-          passedCount: input.passedCount,
-          isNotApplicable: input.isNotApplicable ?? false,
-          testingSample: input.testingSample || null,
-          comments: input.comments || null,
+          sampleSize: input.sampleSize ?? 0,
+          ...updateData,
         });
       }
 
-      // Recalculate section totals
       await recalculateSection(ctx, input.surveyId, question.sectionId);
-
       return { ok: true };
     }),
-
-  // ===========================
-  // LOCK/UNLOCK
-  // ===========================
 
   lock: protectedProcedure
     .input(z.object({ surveyId: z.number().int().positive() }))
@@ -469,10 +447,6 @@ export const qalRouter = createTRPCRouter({
     }),
 });
 
-// ===========================
-// HELPER FUNCTIONS
-// ===========================
-
 async function recalculateSection(ctx: any, surveyId: number, sectionId: number) {
   const [section] = await ctx.db
     .select()
@@ -495,12 +469,11 @@ async function recalculateSection(ctx: any, surveyId: number, sectionId: number)
         eq(qalQuestionResponse.surveyId, surveyId),
         inArray(
           qalQuestionResponse.questionId,
-          questions.map((q: { id: any; }) => q.id)
+          questions.map((q: { id: any }) => q.id)
         )
       )
     );
 
-  // ✅ NEW CALCULATION: Sum up earned points per question
   let sectionEarnedPoints = 0;
   let totalSamples = 0;
   let totalPassed = 0;
@@ -511,25 +484,22 @@ async function recalculateSection(ctx: any, surveyId: number, sectionId: number)
     if (!response) continue;
 
     const questionPossiblePoints = Number(question.possiblePoints || 0);
-    const fixedSample = question.fixedSample;
+    const sampleSize = response.sampleSize ?? 0;
     const passedCount = response.isNotApplicable ? 0 : (response.passedCount || 0);
 
-    totalSamples += fixedSample;
+    totalSamples += sampleSize;
     if (!response.isNotApplicable) {
       totalPassed += passedCount;
     }
 
-    // Calculate earned points for this question
-    // Formula: (Passed / Sample) × Possible Points
-    if (!response.isNotApplicable && fixedSample > 0) {
-      const questionEarned = (passedCount / fixedSample) * questionPossiblePoints;
+    if (!response.isNotApplicable && sampleSize > 0) {
+      const questionEarned = (passedCount / sampleSize) * questionPossiblePoints;
       sectionEarnedPoints += questionEarned;
     }
   }
 
-  const allNA = responses.length > 0 && responses.every((r: { isNotApplicable: any; }) => r.isNotApplicable);
+  const allNA = responses.length > 0 && responses.every((r: { isNotApplicable: any }) => r.isNotApplicable);
 
-  // Upsert section response
   const [existing] = await ctx.db
     .select()
     .from(qalSurveySection)
@@ -562,35 +532,76 @@ async function recalculateSection(ctx: any, surveyId: number, sectionId: number)
     });
   }
 
-  // Recalculate survey totals
   await recalculateSurveyTotals(ctx, surveyId);
 }
 
 async function recalculateSurveyTotals(ctx: any, surveyId: number) {
-  const sectionResponses = await ctx.db
+  // Get survey to find template
+  const [survey] = await ctx.db
     .select()
-    .from(qalSurveySection)
-    .where(eq(qalSurveySection.surveyId, surveyId));
+    .from(qalSurvey)
+    .where(eq(qalSurvey.id, surveyId))
+    .limit(1);
 
+  if (!survey) return;
+
+  // Get all sections for this template
   const sections = await ctx.db
     .select()
     .from(qalSection)
-    .where(
-      inArray(
-        qalSection.id,
-        sectionResponses.map((r: { sectionId: any; }) => r.sectionId)
-      )
-    );
+    .where(eq(qalSection.templateId, survey.templateId));
 
   let totalPossible = 0;
   let totalEarned = 0;
 
-  for (const sr of sectionResponses) {
-    const sec = sections.find((s: { id: any; }) => s.id === sr.sectionId);
-    if (sec) {
-      totalPossible += Number(sec.possiblePoints);
-      totalEarned += Number(sr.earnedPoints || 0);
+  for (const sec of sections) {
+    // Get all questions in this section
+    const questions = await ctx.db
+      .select()
+      .from(qalQuestion)
+      .where(eq(qalQuestion.sectionId, sec.id));
+
+    // Get question responses
+    const questionResponses = await ctx.db
+      .select()
+      .from(qalQuestionResponse)
+      .where(
+        and(
+          eq(qalQuestionResponse.surveyId, surveyId),
+          inArray(
+            qalQuestionResponse.questionId,
+            questions.map((q: { id: any }) => q.id)
+          )
+        )
+      );
+
+    // Calculate adjusted possible points (exclude N/A items)
+    let sectionAdjustedPossible = 0;
+    let sectionEarned = 0;
+
+    for (const q of questions) {
+      const qResponse = questionResponses.find((r: any) => r.questionId === q.id);
+      
+      const questionPossiblePoints = Number(q.possiblePoints || 0);
+      
+      // If N/A, exclude from both earned and possible
+      if (qResponse && qResponse.isNotApplicable) {
+        continue;
+      }
+      
+      // Add to possible total
+      sectionAdjustedPossible += questionPossiblePoints;
+      
+      // Calculate earned for this question
+      if (qResponse && qResponse.sampleSize && qResponse.sampleSize > 0) {
+        const passedCount = qResponse.passedCount || 0;
+        const questionEarned = (passedCount / qResponse.sampleSize) * questionPossiblePoints;
+        sectionEarned += questionEarned;
+      }
     }
+
+    totalPossible += sectionAdjustedPossible;
+    totalEarned += sectionEarned;
   }
 
   const overallPercent = totalPossible > 0 ? (totalEarned / totalPossible) * 100 : 0;
