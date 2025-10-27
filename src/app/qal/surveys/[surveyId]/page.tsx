@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
 import { ArrowLeft, FileText, CheckCircle2, Clock, Building2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import React from "react";
 
 export default function QALSurveyShellPage() {
   const params = useParams();
@@ -128,9 +129,22 @@ export default function QALSurveyShellPage() {
       <div className="flex flex-wrap gap-2">
         <Link
           href={`/qal/surveys/${sv.id}/facility/${facility.id}`}
-          className={buttonVariants({ variant: "default", size: "lg" })}
+          className={buttonVariants({ variant: "default", size: "sm" })}
         >
           Continue Survey
+        </Link>
+        <Link
+          href={`/qal/surveys/${sv.id}/report`}
+          className={buttonVariants({ variant: "outline", size: "sm" })}
+        >
+          <FileText className="h-4 w-4 mr-2" />
+          View Report
+        </Link>
+        <Link
+          href="/qal/surveys"
+          className={buttonVariants({ variant: "ghost", size: "sm" })}
+        >
+          Back to All Surveys
         </Link>
       </div>
 
@@ -174,46 +188,94 @@ export default function QALSurveyShellPage() {
             const sectionScore = possible > 0 ? (earned / possible) * 100 : 0;
             
             return (
-              <Link 
-                key={secRow.section.id} 
-                href={`/qal/surveys/${sv.id}/facility/${facility.id}`}
-                className="block"
-              >
-                <Card className="hover:shadow-md transition-shadow cursor-pointer">
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex-1">
-                        <div className="font-semibold text-sm">
-                          {index + 1}. {secRow.section.title}
-                        </div>
-                        {secRow.section.description && (
-                          <div className="text-xs text-muted-foreground mt-0.5">
-                            {secRow.section.description}
-                          </div>
-                        )}
-                      </div>
-                      <div className="ml-4">
-                        <Badge 
-                          variant={sectionScore >= 90 ? "default" : "secondary"}
-                          className="font-semibold"
-                        >
-                          {sectionScore.toFixed(1)}%
-                        </Badge>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <Progress value={sectionScore} className="flex-1 h-2" />
-                      <span className="text-xs text-muted-foreground whitespace-nowrap">
-                        {earned.toFixed(1)} / {possible.toFixed(1)}
-                      </span>
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
+              <SectionCard 
+                key={secRow.section.id}
+                surveyId={surveyId}
+                sectionId={secRow.section.id}
+                index={index}
+                title={secRow.section.title}
+                description={secRow.section.description}
+                sectionScore={sectionScore}
+                earned={earned}
+                possible={possible}
+                facilityId={facility.id}
+              />
             );
           })}
         </div>
       </div>
     </main>
+  );
+}
+
+function SectionCard({ 
+  surveyId, 
+  sectionId, 
+  index, 
+  title, 
+  description, 
+  sectionScore, 
+  earned, 
+  possible,
+  facilityId
+}: {
+  surveyId: number;
+  sectionId: number;
+  index: number;
+  title: string;
+  description: string | null;
+  sectionScore: number;
+  earned: number;
+  possible: number;
+  facilityId: number;
+}) {
+  const sectionData = api.qal.getSectionWithQuestions.useQuery({
+    surveyId,
+    sectionId,
+  });
+
+  const totalQuestions = sectionData.data?.questions.length || 0;
+  const answeredQuestions = sectionData.data?.questions.filter(
+    q => q.response && ((q.response.sampleSize ?? 0) > 0 || q.response.isNotApplicable)
+  ).length || 0;
+  const progressPercent = totalQuestions > 0 ? (answeredQuestions / totalQuestions) * 100 : 0;
+
+  return (
+    <Link 
+      href={`/qal/surveys/${surveyId}/facility/${facilityId}`}
+      className="block"
+    >
+      <Card className="hover:shadow-md transition-shadow cursor-pointer">
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex-1">
+              <div className="font-semibold text-sm">
+                {index + 1}. {title}
+              </div>
+              {description && (
+                <div className="text-xs text-muted-foreground mt-0.5">
+                  {description}
+                </div>
+              )}
+              <div className="text-xs text-muted-foreground mt-1">
+                Progress: {answeredQuestions}/{totalQuestions} questions answered
+              </div>
+            </div>
+            <div className="ml-4 flex flex-col items-end gap-1">
+              <Badge 
+                variant={sectionScore >= 90 ? "default" : "secondary"}
+                className="font-semibold"
+              >
+                {sectionScore.toFixed(1)}%
+              </Badge>
+              <span className="text-xs text-muted-foreground">
+                {earned.toFixed(1)} / {possible.toFixed(1)} pts
+              </span>
+            </div>
+          </div>
+          <Progress value={progressPercent} className="h-2" />
+        </CardContent>
+      </Card>
+    </Link>
   );
 }
