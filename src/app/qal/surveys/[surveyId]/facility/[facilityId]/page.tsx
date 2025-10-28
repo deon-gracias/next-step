@@ -476,9 +476,14 @@ function QuestionRow({
             <Checkbox
               checked={isNA}
               onCheckedChange={(checked) => {
-                setIsNA(!!checked);
-                if (checked) {
+                const isNaNow = !!checked;
+                setIsNA(isNaNow);
+                if (isNaNow) {
+                  // When marking N/A, clear passed count
                   setPassedCount("");
+                } else {
+                  // When unchecking N/A, set to 0
+                  setPassedCount("0");
                 }
               }}
               disabled={isLocked || !isSampleSet}
