@@ -140,8 +140,9 @@ export const facility = pgTable("facility", {
   id: integer().primaryKey().generatedAlwaysAsIdentity(),
   name: text("name").notNull(),
   address: text("address").notNull(),
-  facilityCode: varchar("facility_code", { length: 10 }),
+  facilityCode: varchar("facility_code", { length: 10 }).notNull(), // Add .notNull()
 });
+
 
 export const templateTypeEnum = pgEnum("template_type", [
   "resident",

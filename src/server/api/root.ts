@@ -13,6 +13,7 @@ import { pocRouter } from "./routers/poc";
 import { pocCommentRouter } from "./routers/poc-comments";
 import { docRouter } from "./routers/doc";
 import { qalRouter } from "./routers/qal";
+import { invitationRouter } from "./routers/invitation";
 
 /**
  * This is the primary router for your server.
@@ -34,6 +35,7 @@ export const appRouter = createTRPCRouter({
   pocComment: pocCommentRouter,
   doc: docRouter,
   qal: qalRouter,
+  invitation: invitationRouter,
 });
 
 // export type definition of API

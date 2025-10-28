@@ -54,6 +54,7 @@ export const facilityRouter = createTRPCRouter({
       const conditions = [];
       if (input.id !== undefined) conditions.push(eq(facility.id, input.id));
       if (input.name) conditions.push(ilike(facility.name, `%${input.name}%`));
+      if (input.facilityCode) conditions.push(ilike(facility.facilityCode, `%${input.facilityCode}%`)); 
 
       const whereClause =
         conditions.length > 0 ? and(...conditions) : undefined;

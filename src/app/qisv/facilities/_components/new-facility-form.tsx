@@ -30,10 +30,17 @@ export function NewFacilityForm({ ...props }: React.ComponentProps<"form">) {
     defaultValues: {
       name: "",
       address: "",
+      facilityCode: "",
     },
   });
 
   async function onSubmit(values: FacilityInsertType) {
+    // Extra validation to ensure no empty values
+    if (!values.name?.trim() || !values.address?.trim() || !values.facilityCode?.trim()) {
+      toast.error("All fields are required");
+      return;
+    }
+
     toast.promise(facilityMutation.mutateAsync(values), {
       loading: <>Creating facility...</>,
       success: async () => {
@@ -57,9 +64,22 @@ export function NewFacilityForm({ ...props }: React.ComponentProps<"form">) {
           name={"name"}
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Name</FormLabel>
+              <FormLabel>Name <span className="text-destructive">*</span></FormLabel>
               <FormControl>
-                <Input {...field} />
+                <Input {...field} required placeholder="Enter facility name" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          name={"facilityCode"}
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Facility Code <span className="text-destructive">*</span></FormLabel>
+              <FormControl>
+                <Input {...field} required maxLength={10} placeholder="e.g. FAC001" />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -70,16 +90,18 @@ export function NewFacilityForm({ ...props }: React.ComponentProps<"form">) {
           name={"address"}
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Address</FormLabel>
+              <FormLabel>Address <span className="text-destructive">*</span></FormLabel>
               <FormControl>
-                <Input {...field} />
+                <Input {...field} required placeholder="Enter facility address" />
               </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
 
-        <Button type="submit">Submit</Button>
+        <Button type="submit" disabled={facilityMutation.isPending}>
+          {facilityMutation.isPending ? "Creating..." : "Submit"}
+        </Button>
       </form>
     </Form>
   );

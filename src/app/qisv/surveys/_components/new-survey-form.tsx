@@ -276,30 +276,21 @@ function FacilityComboBox({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className="w-full justify-between bg-white"
+          className="w-full justify-between bg-white/90 backdrop-blur-sm border-gray-300 hover:bg-white h-11 rounded-full text-gray-600"
         >
           {selectedFacility.data ? (
-            <div className="flex items-center gap-2">
-              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-green-100">
-                <BuildingIcon className="h-3 w-3 text-green-600" />
-              </div>
-              <span className="truncate">{selectedFacility.data.name}</span>
-              <Badge variant="secondary" className="text-xs">
-                ID: {selectedFacility.data.id}
-              </Badge>
-            </div>
+            <span className="truncate text-gray-800">{selectedFacility.data.name}</span>
           ) : selectedItem !== undefined && selectedItem > -1 ? (
             <div className="flex items-center gap-2">
-              <Skeleton className="h-6 w-6 rounded-full" />
               <Skeleton className="h-4 w-32" />
             </div>
           ) : (
-            "Select facility..."
+            <span className="text-gray-400">Select Facility</span>
           )}
           <ChevronDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-full p-0">
+      <PopoverContent className="w-full p-0 rounded-xl" align="start">
         <div className="p-3 border-b">
           <div className="relative">
             <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -307,7 +298,7 @@ function FacilityComboBox({
               placeholder="Search facilities..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-9"
+              className="pl-9 rounded-lg"
             />
           </div>
         </div>
@@ -332,7 +323,7 @@ function FacilityComboBox({
                 <div
                   key={facility.id}
                   className={cn(
-                    "flex items-center gap-2 p-2 cursor-pointer hover:bg-gray-100 rounded-md",
+                    "flex items-center gap-2 p-2 cursor-pointer hover:bg-gray-100 rounded-md transition-colors",
                     selectedItem === facility.id && "bg-green-50"
                   )}
                   onClick={() => {
@@ -342,19 +333,24 @@ function FacilityComboBox({
                 >
                   <CheckIcon
                     className={cn(
-                      "h-4 w-4",
+                      "h-4 w-4 flex-shrink-0",
                       selectedItem === facility.id ? "opacity-100 text-green-600" : "opacity-0"
                     )}
                   />
-                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-green-100">
+                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-green-100 flex-shrink-0">
                     <BuildingIcon className="h-3 w-3 text-green-600" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="font-medium truncate">{facility.name}</div>
-                    <div className="text-xs text-muted-foreground">
-                      ID: {facility.id} • {facility.address || "No address"}
-                    </div>
+                    {facility.address && (
+                      <div className="text-xs text-muted-foreground truncate">
+                        {facility.address}
+                      </div>
+                    )}
                   </div>
+                  <Badge variant="secondary" className="text-xs bg-gray-100 text-gray-600 flex-shrink-0">
+                    ID: {facility.id}
+                  </Badge>
                 </div>
               ))}
             </div>
@@ -398,6 +394,8 @@ function FacilityComboBox({
     </Popover>
   );
 }
+
+
 
 // Template Combobox Component with exclusion logic
 function TemplateComboBox({
@@ -458,25 +456,25 @@ function TemplateComboBox({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className="w-full justify-between bg-white"
+          className="w-full justify-between bg-white/90 backdrop-blur-sm border-gray-300 hover:bg-white h-11 rounded-full text-gray-600"
         >
           {selectedItem ? (
             <div className="flex items-center gap-2">
-              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-purple-100">
-                <FileTextIcon className="h-3 w-3 text-purple-600" />
-              </div>
-              <span className="truncate">{selectedItem.name}</span>
-              <Badge variant="secondary" className={`text-xs ${getTypeBadgeColor(selectedItem.type)}`}>
+              <span className="truncate text-gray-800">{selectedItem.name}</span>
+              <Badge
+                variant="secondary"
+                className={`text-xs ${getTypeBadgeColor(selectedItem.type)} flex-shrink-0`}
+              >
                 {selectedItem.type}
               </Badge>
             </div>
           ) : (
-            "Select template..."
+            <span className="text-gray-400">Select template...</span>
           )}
           <ChevronDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-full p-0">
+      <PopoverContent className="w-full p-0 rounded-xl" align="start">
         <div className="p-3 border-b">
           <div className="relative">
             <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -484,7 +482,7 @@ function TemplateComboBox({
               placeholder="Search templates..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-9"
+              className="pl-9 rounded-lg"
             />
           </div>
         </div>
@@ -513,8 +511,8 @@ function TemplateComboBox({
                 <div
                   key={template.id}
                   className={cn(
-                    "flex items-center gap-2 p-2 cursor-pointer hover:bg-gray-100 rounded-md",
-                    selectedItem?.id === template.id && "bg-purple-50"
+                    "flex items-center gap-2 p-2 cursor-pointer hover:bg-gray-100 rounded-md transition-colors",
+                    selectedItem?.id === template.id && "bg-blue-50"
                   )}
                   onClick={() => {
                     const newValue = withValue
@@ -527,16 +525,16 @@ function TemplateComboBox({
                   <CheckIcon
                     className={cn(
                       "h-4 w-4",
-                      selectedItem?.id === template.id ? "opacity-100 text-purple-600" : "opacity-0"
+                      selectedItem?.id === template.id ? "opacity-100 text-blue-600" : "opacity-0"
                     )}
                   />
-                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-purple-100">
-                    <FileTextIcon className="h-3 w-3 text-purple-600" />
+                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 flex-shrink-0">
+                    <FileTextIcon className="h-3 w-3 text-blue-600" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="font-medium truncate">{template.name}</div>
                   </div>
-                  <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2 flex-shrink-0">
                     <Badge
                       variant="secondary"
                       className={`text-xs ${getTypeBadgeColor(template.type)}`}
@@ -588,6 +586,9 @@ function TemplateComboBox({
     </Popover>
   );
 }
+
+
+
 
 export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
   const user = authClient.useSession();
@@ -795,83 +796,85 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
         </div>
       </div>
 
-      {/* Survey Details - Compact layout with reduced spacing */}
-      <Card className="border-2 border-blue-100 bg-gradient-to-r from-blue-50/30 to-indigo-50/30">
-        <CardHeader className="border-b border-blue-100 pb-2">
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100">
-              <CalendarIcon className="h-4 w-4 text-blue-600" />
-            </div>
-            <h2 className="text-lg font-semibold text-gray-900">Survey Details</h2>
-          </div>
-        </CardHeader>
-        <CardContent className="pt-4">
+      {/* Survey Details - Matching the dark blue header from screenshot */}
+      {/* Survey Details - Header and fields on same line matching screenshot */}
+      <Card className="border-none shadow-lg bg-[#0C2152] rounded-xl overflow-hidden">
+        <CardContent className="p-5">
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)}>
-              {/* Date and Facility on same line */}
-              <div className="flex gap-4">
-                <FormField
-                  control={form.control}
-                  name="surveyDate"
-                  render={({ field }) => (
-                    <FormItem className="flex-1">
-                      <FormLabel>Survey Date</FormLabel>
-                      <FormControl>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <FormControl>
-                              <Button
-                                variant={"outline"}
-                                className={cn(
-                                  "w-full pl-3 text-left font-normal bg-white hover:bg-gray-50",
-                                  !field.value && "text-muted-foreground",
-                                )}
-                              >
-                                {field.value ? (
-                                  format(field.value, "PPP")
-                                ) : (
-                                  <span>Pick a date</span>
-                                )}
-                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                              </Button>
-                            </FormControl>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                              mode="single"
-                              selected={field.value}
-                              onSelect={field.onChange}
-                              captionLayout="dropdown"
-                            />
-                          </PopoverContent>
-                        </Popover>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+              <div className="flex items-center gap-4">
+                {/* Left side - Survey Details Header */}
+                <div className="flex items-center gap-3 min-w-fit">
+                  <div className="bg-white/10 rounded-lg p-2">
+                    <ClipboardListIcon className="h-6 w-6 text-white" />
+                  </div>
+                  <h2 className="text-xl font-bold text-white whitespace-nowrap">Survey Details</h2>
+                </div>
 
-                <FormField
-                  control={form.control}
-                  name="facilityId"
-                  render={({ field }) => (
-                    <FormItem className="flex-1">
-                      <FormLabel>Facility</FormLabel>
-                      <FormControl>
-                        <FacilityComboBox
-                          selectedItem={field.value}
-                          onSelect={(item) => field.onChange(item)}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {/* Right side - Date and Facility fields */}
+                <div className="flex-1 grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="surveyDate"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col">
+                        <FormControl>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <FormControl>
+                                <Button
+                                  variant={"outline"}
+                                  className={cn(
+                                    "w-full pl-3 text-left font-normal bg-white/90 backdrop-blur-sm border-blue-200 hover:bg-white h-11 rounded-full",
+                                    !field.value && "text-muted-foreground",
+                                  )}
+                                >
+                                  {field.value ? (
+                                    format(field.value, "PPP")
+                                  ) : (
+                                    <span className="text-gray-400">Survey Date</span>
+                                  )}
+                                  <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                </Button>
+                              </FormControl>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                              <Calendar
+                                mode="single"
+                                selected={field.value}
+                                onSelect={field.onChange}
+                                captionLayout="dropdown"
+                              />
+                            </PopoverContent>
+                          </Popover>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="facilityId"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col">
+                        <FormControl>
+                          <FacilityComboBox
+                            selectedItem={field.value}
+                            onSelect={(item) => field.onChange(item)}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
               </div>
             </form>
           </Form>
         </CardContent>
       </Card>
+
 
       {/* Surveyors Section */}
       <div className="space-y-4">
@@ -888,38 +891,39 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
         })}
 
         {form.watch("facilityId") > -1 && (
-          <Button
+          <button
             type="button"
-            variant="outline"
-            className="w-full border-dashed border-2 border-green-200 text-green-700 hover:bg-green-50 hover:border-green-300"
             onClick={() => {
               const defaultSurveyorId = users.data?.[0]?.id || "";
               toast.success("Added new surveyor");
               surveyorsField.append({ surveyorId: defaultSurveyorId, templates: [] });
             }}
+            className="w-full bg-[#0C2152] hover:bg-[#0C2152] text-white font-medium rounded-lg py-3 transition-all flex items-center justify-center gap-2 shadow-md"
           >
-            <PlusIcon className="mr-2 h-4 w-4" /> Add Surveyor
-          </Button>
+            <PlusIcon className="h-4 w-4" />
+            Add Surveyor
+          </button>
         )}
       </div>
 
       {/* Submit Button */}
-      <Card className="border-2 border-emerald-100 bg-gradient-to-r from-emerald-50/50 to-green-50/50">
-        <CardContent className="pt-6">
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)}>
-              <Button
-                type="submit"
-                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
-                size="lg"
-                disabled={form.watch("facilityId") < 0}
-              >
-                Create Survey
-              </Button>
-            </form>
-          </Form>
-        </CardContent>
-      </Card>
+
+
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)}>
+          <div className="flex justify-center mt-16">
+            <Button
+              type="submit"
+              disabled={form.watch("facilityId") < 0}
+              className="w-full max-w-md bg-[#ec553a] hover:bg-[#d64931] text-white font-medium py-3 rounded-lg shadow-md transition-all"
+            >
+              Create Survey
+            </Button>
+          </div>
+
+        </form>
+      </Form>
+
     </div>
   );
 }
@@ -954,58 +958,147 @@ function SurveyorField({
   return (
     <Card
       key={surveyor.id}
-      className="border-2 border-amber-100 bg-gradient-to-r from-amber-50/40 to-orange-50/40 shadow-sm"
+      className="border-none shadow-sm bg-[#CCDEEA] rounded-lg overflow-hidden"
     >
-      <CardHeader className="border-b border-amber-100">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-100">
-              <UserIcon className="h-4 w-4 text-amber-600" />
+      <CardContent className="p-4 space-y-4">
+        {/* Header and User field on same line - ALWAYS VISIBLE */}
+        <div className="flex items-center gap-4">
+          {/* Left side - Surveyor Header */}
+          <div className="flex items-center gap-2 min-w-fit">
+            <div className="bg-[#347aaa] rounded-full p-2">
+              <UserIcon className="h-5 w-5 text-white" />
             </div>
-            <h3 className="font-semibold text-gray-900">Surveyor {sIndex + 1}</h3>
+            <h3 className="font-semibold text-gray-800 text-lg whitespace-nowrap">
+              Surveyor {sIndex + 1}
+            </h3>
           </div>
+
+          {/* Right side - User dropdown */}
+          <div className="flex-1">
+            <Form {...form}>
+              <FormField
+                control={form.control}
+                name={`surveyors.${sIndex}.surveyorId`}
+                render={({ field }) => (
+                  <FormItem>
+                    <FormControl>
+                      <UserComboBox
+                        selectedItem={field.value}
+                        onSelect={(item) => field.onChange(item)}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </Form>
+          </div>
+
+          {/* Collapse/Remove buttons on far right */}
           <div className="flex items-center gap-2">
             <Button
               type="button"
               variant="ghost"
               size="icon"
-              className="text-gray-400 hover:text-gray-600"
+              className="h-8 w-8 text-gray-600 hover:text-gray-800"
               onClick={() => setIsCollapsed(!isCollapsed)}
             >
-              {isCollapsed ? (
-                <ChevronDownIcon className="h-4 w-4" />
-              ) : (
-                <ChevronUpIcon className="h-4 w-4" />
-              )}
+              <ChevronUpIcon className={cn("h-5 w-5 transition-transform", isCollapsed && "rotate-180")} />
             </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="text-gray-400 hover:text-red-500 hover:bg-red-50"
-              onClick={() => surveyorsField.remove(sIndex)}
-            >
-              <XIcon className="h-4 w-4" />
-            </Button>
+            {surveyorsField.fields.length > 1 && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-red-500 hover:text-red-700"
+                onClick={() => surveyorsField.remove(sIndex)}
+              >
+                <XIcon className="h-5 w-5" />
+              </Button>
+            )}
           </div>
-
         </div>
-      </CardHeader>
 
-      {!isCollapsed && (
-        <CardContent className="pt-6 space-y-4">
-          {/* Surveyor Select */}
+        {/* Templates - ONLY show when NOT collapsed */}
+        {!isCollapsed && (
+          <div className="space-y-3">
+            {templatesField.fields.map((template, tIndex) => (
+              <TemplateCard
+                key={template.id}
+                form={form}
+                sIndex={sIndex}
+                tIndex={tIndex}
+                templatesField={templatesField}
+                getExcludedTemplateIds={getExcludedTemplateIds}
+              />
+            ))}
+
+            {/* Add Template Button - Matching screenshot */}
+            <div className="border-2 border-dashed border-[#347aaa] bg-white rounded-lg py-3 flex items-center justify-center">
+              <button
+                type="button"
+                onClick={() =>
+                  templatesField.append({
+                    caseCodes: [],
+                    residentIds: [],
+                  })
+                }
+                className="text-[#347aaa] font-medium text-sm flex items-center gap-2"
+              >
+                <PlusIcon className="h-4 w-4" />
+                Add Template
+              </button>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// Separate Template Card Component
+function TemplateCard({
+  form,
+  sIndex,
+  tIndex,
+  templatesField,
+  getExcludedTemplateIds,
+}: {
+  form: UseFormReturn<NewMultiSurveyCreateInputType>;
+  sIndex: number;
+  tIndex: number;
+  templatesField: any;
+  getExcludedTemplateIds: (index: number) => number[];
+}) {
+  const caseInputRef = useRef<HTMLInputElement>(null);
+  const selectedTemplate = form.watch(`surveyors.${sIndex}.templates.${tIndex}.template`);
+
+  return (
+    <Card className="border-none shadow-md bg-[#347aaa] rounded-lg overflow-hidden">
+      {/* Template Header with selector - Template text bigger, selector more to right */}
+      <div className="px-4 py-3 flex items-center gap-4">
+        {/* Left - Template Icon and Title (BIGGER TEXT) */}
+        <div className="flex items-center gap-2 text-white min-w-[140px]">
+          <div className="bg-white/20 rounded-full p-1.5">
+            <FileTextIcon className="h-4 w-4" />
+          </div>
+          <h4 className="font-semibold text-base">Template {tIndex + 1}</h4>
+        </div>
+
+        {/* Right - Template Selector (MORE SPACE) */}
+        <div className="flex-1">
           <Form {...form}>
             <FormField
               control={form.control}
-              name={`surveyors.${sIndex}.surveyorId`}
+              name={`surveyors.${sIndex}.templates.${tIndex}.template`}
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>User</FormLabel>
                   <FormControl>
-                    <UserComboBox
+                    <TemplateComboBox
+                      withValue
                       selectedItem={field.value}
                       onSelect={(item) => field.onChange(item)}
+                      excludeTemplateIds={getExcludedTemplateIds(tIndex)}
                     />
                   </FormControl>
                   <FormMessage />
@@ -1013,202 +1106,171 @@ function SurveyorField({
               )}
             />
           </Form>
+        </div>
 
-          {/* Templates */}
-          <div className="space-y-3">
-            {templatesField.fields.map((template, tIndex) => (
-              <Card
-                key={template.id}
-                className="border border-purple-200 bg-gradient-to-r from-purple-50/50 to-violet-50/50 shadow-sm"
-              >
-                <CardHeader className="pb-3 border-b border-purple-100">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-purple-100">
-                        <ClipboardListIcon className="h-3 w-3 text-purple-600" />
-                      </div>
-                      <h4 className="font-medium text-gray-900">Template {tIndex + 1}</h4>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 text-gray-400 hover:text-red-500 hover:bg-red-50"
-                      onClick={() => templatesField.remove(tIndex)}
-                    >
-                      <XIcon className="h-3 w-3" />
-                    </Button>
+        {/* Far Right - Remove button */}
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6 text-white/80 hover:text-white hover:bg-white/10 flex-shrink-0"
+          onClick={() => templatesField.remove(tIndex)}
+        >
+          <XIcon className="h-4 w-4" />
+        </Button>
+      </div>
+
+      {/* Template Content */}
+      <div className="px-4 pb-4 space-y-3">
+        {selectedTemplate && (
+          <>
+            {/* RESIDENT TYPE */}
+            {selectedTemplate.type === "resident" && (
+              <div className="grid grid-cols-[280px_1fr] gap-3">
+                {/* LEFT COLUMN - Selected Residents Box (WIDER + BIGGER TEXT) */}
+                <div className="bg-white/90 rounded-lg p-3 min-h-[140px] self-start">
+                  <div className="text-sm font-semibold text-gray-600 mb-2 pb-1 border-b border-gray-300">
+                    Selected Residents
                   </div>
-                </CardHeader>
-
-                <CardContent className="pt-4 space-y-4">
-                  {/* Template Select */}
-                  <Form {...form}>
-                    <FormField
-                      control={form.control}
-                      name={`surveyors.${sIndex}.templates.${tIndex}.template`}
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Template</FormLabel>
-                          <FormControl>
-                            <TemplateComboBox
-                              withValue
-                              selectedItem={field.value}
-                              onSelect={(item) => field.onChange(item)}
-                              excludeTemplateIds={getExcludedTemplateIds(tIndex)}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </Form>
-
-                  {/* CONDITIONAL RENDERING BASED ON TEMPLATE TYPE */}
-                  {form.watch(`surveyors.${sIndex}.templates.${tIndex}.template`) && (
-                    <>
-                      {/* RESIDENT TYPE: Show Add Resident form and Selected Residents */}
-                      {form.watch(`surveyors.${sIndex}.templates.${tIndex}.template`)?.type === "resident" && (
-                        <div className="space-y-4">
-                          {/* Add Resident Form */}
-                          <AddResidentInput
-                            facilityId={form.getValues("facilityId")}
-                            value={form.getValues(`surveyors.${sIndex}.templates.${tIndex}.residentIds`)}
-                            onChange={(value) =>
+                  {form.watch(`surveyors.${sIndex}.templates.${tIndex}.residentIds`).length < 1 ? (
+                    <div className="text-sm text-gray-400 text-center py-6">
+                      No residents selected
+                    </div>
+                  ) : (
+                    <ul className="space-y-1.5 list-disc list-inside text-sm text-gray-700">
+                      {form
+                        .watch(`surveyors.${sIndex}.templates.${tIndex}.residentIds`)
+                        .sort((curr, next) => (curr > next ? 1 : 0))
+                        .map((id) => (
+                          <ResidentRowById
+                            key={id}
+                            id={id}
+                            handleRemove={() => {
                               form.setValue(
                                 `surveyors.${sIndex}.templates.${tIndex}.residentIds`,
-                                Array.from(new Set(value)),
-                              )
-                            }
+                                form
+                                  .getValues(`surveyors.${sIndex}.templates.${tIndex}.residentIds`)
+                                  .filter((i) => i !== id),
+                              );
+                            }}
+                            compact={true}
+                          />
+                        ))}
+                    </ul>
+                  )}
+                </div>
+
+                {/* RIGHT COLUMN - Add Resident with Search */}
+                <AddResidentInput
+                  facilityId={form.getValues("facilityId")}
+                  value={form.getValues(`surveyors.${sIndex}.templates.${tIndex}.residentIds`)}
+                  onChange={(value) =>
+                    form.setValue(
+                      `surveyors.${sIndex}.templates.${tIndex}.residentIds`,
+                      Array.from(new Set(value)),
+                    )
+                  }
+                />
+              </div>
+            )}
+
+            {/* CASE TYPE */}
+            {selectedTemplate.type === "case" && (
+              <Form {...form}>
+                <FormField
+                  control={form.control}
+                  name={`surveyors.${sIndex}.templates.${tIndex}.caseCodes`}
+                  render={({ field }) => {
+                    return (
+                      <div className="grid grid-cols-[280px_1fr] gap-3">
+                        {/* LEFT COLUMN - Cases Box (WIDER + BIGGER TEXT) */}
+                        <div className="bg-white/90 rounded-lg p-3 min-h-[140px] self-start">
+                          <div className="text-sm font-semibold text-gray-600 mb-2 pb-1 border-b border-gray-300">
+                            Cases
+                          </div>
+                          {field.value && field.value.length > 0 ? (
+                            <ul className="space-y-1.5 list-disc list-inside text-sm text-gray-700">
+                              {field.value.map((code, idx) => (
+                                <li key={idx} className="flex items-center justify-between">
+                                  <span>{code}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      field.onChange(field.value.filter((_, i) => i !== idx));
+                                      toast.success("Case removed successfully!");
+                                    }}
+                                    className="text-gray-400 hover:text-gray-600 transition-colors ml-2"
+                                  >
+                                    <XIcon className="h-3.5 w-3.5" />
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <div className="text-sm text-gray-400 text-center py-6">
+                              No cases added
+                            </div>
+                          )}
+                        </div>
+
+                        {/* RIGHT COLUMN - Input and Button */}
+                        <div className="space-y-2">
+                          <Input
+                            ref={caseInputRef}
+                            placeholder="Enter Case Number"
+                            className="w-full bg-white/90 border-gray-300 h-10 rounded-lg text-sm"
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                if (caseInputRef.current?.value && caseInputRef.current.value.trim()) {
+                                  field.onChange([
+                                    ...field.value,
+                                    caseInputRef.current.value.trim(),
+                                  ]);
+                                  caseInputRef.current.value = "";
+                                  toast.success("Case added successfully!");
+                                }
+                              }
+                            }}
                           />
 
-                          {/* Selected Residents Display */}
-                          <div className="rounded-lg border border-teal-200 bg-teal-50/30 overflow-hidden">
-                            <div className="bg-teal-100/50 px-4 py-2 border-b border-teal-200">
-                              <div className="flex items-center gap-2">
-                                <UsersIcon className="h-4 w-4 text-teal-600" />
-                                <span className="text-sm font-medium text-teal-800">Selected Residents</span>
-                              </div>
-                            </div>
-                            <div className="p-2">
-                              {form.watch(`surveyors.${sIndex}.templates.${tIndex}.residentIds`).length < 1 ? (
-                                <div className="text-muted-foreground py-4 text-center text-xs">
-                                  No residents selected
-                                </div>
-                              ) : (
-                                <div className="space-y-2">
-                                  {form
-                                    .watch(`surveyors.${sIndex}.templates.${tIndex}.residentIds`)
-                                    .sort((curr, next) => (curr > next ? 1 : 0))
-                                    .map((id) => (
-                                      <ResidentRowById
-                                        key={id}
-                                        id={id}
-                                        handleRemove={() => {
-                                          form.setValue(
-                                            `surveyors.${sIndex}.templates.${tIndex}.residentIds`,
-                                            form
-                                              .getValues(`surveyors.${sIndex}.templates.${tIndex}.residentIds`)
-                                              .filter((i) => i !== id),
-                                          );
-                                        }}
-                                        compact={true}
-                                      />
-                                    ))}
-                                </div>
-                              )}
-                            </div>
-                          </div>
+                          {/* Add Case Button - SAME COLOR AS RESIDENT BUTTON */}
+                          <Button
+                            type="button"
+                            className="w-full bg-gray-500 hover:bg-gray-600 text-white h-10 rounded-lg text-sm font-medium shadow-sm"
+                            onClick={() => {
+                              if (caseInputRef.current?.value && caseInputRef.current.value.trim()) {
+                                field.onChange([
+                                  ...field.value,
+                                  caseInputRef.current.value.trim(),
+                                ]);
+                                caseInputRef.current.value = "";
+                                toast.success("Case added successfully!");
+                              } else {
+                                toast.error("Please enter a case number");
+                              }
+                            }}
+                          >
+                            + Add Case
+                          </Button>
                         </div>
-                      )}
-
-                      {/* CASE TYPE: Show Case Codes form */}
-                      {form.watch(`surveyors.${sIndex}.templates.${tIndex}.template`)?.type === "case" && (
-                        <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-3">
-                          <Form {...form}>
-                            <FormField
-                              control={form.control}
-                              name={`surveyors.${sIndex}.templates.${tIndex}.caseCodes`}
-                              render={({ field }) => {
-                                const ref = useRef<HTMLInputElement>(null);
-                                return (
-                                  <FormItem>
-                                    <FormLabel className="text-sm font-medium">Cases</FormLabel>
-                                    <div className="flex items-center gap-2">
-                                      <FormControl>
-                                        <Input
-                                          ref={ref}
-                                          className="bg-white"
-                                          placeholder="Enter case code"
-                                        />
-                                      </FormControl>
-                                      <Button
-                                        type="button"
-                                        size="icon"
-                                        variant="secondary"
-                                        className="bg-slate-200 hover:bg-slate-300"
-                                        onClick={() => {
-                                          if (ref.current?.value && ref.current.value.trim()) {
-                                            field.onChange([
-                                              ...field.value,
-                                              ref.current.value.trim(),
-                                            ]);
-                                            ref.current.value = "";
-                                          }
-                                        }}
-                                      >
-                                        <PlusIcon className="h-4 w-4" />
-                                      </Button>
-                                    </div>
-                                    <div className="flex flex-wrap gap-1 mt-2">
-                                      {field.value.map((e, i) => (
-                                        <Badge
-                                          variant="secondary"
-                                          key={i}
-                                          className="bg-slate-200 cursor-pointer hover:bg-slate-300"
-                                          onClick={() => {
-                                            field.onChange(field.value.filter((_, index) => index !== i));
-                                          }}
-                                        >
-                                          {e} <XIcon className="h-3 w-3 ml-1" />
-                                        </Badge>
-                                      ))}
-                                    </div>
-                                    <FormMessage />
-                                  </FormItem>
-                                );
-                              }}
-                            />
-                          </Form>
-                        </div>
-                      )}
-
-                    </>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
-
-            {/* Add Template Button */}
-            <Button
-              variant="outline"
-              type="button"
-              className="w-full border-dashed border-2 border-purple-200 text-purple-700 hover:bg-purple-50 hover:border-purple-300"
-              onClick={() =>
-                templatesField.append({
-                  caseCodes: [],
-                  residentIds: [],
-                })
-              }
-            >
-              <PlusIcon className="mr-2 h-4 w-4" /> Add Template
-            </Button>
-          </div>
-        </CardContent>
-      )}
+                      </div>
+                    );
+                  }}
+                />
+              </Form>
+            )}
+          </>
+        )}
+      </div>
     </Card>
   );
 }
+
+
+
+
+
 
 // ResidentRowById component - only cross icon for removal
 // ResidentRowById component - showing name, room, and PCC ID
@@ -1475,7 +1537,7 @@ function AddResidentInput({
 
             <Button
               type="submit"
-              className="w-full bg-indigo-600 hover:bg-indigo-700 h-8"
+              className="w-full bg-gray-500 hover:bg-gray-600 text-white h-10 rounded-lg text-sm font-medium shadow-sm"
               disabled={
                 residentMutation.isPending ||
                 !(form.watch("pcciId")?.trim?.().length > 0) ||
@@ -1491,3 +1553,7 @@ function AddResidentInput({
     </Card>
   );
 }
+
+
+
+
