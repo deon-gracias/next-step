@@ -90,7 +90,7 @@ export default function QALFacilitiesPage() {
     await create.mutateAsync({
       name: creating.name.trim(),
       address: creating.address.trim(),
-      facilityCode: creating.facilityCode?.trim() || undefined,
+      facilityCode: creating.facilityCode?.trim() || '',
     });
     setCreating(null);
   };
