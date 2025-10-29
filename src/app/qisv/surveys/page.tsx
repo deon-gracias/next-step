@@ -979,36 +979,51 @@ export default function SurveysPage() {
                           ? `${lockedCount}/${totalCount} templates completed`
                           : `${lockedCount}/${totalCount} templates locked`
                         }
-                    </Badge>
+                      </Badge>
                     );
                   })()
                 ) : (
                   (() => {
-                    // For completed surveys, count how many have POC completed
-                    const pocCompletedCount = dateGroup.surveys.filter(s => {
+                    // Only count surveys that require POC (score < 85%)
+                    const requiresPoc = dateGroup.surveys.filter(s => {
                       const scoreData = surveyScores.get(s.id);
-                      const scorePercentage = scoreData && scoreData.totalPossible > 0
+                      const pct = scoreData && scoreData.totalPossible > 0
                         ? Math.round((scoreData.score / scoreData.totalPossible) * 100)
                         : 0;
+                      return pct < 85; // <85 means POC required
+                    });
 
-                      // POC is considered completed if score >= 85% OR actual POC exists
+                    const totalRequiring = requiresPoc.length;
+
+                    // If none require POC, show special message
+                    if (totalRequiring === 0) {
+                      return (
+                        <Badge className="bg-slate-100 text-slate-800 border-slate-300">
+                          No POC Required
+                        </Badge>
+                      );
+                    }
+
+                    // Among requiring POC, count ONLY those where actual POC exists
+                    // Match getPocStatus: pocExists = true means "POC Completed", not pocGenerated
+                    const completedCount = requiresPoc.filter(s => {
                       const pocExists = surveyPocExists.get(s.id) || false;
-                      return scorePercentage >= 85 || pocExists;
+                      return pocExists; // ONLY count if actual POC document exists
                     }).length;
 
-                    const totalCount = dateGroup.surveys.length;
-                    const allCompleted = pocCompletedCount === totalCount;
+                    const allDone = completedCount === totalRequiring;
 
                     return (
                       <Badge className={cn(
-                        allCompleted
+                        allDone
                           ? "bg-green-100 text-green-800 border-green-300"
                           : "bg-blue-100 text-blue-800 border-blue-300"
                       )}>
-                        {pocCompletedCount}/{totalCount} POC completed
+                        {completedCount}/{totalRequiring} POC completed
                       </Badge>
                     );
                   })()
+
                 )}
               </TableCell>
 
