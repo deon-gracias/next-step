@@ -1098,14 +1098,37 @@ const generalStrengths = React.useMemo(() => {
       });
     }
     else if (templateType === "general") {
-      // ✅ NEW: Check if all general questions are answered
-      const generalResponses = allResponses.filter(r => !r.residentId && !r.surveyCaseId);
+  // DEBUG: Let's see what's actually in the data
+  const generalResponses = allResponses.filter(r => !r.residentId && !r.surveyCaseId);
+  
+  console.log("🔍 GENERAL SURVEY DEBUG:");
+  console.log("Total Questions:", questions.data.length);
+  console.log("All Responses:", allResponses.length);
+  console.log("General Responses:", generalResponses.length);
+  console.log("General Responses Data:", generalResponses);
+  
+  const result = questions.data.every(q => {
+    const response = generalResponses.find(r => r.questionId === q.id);
+    const isValid = response && (
+      response.status === "met" || 
+      response.status === "unmet" || 
+      response.status === "not_applicable"
+    );
+    
+    console.log(`Question ${q.id}:`, {
+      found: !!response,
+      status: response?.status,
+      isValid
+    });
+    
+    return isValid;
+  });
+  
+  console.log("✅ Survey Complete:", result);
+  return result;
+}
 
-      return questions.data.every(q => {
-        const response = generalResponses.find(r => r.questionId === q.id);
-        return response?.status
-      });
-    }
+
 
     return false;
   }, [questions.data, residents.data, cases.data, allResponses, byEntity, survey.data?.template?.type]);

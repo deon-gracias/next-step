@@ -91,6 +91,34 @@ export default function SurveysPage() {
     { enabled: !!assignedFacility.data }
   );
 
+  // Generate POC functionality
+  // Generate POC for all templates under a date
+  // Generate POC for all templates under a date
+  const markPocGenerated = api.survey.markPocGenerated.useMutation({
+    onSuccess: () => {
+      utils.survey.list.invalidate();
+    },
+    onError: (error) => {
+      toast.error(`Failed to generate POC: ${error.message}`);
+    },
+  });
+
+  const handleGeneratePocForDate = async (surveys: Array<{ id: number }>) => {
+    try {
+      // Call markPocGenerated for each survey under this date
+      await Promise.all(
+        surveys.map((survey) =>
+          markPocGenerated.mutateAsync({ surveyId: survey.id })
+        )
+      );
+      toast.success("POC generated successfully for all templates");
+    } catch (error) {
+      toast.error("Failed to generate POC for some templates");
+    }
+  };
+
+
+
   const hasViewSurveyPermission = useQuery({
     queryKey: ["permissions", "read-survey", session.data?.user.id],
     queryFn: async () =>
@@ -821,13 +849,13 @@ export default function SurveysPage() {
     if (sectionType === 'pending') {
       if (survey.isLocked) {
         return {
-          status: "Survey Locked",
+          status: "Locked/Completed",
           variant: "secondary" as const,
           className: "bg-gray-100 text-gray-800"
         };
       } else {
         return {
-          status: "Survey In Process",
+          status: "In Progress",
           variant: "secondary" as const,
           className: "bg-blue-100 text-blue-800"
         };
@@ -867,7 +895,7 @@ export default function SurveysPage() {
       };
     } else {
       return {
-        status: "POC Pending",
+        status: "POC In Progress",
         variant: "secondary" as const,
         className: "bg-amber-100 text-amber-800"
       };
@@ -893,7 +921,7 @@ export default function SurveysPage() {
         className="bg-muted/50 hover:bg-muted/70 cursor-pointer font-medium"
         onClick={onToggle}
       >
-        <TableCell className="text-right font-mono">
+        <TableCell className="text-center font-mono pl-0">
           <Button variant="ghost" size="sm" className="p-0 h-auto">
             {isExpanded ? <ChevronDownIcon className="h-4 w-4" /> : <ChevronRightIcon className="h-4 w-4" />}
           </Button>
@@ -908,11 +936,6 @@ export default function SurveysPage() {
         </TableCell>
         <TableCell></TableCell>
         <TableCell>-</TableCell>
-        <TableCell className="text-right">
-          <Badge variant="outline">
-            {isExpanded ? 'Collapse' : 'Expand'}
-          </Badge>
-        </TableCell>
       </TableRow>
 
       {/* LEVEL 2: DATE GROUPS - Slightly Indented */}
@@ -928,7 +951,7 @@ export default function SurveysPage() {
               className="bg-muted/30 hover:bg-muted/50 cursor-pointer"
               onClick={() => toggleDateExpanded(group.facilityId, dateKey, type)}
             >
-              <TableCell className="text-right font-mono pl-8">
+              <TableCell className="text-center font-mono pl-0">
                 <Button variant="ghost" size="sm" className="p-0 h-auto">
                   {isDateExpanded ? <ChevronDownIcon className="h-4 w-4" /> : <ChevronRightIcon className="h-4 w-4" />}
                 </Button>
@@ -939,20 +962,272 @@ export default function SurveysPage() {
                 </div>
               </TableCell>
               <TableCell>
-                <Badge variant="outline" className="text-xs">
-                  {dateGroup.surveys.length} template{dateGroup.surveys.length !== 1 ? 's' : ''}
-                </Badge>
+                {/* MIDDLE SECTION: Show status chip for both pending and completed */}
+                {type === 'pending' ? (
+                  (() => {
+                    const lockedCount = dateGroup.surveys.filter(s => s.isLocked).length;
+                    const totalCount = dateGroup.surveys.length;
+                    const allLocked = lockedCount === totalCount;
+
+                    return (
+                      <Badge className={cn(
+                        allLocked
+                          ? "bg-green-100 text-green-800 border-green-300"
+                          : "bg-blue-100 text-blue-800 border-blue-300"
+                      )}>
+                        {!allLocked
+                          ? `${lockedCount}/${totalCount} templates completed`
+                          : `${lockedCount}/${totalCount} templates locked`
+                        }
+                    </Badge>
+                    );
+                  })()
+                ) : (
+                  (() => {
+                    // For completed surveys, count how many have POC completed
+                    const pocCompletedCount = dateGroup.surveys.filter(s => {
+                      const scoreData = surveyScores.get(s.id);
+                      const scorePercentage = scoreData && scoreData.totalPossible > 0
+                        ? Math.round((scoreData.score / scoreData.totalPossible) * 100)
+                        : 0;
+
+                      // POC is considered completed if score >= 85% OR actual POC exists
+                      const pocExists = surveyPocExists.get(s.id) || false;
+                      return scorePercentage >= 85 || pocExists;
+                    }).length;
+
+                    const totalCount = dateGroup.surveys.length;
+                    const allCompleted = pocCompletedCount === totalCount;
+
+                    return (
+                      <Badge className={cn(
+                        allCompleted
+                          ? "bg-green-100 text-green-800 border-green-300"
+                          : "bg-blue-100 text-blue-800 border-blue-300"
+                      )}>
+                        {pocCompletedCount}/{totalCount} POC completed
+                      </Badge>
+                    );
+                  })()
+                )}
               </TableCell>
-              <TableCell></TableCell>
+
               <TableCell>-</TableCell>
               <TableCell className="text-right">
-                <Badge variant="outline" className="text-xs">
-                  {isDateExpanded ? 'Collapse' : 'Expand'}
-                </Badge>
+                <div className="flex items-center justify-end gap-2">
+                  {/* GENERATE POC BUTTON - Only show in pending if all templates are locked */}
+                  {type === 'pending' &&
+                    dateGroup.surveys.length > 0 &&
+                    dateGroup.surveys.every(s => s.isLocked) && (
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="h-7 bg-red-600 hover:bg-red-700 text-white"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleGeneratePocForDate(dateGroup.surveys);
+                        }}
+                        disabled={markPocGenerated.isPending}
+                      >
+                        {markPocGenerated.isPending ? "Generating..." : "Generate POC"}
+                      </Button>
+                    )}
+                </div>
               </TableCell>
             </TableRow>
 
-            {/* LEVEL 3: SURVEY ROWS - More Indented */}
+            {/* LEVEL 3: HEADER ROW - Shows when date is expanded */}
+            {/* LEVEL 3: EXPANDED CONTENT - Wrapped in a container */}
+            {isDateExpanded && (
+              <TableRow>
+                <TableCell colSpan={7} className="p-4 bg-muted/20">
+                  <div className={cn(
+                    "rounded-lg border-2 overflow-hidden",
+                    type === "closed"
+                      ? "border-green-300 bg-white"
+                      : "border-amber-300 bg-white"
+                  )}>
+                    <Table>
+                      <TableHeader>
+                        <TableRow className={cn(
+                          "border-b-2",
+                          type === "closed"
+                            ? "bg-green-50 hover:bg-green-50 border-green-200"
+                            : "bg-amber-50 hover:bg-amber-50 border-amber-200"
+                        )}>
+                          <TableHead className={cn(
+                            "w-[80px] text-right font-semibold",
+                            type === "closed" ? "text-green-800" : "text-amber-800"
+                          )}>
+                            System ID
+                          </TableHead>
+                          <TableHead className={cn(
+                            "font-semibold",
+                            type === "closed" ? "text-green-800" : "text-amber-800"
+                          )}>
+                            Date
+                          </TableHead>
+                          <TableHead className={cn(
+                            "font-semibold",
+                            type === "closed" ? "text-green-800" : "text-amber-800"
+                          )}>
+                            Surveyor
+                          </TableHead>
+                          <TableHead className={cn(
+                            "font-semibold",
+                            type === "closed" ? "text-green-800" : "text-amber-800"
+                          )}>
+                            Template
+                          </TableHead>
+                          <TableHead className={cn(
+                            "font-semibold",
+                            type === "closed" ? "text-green-800" : "text-amber-800"
+                          )}>
+                            Status
+                          </TableHead>
+                          <TableHead className={cn(
+                            "font-semibold text-center",
+                            type === "closed" ? "text-green-800" : "text-amber-800"
+                          )}>
+                            Score
+                          </TableHead>
+                          <TableHead className={cn(
+                            "text-right font-semibold",
+                            type === "closed" ? "text-green-800" : "text-amber-800"
+                          )}>
+                            Action
+                          </TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {dateGroup.surveys.map((survey) => {
+                          const scoreData = surveyScores.get(survey.id);
+                          const scorePercentage = scoreData && scoreData.totalPossible > 0
+                            ? Math.round((scoreData.score / scoreData.totalPossible) * 100)
+                            : 0;
+                          const pocStatus = getPocStatus(survey, scoreData, type === 'pending' ? 'pending' : 'completed');
+
+                          return (
+                            <TableRow key={`${type}-survey-${survey.id}`} className="hover:bg-muted/50">
+                              <TableCell className="text-right font-mono tabular-nums">
+                                {survey.id}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="secondary">{dateKey}</Badge>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  {survey.surveyor ? (
+                                    <>
+                                      <span>{survey.surveyor.name}</span>
+                                      <Badge variant="outline" className="text-xs">{survey.surveyor.email}</Badge>
+                                    </>
+                                  ) : (
+                                    "-"
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                {survey.template && <TemplateHoverCard template={survey.template} />}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant={pocStatus.variant} className={pocStatus.className}>
+                                  {pocStatus.status}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  {scoreData ? (
+                                    <div className="flex flex-col items-center">
+                                      <Badge
+                                        variant="outline"
+                                        className={cn(
+                                          "font-mono",
+                                          scorePercentage >= 80 ? "bg-green-100 text-green-800 border-green-300" :
+                                            scorePercentage >= 60 ? "bg-yellow-100 text-yellow-800 border-yellow-300" :
+                                              "bg-red-100 text-red-800 border-red-300"
+                                        )}
+                                      >
+                                        {scoreData.score}/{scoreData.totalPossible}
+                                      </Badge>
+                                    </div>
+                                  ) : (
+                                    <Skeleton className="h-6 w-12" />
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <Link
+                                  href={`/qisv/surveys/${survey.id}`}
+                                  className={cn(buttonVariants({ variant: "outline", size: "icon" }), "size-6")}
+                                >
+                                  <ExternalLinkIcon className="h-3 w-3" />
+                                </Link>
+
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="ml-2 h-6 w-6 text-destructive hover:text-destructive"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSurveyToDelete({
+                                          id: survey.id,
+                                          name: survey.template?.name ?? `Survey ${survey.id}`,
+                                        });
+                                      }}
+                                      disabled={deleteSurvey.isPending}
+                                    >
+                                      <TrashIcon className="h-4 w-4" />
+                                      <span className="sr-only">Delete survey</span>
+                                    </Button>
+                                  </AlertDialogTrigger>
+
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Delete Template</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        Are you sure you want to delete the template "
+                                        {surveyToDelete?.id === survey.id ? surveyToDelete?.id : survey.template?.name ?? `Survey ${survey.id}`}
+                                        "? This action cannot be undone and will delete all associated data.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel
+                                        onClick={() => setSurveyToDelete(null)}
+                                        disabled={deleteSurvey.isPending}
+                                      >
+                                        Cancel
+                                      </AlertDialogCancel>
+                                      <AlertDialogAction
+                                        className="px-4 py-2 rounded-lg bg-destructive text-white hover:bg-red-700 active:bg-red-800 focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors duration-150"
+                                        onClick={() => {
+                                          setSurveyToDelete(null);
+                                          deleteSurvey.mutate({ id: survey.id });
+                                        }}
+                                        disabled={deleteSurvey.isPending}
+                                      >
+                                        {deleteSurvey.isPending ? "Deleting..." : "Delete"}
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </TableCell>
+              </TableRow>
+            )}
+
+
+
+
+            {/* LEVEL 3: SURVEY ROWS - More Indented
             {isDateExpanded && dateGroup.surveys.map((survey) => {
               const scoreData = surveyScores.get(survey.id);
               const scorePercentage = scoreData && scoreData.totalPossible > 0
@@ -1069,7 +1344,7 @@ export default function SurveysPage() {
                   </TableCell>
                 </TableRow>
               );
-            })}
+            })} */}
           </React.Fragment>
         );
       })}
@@ -1196,11 +1471,11 @@ export default function SurveysPage() {
             </div>
 
             {/* Completed Surveys */}
-            <div className="mb-8 rounded-lg border border-green-200 bg-green-50/30">
-              <div className="flex items-center justify-between p-4 border-b border-green-200 bg-green-100/50">
+            <div className="mb-8 rounded-lg border border-[#0c2152] bg-[#0c2152]">
+              <div className="flex items-center justify-between p-4 border-b border-[#0c2152] bg-[#0c2152]-100/50">
                 <div className="flex items-center gap-2">
                   <div className="h-3 w-3 rounded-full bg-green-500"></div>
-                  <span className="font-semibold text-green-800">Completed Surveys</span>
+                  <span className="font-semibold text-white">Completed Surveys</span>
                   <Badge variant="secondary" className="bg-green-200 text-green-800">
                     {filteredClosedGroups.length} facilit{filteredClosedGroups.length !== 1 ? 'ies' : 'y'}
                   </Badge>
@@ -1234,7 +1509,7 @@ export default function SurveysPage() {
                     <SelectContent>
                       <SelectItem value="all">All Status</SelectItem>
                       <SelectItem value="poc-completed">POC Completed</SelectItem>
-                      <SelectItem value="poc-pending">POC Pending</SelectItem>
+                      <SelectItem value="poc-pending">POC In Progress</SelectItem>
                     </SelectContent>
                   </Select>
 
@@ -1242,18 +1517,7 @@ export default function SurveysPage() {
 
               </div>
 
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-green-100 hover:bg-green-100">
-                    <TableHead className="w-[80px] text-right text-green-800">System ID</TableHead>
-                    <TableHead className="text-green-800">Date</TableHead>
-                    <TableHead className="text-green-800">Surveyor</TableHead>
-                    <TableHead className="text-green-800">Template</TableHead>
-                    <TableHead className="text-green-800">Status</TableHead>
-                    <TableHead className="text-green-800 text-center">Score</TableHead>
-                    <TableHead className="text-right text-green-800">Action</TableHead>
-                  </TableRow>
-                </TableHeader>
+              <Table className="bg-white">
                 <TableBody>
                   {surveys.isPending ? (
                     Array.from({ length: 3 }).map((_, i) => (
@@ -1290,11 +1554,11 @@ export default function SurveysPage() {
             </div>
 
             {/* Pending Surveys */}
-            <div className="mb-8 rounded-lg border border-amber-200 bg-amber-50/30">
-              <div className="flex items-center justify-between p-4 border-b border-amber-200 bg-amber-100/50">
+            <div className="mb-8 rounded-lg border border-[#0c2152] bg-[#0C2152]">
+              <div className="flex items-center justify-between p-4 border-b border-[#0c2152] ">
                 <div className="flex items-center gap-2">
                   <div className="h-3 w-3 rounded-full bg-amber-500"></div>
-                  <span className="font-semibold text-amber-800">Pending Surveys</span>
+                  <span className="font-semibold text-white">Pending Surveys</span>
                   <Badge variant="secondary" className="bg-amber-200 text-amber-800">
                     {filteredPendingGroups.length} facilit{filteredPendingGroups.length !== 1 ? 'ies' : 'y'}
                   </Badge>
@@ -1329,7 +1593,7 @@ export default function SurveysPage() {
                     <SelectContent>
                       <SelectItem value="all">All Status</SelectItem>
                       <SelectItem value="locked">Locked</SelectItem>
-                      <SelectItem value="unlocked">Unlocked</SelectItem>
+                      <SelectItem value="unlocked">In Progress</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1337,18 +1601,7 @@ export default function SurveysPage() {
               </div>
 
               <Table>
-                <TableHeader>
-                  <TableRow className="bg-amber-100 hover:bg-amber-100">
-                    <TableHead className="w-[80px] text-right text-amber-800">System ID</TableHead>
-                    <TableHead className="text-amber-800">Date</TableHead>
-                    <TableHead className="text-amber-800">Surveyor</TableHead>
-                    <TableHead className="text-amber-800">Template</TableHead>
-                    <TableHead className="text-amber-800">Status</TableHead>
-                    <TableHead className="text-amber-800 text-center">Score</TableHead>
-                    <TableHead className="text-right text-amber-800">Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+                <TableBody className="bg-white rounded-lg border-white">
                   {surveys.isPending ? (
                     Array.from({ length: 3 }).map((_, i) => (
                       <TableRow key={`pending-skel-${i}`}>
