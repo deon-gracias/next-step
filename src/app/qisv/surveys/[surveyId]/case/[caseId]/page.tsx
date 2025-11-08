@@ -6,7 +6,6 @@ import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { FormField } from "@/components/ui/form";
 import {
@@ -19,6 +18,7 @@ import {
 import { metStatusEnum, surveyResponseInsertSchema } from "@/server/db/schema";
 import React, { useEffect } from "react";
 import { QISVHeader } from "@/app/qisv/_components/header";
+import TextareaAutosize from "react-textarea-autosize";
 
 // ✅ Use the SAME schema as resident page - allow undefined/optional values
 const formSchema = z.object({
@@ -69,7 +69,6 @@ export default function CaseSurveyPage() {
     ? `Case ${surveyCase.data.caseCode}`
     : `Case ${caseId}`;
 
-
   // ✅ Updated query to use surveyCaseId parameter
   const responsesQuery = api.survey.listResponses.useQuery(
     {
@@ -104,7 +103,6 @@ export default function CaseSurveyPage() {
     return m;
   }, [ftagsBatch.data]);
 
-
   // Mutations
   const upsertResponses = api.survey.createResponse.useMutation({
     onError: (e) => toast.error(e.message),
@@ -128,9 +126,10 @@ export default function CaseSurveyPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [questions.data, responsesQuery.data]);
+  
   const router = useRouter();
 
-  // ✅ Updated submit function to use surveyCaseId properly
+  // ✅ Updated submit function with findings validation
   const onSubmit = async (vals: FormValues) => {
     if (!questions.data || !survey.data) return;
 
@@ -144,6 +143,16 @@ export default function CaseSurveyPage() {
 
       if (filtered.length === 0) {
         toast.message("No changes to save");
+        return;
+      }
+
+      // ✅ NEW: Validate that all "unmet" responses have findings
+      const unmetWithoutFindings = filtered.filter(
+        (r) => r.requirementsMetOrUnmet === "unmet" && (!r.findings || r.findings.trim().length === 0)
+      );
+
+      if (unmetWithoutFindings.length > 0) {
+        toast.error("All items marked as 'Unmet' must have findings");
         return;
       }
 
@@ -244,7 +253,6 @@ export default function CaseSurveyPage() {
                   </div>
                 </div>
 
-
                 <FormField
                   control={form.control}
                   name={`responses.${idx}.requirementsMetOrUnmet`}
@@ -271,20 +279,27 @@ export default function CaseSurveyPage() {
                   )}
                 />
 
-                {/* ✅ Show findings input when unmet */}
+                {/* ✅ NEW: Show findings textarea when unmet - with red asterisk and auto-resize */}
                 {isUnmet && (
-                  <FormField
-                    control={form.control}
-                    name={`responses.${idx}.findings`}
-                    render={({ field }) => (
-                      <Input
-                        placeholder="Findings / notes"
-                        {...field}
-                        value={field.value ?? ""}
-                        disabled={isLocked}
-                      />
-                    )}
-                  />
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium">
+                      Findings <span className="text-red-500">*</span>
+                    </label>
+                    <FormField
+                      control={form.control}
+                      name={`responses.${idx}.findings`}
+                      render={({ field }) => (
+                        <TextareaAutosize
+                          placeholder="Enter findings / notes"
+                          {...field}
+                          value={field.value ?? ""}
+                          disabled={isLocked}
+                          minRows={2}
+                          className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
+                        />
+                      )}
+                    />
+                  </div>
                 )}
               </div>
             );

@@ -1832,7 +1832,7 @@ const generalStrengths = React.useMemo(() => {
     }
 
     // Existing POC sheet logic when pocGenerated is true
-    const label = hasAnyPOC ? "View POC" : "Create POC";
+    const label = hasAnyPOC ? "View POC" : "Fill POC";
     const totalUnmetQuestions = sheetBlocks.length;
 
     // ✅ UPDATED: Count entities based on template type

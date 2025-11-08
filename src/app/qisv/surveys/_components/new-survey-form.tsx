@@ -72,6 +72,17 @@ import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { authClient } from "@/components/providers/auth-client";
 import { useLocalStorageForm } from "@/hooks/useLocalStorageForm";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 export const newMultiSurveyCreateInputSchema = z.object({
   surveyDate: z.date(),
@@ -626,6 +637,10 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
   // State for showing save indicator
   const [showSavedIndicator, setShowSavedIndicator] = useState(false);
 
+
+  // ✅ NEW: Add state for confirmation dialog
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+
   const surveyorsField = useFieldArray({
     control: form.control,
     name: "surveyors",
@@ -710,38 +725,39 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
       }
     }
 
-    async function createSurveys(survey: SurveyCreateInputType) {
-      return await createSurvey.mutateAsync(survey);
-    }
+    // ✅ NEW: Function to actually create surveys (moved out of immediate execution)
+    const executeSurveyCreation = async () => {
+      async function createSurveys(survey: SurveyCreateInputType) {
+        return await createSurvey.mutateAsync(survey);
+      }
 
-    toast.promise(
-      Promise.all(createSurveyRequest.map((e) => createSurveys(e))),
-      {
-        loading: "Creating surveys",
-        success: () => {
-          // Clear localStorage FIRST - completely remove all saved data
-          clearStorage();
+      toast.promise(
+        Promise.all(createSurveyRequest.map((e) => createSurveys(e))),
+        {
+          loading: "Creating surveys",
+          success: () => {
+            clearStorage();
 
-          // Reset form to completely fresh state
-          const freshFormData: NewMultiSurveyCreateInputType = {
-            surveyDate: new Date(),
-            facilityId: -1, // Reset to default "not selected" state
-            surveyors: [], // Start with empty surveyors array
-          };
+            const freshFormData: NewMultiSurveyCreateInputType = {
+              surveyDate: new Date(),
+              facilityId: -1,
+              surveyors: [],
+            };
 
-          form.reset(freshFormData);
+            form.reset(freshFormData);
+            surveyorsField.replace([]);
 
-          // Force surveyors field to be completely empty initially
-          surveyorsField.replace([]);
-
-          // Show success message
-          return "Survey created successfully! Form has been cleared.";
+            return "Survey created successfully! Form has been cleared.";
+          },
+          error: () => "Failed to create survey.",
         },
-        error: () => "Failed to create survey.",
-      },
-    );
+      );
+    };
 
+    // ✅ NEW: Just open dialog, don't create yet
+    setShowConfirmDialog(true);
   };
+
 
   return (
     <div className="space-y-4">
@@ -909,20 +925,106 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
       {/* Submit Button */}
 
 
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)}>
-          <div className="flex justify-center mt-16">
-            <Button
-              type="submit"
-              disabled={form.watch("facilityId") < 0}
-              className="w-full max-w-md bg-[#ec553a] hover:bg-[#d64931] text-white font-medium py-3 rounded-lg shadow-md transition-all"
-            >
-              Create Survey
-            </Button>
+      {/* Submit Button */}
+      {/* Submit Button with Alert Dialog */}
+      {/* Submit Button with Alert Dialog */}
+      {/* Submit Button with Alert Dialog */}
+      {/* Submit Button with Alert Dialog - UNCONTROLLED VERSION */}
+      <AlertDialog>
+        <Form {...form}>
+          <div className="flex justify-center mt-16 mb-16">
+            <AlertDialogTrigger asChild>
+              <Button
+                type="button"
+                disabled={form.watch("facilityId") < 0}
+                className="w-full max-w-md bg-[#ec553a] hover:bg-[#d64931] text-white font-medium py-3 rounded-lg shadow-md transition-all"
+              >
+                Create Survey
+              </Button>
+            </AlertDialogTrigger>
           </div>
+        </Form>
 
-        </form>
-      </Form>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Survey Creation</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to create this survey? This action will process all selected templates and surveyors.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>
+              No
+            </AlertDialogCancel>
+
+            <AlertDialogCancel
+              className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 h-10 px-4 py-2 bg-green-600 hover:bg-green-700 text-white border-2 border-green-600"
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setTimeout(() => {
+                    const values = form.getValues();
+                    const createSurveyRequest: SurveyCreateInputType[] = [];
+
+                    for (const surveyor of values.surveyors) {
+                      for (const template of surveyor.templates) {
+                        createSurveyRequest.push({
+                          surveyDate: values.surveyDate.toUTCString(),
+                          surveyorId: surveyor.surveyorId,
+                          facilityId: values.facilityId,
+                          templateId: template.template?.id,
+                          caseCodes: template.caseCodes,
+                          residentIds: template.residentIds,
+                        } as SurveyCreateInputType);
+                      }
+                    }
+
+                    if (createSurveyRequest.length === 0) {
+                      toast.error("No surveys to create");
+                      return;
+                    }
+
+                    async function createSurveys(survey: SurveyCreateInputType) {
+                      return await createSurvey.mutateAsync(survey);
+                    }
+
+                    toast.promise(
+                      Promise.all(createSurveyRequest.map((e) => createSurveys(e))),
+                      {
+                        loading: "Creating surveys",
+                        success: () => {
+                          clearStorage();
+                          const freshFormData: NewMultiSurveyCreateInputType = {
+                            surveyDate: new Date(),
+                            facilityId: -1,
+                            surveyors: [],
+                          };
+                          form.reset(freshFormData);
+                          surveyorsField.replace([]);
+                          return "Survey created successfully! Form has been cleared.";
+                        },
+                        error: () => "Failed to create survey.",
+                      },
+                    );
+                  }, 0);
+                }}
+              >
+                Yes
+              </button>
+            </AlertDialogCancel>
+          </AlertDialogFooter>
+
+
+
+        </AlertDialogContent>
+      </AlertDialog>
+
+
+
+
+
+
 
     </div>
   );
@@ -1034,21 +1136,20 @@ function SurveyorField({
             ))}
 
             {/* Add Template Button - Matching screenshot */}
-            <div className="border-2 border-dashed border-[#347aaa] bg-white rounded-lg py-3 flex items-center justify-center">
-              <button
-                type="button"
-                onClick={() =>
-                  templatesField.append({
-                    caseCodes: [],
-                    residentIds: [],
-                  })
-                }
-                className="text-[#347aaa] font-medium text-sm flex items-center gap-2"
-              >
-                <PlusIcon className="h-4 w-4" />
-                Add Template
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() =>
+                templatesField.append({
+                  caseCodes: [],
+                  residentIds: [],
+                })
+              }
+              className="w-full border-2 border-dashed border-[#347aaa] bg-white rounded-lg py-3 flex items-center justify-center text-[#347aaa] font-medium text-sm gap-2"
+            >
+              <PlusIcon className="h-4 w-4" />
+              Add Template
+            </button>
+
           </div>
         )}
       </CardContent>

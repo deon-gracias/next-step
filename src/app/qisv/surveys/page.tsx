@@ -65,6 +65,33 @@ type GroupedSurvey = {
 };
 
 type DateSortOrder = "asc" | "desc" | null;
+type StatusVal = "met" | "unmet" | "not_applicable";
+
+const isFinalStatus = (v: string | null | undefined): v is StatusVal =>
+  v === "met" || v === "unmet" || v === "not_applicable";
+
+// Helper to check if all questions answered for a survey
+async function checkSurveyCompletion(surveyId: number): Promise<boolean> {
+  try {
+    const responses = await fetch(`/api/trpc/qisv.getResponsesBySurvey?input=${JSON.stringify({ surveyId })}`).then(r => r.json());
+    const template = await fetch(`/api/trpc/qisv.getTemplateForSurvey?input=${JSON.stringify({ surveyId })}`).then(r => r.json());
+
+    if (!responses?.result?.data || !template?.result?.data?.questions) return false;
+
+    const questions = template.result.data.questions;
+    const responsesList = responses.result.data;
+
+    // Check if every question has at least one final status response
+    return questions.every((q: any) => {
+      return responsesList.some((r: any) =>
+        r.questionId === q.id && isFinalStatus(r.status)
+      );
+    });
+  } catch {
+    return false;
+  }
+}
+
 
 export default function SurveysPage() {
   const session = authClient.useSession();
@@ -362,6 +389,120 @@ export default function SurveysPage() {
             }
           })
         );
+
+        // ✅ ADD THIS BLOCK at the end of your first useEffect, BEFORE "if (!cancelled) setSurveyScores(scoresMap);"
+        // Attach completion status to each survey for pending table
+        if (!cancelled && surveys.data) {
+          surveys.data.forEach(async survey => {
+            const residents = await utils.survey.listResidents.fetch({ surveyId: survey.id });
+            const cases = await utils.survey.listCases.fetch({ surveyId: survey.id });
+            const questions = await utils.question.list.fetch({ templateId: survey.templateId });
+
+            if (!questions || questions.length === 0) {
+              (survey as any)._isComplete = false;
+              return;
+            }
+
+            // Get responses (same logic you already use above)
+            const allResponses: Array<{
+              residentId: number | null;
+              surveyCaseId: number | null;
+              questionId: number;
+              status: string | null;
+            }> = [];
+
+            if (residents && residents.length > 0) {
+              for (const r of residents) {
+                const rows = await utils.survey.listResponses.fetch({
+                  surveyId: survey.id,
+                  residentId: r.residentId
+                });
+                for (const rr of rows ?? []) {
+                  allResponses.push({
+                    residentId: r.residentId,
+                    surveyCaseId: null,
+                    questionId: rr.questionId,
+                    status: rr.requirementsMetOrUnmet ?? null,
+                  });
+                }
+              }
+            }
+
+            if (cases && cases.length > 0) {
+              for (const c of cases) {
+                const rows = await utils.survey.listResponses.fetch({
+                  surveyId: survey.id,
+                  surveyCaseId: c.id
+                });
+                for (const rr of rows ?? []) {
+                  allResponses.push({
+                    residentId: null,
+                    surveyCaseId: c.id,
+                    questionId: rr.questionId,
+                    status: rr.requirementsMetOrUnmet ?? null,
+                  });
+                }
+              }
+            }
+
+            if ((!residents || residents.length === 0) && (!cases || cases.length === 0)) {
+              const rows = await utils.survey.listResponses.fetch({
+                surveyId: survey.id,
+                residentId: null,
+                surveyCaseId: null
+              });
+              for (const rr of rows ?? []) {
+                allResponses.push({
+                  residentId: null,
+                  surveyCaseId: null,
+                  questionId: rr.questionId,
+                  status: rr.requirementsMetOrUnmet ?? null,
+                });
+              }
+            }
+
+            // Build byEntity map
+            const byEntity = new Map<string, Map<number, { status: string | null }>>();
+            for (const r of allResponses) {
+              const entityKey = r.residentId
+                ? `resident-${r.residentId}`
+                : r.surveyCaseId
+                  ? `case-${r.surveyCaseId}`
+                  : 'general';
+              const inner = byEntity.get(entityKey) ?? new Map();
+              inner.set(r.questionId, { status: r.status });
+              byEntity.set(entityKey, inner);
+            }
+
+            // Check if ALL questions have final status (met/unmet/not_applicable)
+            const isSurveyComplete = questions.every((q: any) => {
+              if ((!residents || residents.length === 0) && (!cases || cases.length === 0)) {
+                const cell = byEntity.get('general')?.get(q.id);
+                return cell?.status && isFinalStatus(cell.status);
+              }
+
+              if (residents && residents.length > 0) {
+                return residents.every((r: any) => {
+                  const cell = byEntity.get(`resident-${r.residentId}`)?.get(q.id);
+                  return cell?.status && isFinalStatus(cell.status);
+                });
+              }
+
+              if (cases && cases.length > 0) {
+                return cases.every((c: any) => {
+                  const cell = byEntity.get(`case-${c.id}`)?.get(q.id);
+                  return cell?.status && isFinalStatus(cell.status);
+                });
+              }
+
+              return false;
+            });
+
+            // ✅ Attach completion flag to survey object
+            (survey as any)._isComplete = isSurveyComplete;
+          });
+        }
+
 
         if (!cancelled) {
           setSurveyScores(scoresMap);
@@ -847,19 +988,30 @@ export default function SurveysPage() {
   const getPocStatus = (survey: any, scoreData: { score: number; totalPossible: number } | undefined, sectionType: 'completed' | 'pending' = 'completed') => {
     // ONLY for pending section, check if survey is locked or not
     if (sectionType === 'pending') {
+      // 1) Locked wins (gray)
       if (survey.isLocked) {
         return {
-          status: "Locked/Completed",
+          status: "Locked",
           variant: "secondary" as const,
           className: "bg-gray-100 text-gray-800"
         };
-      } else {
+      }
+
+      // 2) Check if completed - use the _isComplete flag passed from parent
+      if (survey._isComplete === true) {
         return {
-          status: "In Progress",
-          variant: "secondary" as const,
-          className: "bg-blue-100 text-blue-800"
+          status: "Completed",
+          variant: "default" as const,
+          className: "bg-green-100 text-green-800"
         };
       }
+
+      // 3) Otherwise in progress (blue)
+      return {
+        status: "In Progress",
+        variant: "secondary" as const,
+        className: "bg-blue-100 text-blue-800"
+      };
     }
 
     // KEEP ALL ORIGINAL LOGIC FOR COMPLETED SECTION
@@ -965,23 +1117,25 @@ export default function SurveysPage() {
                 {/* MIDDLE SECTION: Show status chip for both pending and completed */}
                 {type === 'pending' ? (
                   (() => {
+                    const completedCount = dateGroup.surveys.filter(s => s._isComplete === true).length;
                     const lockedCount = dateGroup.surveys.filter(s => s.isLocked).length;
                     const totalCount = dateGroup.surveys.length;
-                    const allLocked = lockedCount === totalCount;
+                    const allCompleted = completedCount === totalCount;
 
                     return (
                       <Badge className={cn(
-                        allLocked
+                        allCompleted
                           ? "bg-green-100 text-green-800 border-green-300"
-                          : "bg-blue-100 text-blue-800 border-blue-300"
+                          : "bg-yellow-100 text-yellow-800 border-yellow-300"
                       )}>
-                        {!allLocked
-                          ? `${lockedCount}/${totalCount} templates completed`
-                          : `${lockedCount}/${totalCount} templates locked`
+                        {!allCompleted
+                          ? `${completedCount}/${totalCount} Templates Completed`
+                          : `${lockedCount}/${totalCount} Templates Locked`
                         }
                       </Badge>
                     );
                   })()
+
                 ) : (
                   (() => {
                     // Only count surveys that require POC (score < 85%)
