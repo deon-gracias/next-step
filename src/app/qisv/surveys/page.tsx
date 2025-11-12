@@ -688,21 +688,12 @@ export default function SurveysPage() {
   }, [selectedDate, dateSortOrder]);
 
   // Helper function to determine survey category - BACK TO USING pocGenerated FLAG for grouping
-  const getSurveyCategory = (survey: any, scoreData: { score: number; totalPossible: number } | undefined) => {
-    // If survey is not locked, it goes to pending regardless of score/POC
-    if (!survey.isLocked) {
-      return 'pending';
-    }
-
-    const scorePercentage = scoreData && scoreData.totalPossible > 0
-      ? Math.round((scoreData.score / scoreData.totalPossible) * 100)
-      : 0;
-
-    // For locked surveys:
-    // If score >= 75% OR pocGenerated is true, it goes to completed
-    // Otherwise, it goes to pending
-    return (scorePercentage >= 85 || survey.pocGenerated) ? 'completed' : 'pending';
-  };
+  const getSurveyCategory = (survey: any) => {
+  // ✅ SIMPLE: Only pocGenerated flag determines the section
+  // If pocGenerated is true → completed section
+  // If pocGenerated is false → pending section
+  return survey.pocGenerated ? 'completed' : 'pending';
+};
 
   // Group surveys by facility → date → template hierarchy
   const groupedSurveys = React.useMemo(() => {
@@ -716,15 +707,14 @@ export default function SurveysPage() {
     const pendingSurveys: any[] = [];
 
     filteredSurveys.forEach(survey => {
-      const scoreData = surveyScores.get(survey.id);
-      const category = getSurveyCategory(survey, scoreData);
+  const category = getSurveyCategory(survey); // ✅ Removed scoreData parameter
 
-      if (category === 'completed') {
-        completedSurveys.push(survey);
-      } else {
-        pendingSurveys.push(survey);
-      }
-    });
+  if (category === 'completed') {
+    completedSurveys.push(survey);
+  } else {
+    pendingSurveys.push(survey);
+  }
+});
 
     // Debug logging
     console.log('Survey categorization (using pocGenerated for grouping, survey_poc for display):', {
@@ -1018,7 +1008,7 @@ export default function SurveysPage() {
     if (!survey.isLocked) {
       const isCompleted = survey.responses && survey.responses.length > 0;
       return {
-        status: isCompleted ? "In Progress" : "POC Not Started",
+        status: isCompleted ? "In Progress" : "POC Not Started (Unlocked)",
         variant: "secondary" as const,
         className: isCompleted ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-800"
       };

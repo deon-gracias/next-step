@@ -592,4 +592,206 @@ export const surveyRouter = createTRPCRouter({
       if (!updated) throw new Error("Survey not found");
       return updated;
     }),
+  // Add to survey router
+  updateSurveyor: protectedProcedure
+    .input(z.object({
+      surveyId: z.number().int().positive(),
+      surveyorId: z.string()
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const [updated] = await ctx.db
+        .update(survey)
+        .set({ surveyorId: input.surveyorId })
+        .where(eq(survey.id, input.surveyId))
+        .returning();
+      if (!updated) throw new Error("Survey not found");
+      return updated;
+    }),
+
+  addResident: protectedProcedure
+  .input(z.object({
+    surveyId: z.number().int().positive(),
+    residentId: z.number().int().positive(),
+  }))
+  .mutation(async ({ ctx, input }) => {
+    // Check if already exists
+    const existing = await ctx.db
+      .select()
+      .from(surveyResident)
+      .where(
+        and(
+          eq(surveyResident.surveyId, input.surveyId),
+          eq(surveyResident.residentId, input.residentId)
+        )
+      )
+      .limit(1);
+
+    if (existing.length > 0) {
+      throw new Error("Resident already added to this survey");
+    }
+
+    // ✅ Delete ALL POCs for this survey
+    await ctx.db
+      .delete(surveyPOC)
+      .where(eq(surveyPOC.surveyId, input.surveyId));
+
+    // ✅ Set pocGenerated to false
+    await ctx.db
+      .update(survey)
+      .set({ pocGenerated: false })
+      .where(eq(survey.id, input.surveyId));
+
+    // Add the resident
+    const [added] = await ctx.db
+      .insert(surveyResident)
+      .values({
+        surveyId: input.surveyId,
+        residentId: input.residentId,
+      })
+      .returning();
+
+    return added;
+  }),
+
+
+  removeResident: protectedProcedure
+    .input(z.object({
+      surveyId: z.number().int().positive(),
+      residentId: z.number().int().positive(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      // Delete all responses for this resident first
+      await ctx.db
+        .delete(surveyResponse)
+        .where(
+          and(
+            eq(surveyResponse.surveyId, input.surveyId),
+            eq(surveyResponse.residentId, input.residentId)
+          )
+        );
+
+      // Delete POCs
+      await ctx.db
+        .delete(surveyPOC)
+        .where(
+          and(
+            eq(surveyPOC.surveyId, input.surveyId),
+            eq(surveyPOC.residentId, input.residentId)
+          )
+        );
+
+      // Delete DOCs
+      await ctx.db
+        .delete(surveyDOC)
+        .where(
+          and(
+            eq(surveyDOC.surveyId, input.surveyId),
+            eq(surveyDOC.residentId, input.residentId)
+          )
+        );
+
+      // Finally delete the survey resident link
+      await ctx.db
+        .delete(surveyResident)
+        .where(
+          and(
+            eq(surveyResident.surveyId, input.surveyId),
+            eq(surveyResident.residentId, input.residentId)
+          )
+        );
+
+      return { success: true };
+    }),
+
+addCase: protectedProcedure
+  .input(z.object({
+    surveyId: z.number().int().positive(),
+    caseCode: z.string().min(1),
+  }))
+  .mutation(async ({ ctx, input }) => {
+    // Check if already exists
+    const existing = await ctx.db
+      .select()
+      .from(surveyCases)
+      .where(
+        and(
+          eq(surveyCases.surveyId, input.surveyId),
+          eq(surveyCases.caseCode, input.caseCode)
+        )
+      )
+      .limit(1);
+
+    if (existing.length > 0) {
+      throw new Error("Case already added to this survey");
+    }
+
+    // ✅ Delete ALL POCs for this survey
+    await ctx.db
+      .delete(surveyPOC)
+      .where(eq(surveyPOC.surveyId, input.surveyId));
+
+    // ✅ Set pocGenerated to false
+    await ctx.db
+      .update(survey)
+      .set({ pocGenerated: false })
+      .where(eq(survey.id, input.surveyId));
+
+    // Add the case
+    const [added] = await ctx.db
+      .insert(surveyCases)
+      .values({
+        surveyId: input.surveyId,
+        caseCode: input.caseCode,
+      })
+      .returning();
+
+    return added;
+  }),
+
+
+removeCase: protectedProcedure
+  .input(z.object({
+    surveyId: z.number().int().positive(),
+    caseId: z.number().int().positive(),
+  }))
+  .mutation(async ({ ctx, input }) => {
+    // Delete all responses for this case first
+    await ctx.db
+      .delete(surveyResponse)
+      .where(
+        and(
+          eq(surveyResponse.surveyId, input.surveyId),
+          eq(surveyResponse.surveyCaseId, input.caseId)
+        )
+      );
+
+    // Delete POCs
+    await ctx.db
+      .delete(surveyPOC)
+      .where(
+        and(
+          eq(surveyPOC.surveyId, input.surveyId),
+          eq(surveyPOC.surveyCaseId, input.caseId)
+        )
+      );
+
+    // Delete DOCs
+    await ctx.db
+      .delete(surveyDOC)
+      .where(
+        and(
+          eq(surveyDOC.surveyId, input.surveyId),
+          eq(surveyDOC.surveyCaseId, input.caseId)
+        )
+      );
+
+    // Finally delete the survey case link
+    await ctx.db
+      .delete(surveyCases)
+      .where(eq(surveyCases.id, input.caseId));
+
+    return { success: true };
+  }),
+
+
 });

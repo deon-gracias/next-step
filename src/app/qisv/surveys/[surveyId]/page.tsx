@@ -29,11 +29,18 @@ import { Lock, Unlock, MessageCircle, Send, User, Clock, Download, Calendar, Ale
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { format } from "date-fns";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { Pencil, Plus, Trash2, X } from "lucide-react";
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+
 
 // Import jsPDF - you'll need to install it: npm install jspdf html2canvas
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { ftag } from "@/server/db/schema";
+import { authClient } from "@/components/providers/auth-client";
+import { useDebounce } from "@uidotdev/usehooks";
 
 // Local minimal types to avoid any
 type StatusVal = "met" | "unmet" | "not_applicable";
@@ -329,8 +336,138 @@ export default function SurveyDetailPage() {
   const [newComment, setNewComment] = useState("");
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
+  const [editSurveyorOpen, setEditSurveyorOpen] = useState(false);
+  const [selectedSurveyorId, setSelectedSurveyorId] = useState<string>("");
+  const [editResidentsOpen, setEditResidentsOpen] = useState(false);
+  const [selectedResidentId, setSelectedResidentId] = useState<number | null>(null);
+
+  const [editCasesOpen, setEditCasesOpen] = useState(false);
+  const [newCaseCode, setNewCaseCode] = useState("");
+  const mutationCountRef = useRef(0);
+
   // PDF ref for hidden content
   const pdfContentRef = useRef<HTMLDivElement>(null);
+
+
+  const updateSurveyor = api.survey.updateSurveyor.useMutation({
+    onSuccess: async () => {
+      await utils.survey.byId.invalidate({ id: surveyId });
+      setEditSurveyorOpen(false);
+      toast.success("Surveyor updated successfully");
+    },
+    onError: (e) => toast.error(e.message ?? "Failed to update surveyor"),
+  });
+
+  const addResident = api.survey.addResident.useMutation({
+    onSuccess: async () => {
+      await utils.survey.listResidents.invalidate({ surveyId });
+      setSelectedResidentId(null);
+      toast.success("Resident added successfully");
+    },
+    onError: (e) => toast.error(e.message ?? "Failed to add resident"),
+  });
+
+  const removeResident = api.survey.removeResident.useMutation({
+    onMutate: async (deletedResident) => {
+      // Cancel any outgoing refetches
+      await utils.survey.listResidents.cancel({ surveyId });
+
+      // Snapshot the previous value
+      const previousResidents = utils.survey.listResidents.getData({ surveyId });
+
+      // Optimistically update to the new value
+      utils.survey.listResidents.setData(
+        { surveyId },
+        (old) => old?.filter((r) => r.residentId !== deletedResident.residentId)
+      );
+
+      // Return a context object with the snapshotted value
+      return { previousResidents };
+    },
+    onError: (err, deletedResident, context) => {
+      // If the mutation fails, use the context returned from onMutate to roll back
+      utils.survey.listResidents.setData(
+        { surveyId },
+        context?.previousResidents
+      );
+      toast.error(err.message ?? "Failed to remove resident");
+    },
+    onSettled: () => {
+      // Always refetch after error or success to ensure data is correct
+      utils.survey.listResidents.invalidate({ surveyId });
+      utils.survey.checkCompletion.invalidate({ surveyId });
+    },
+    onSuccess: () => {
+      toast.success("Resident removed successfully");
+    },
+  });
+
+  const addCase = api.survey.addCase.useMutation({
+    onSuccess: async () => {
+      await utils.survey.listCases.invalidate({ surveyId });
+      setNewCaseCode("");
+      toast.success("Case added successfully");
+    },
+    onError: (e) => toast.error(e.message ?? "Failed to add case"),
+  });
+
+  const removeCase = api.survey.removeCase.useMutation({
+    onMutate: async (deletedCase) => {
+      mutationCountRef.current += 1;
+      await utils.survey.listCases.cancel({ surveyId });
+      const previousCases = utils.survey.listCases.getData({ surveyId });
+      utils.survey.listCases.setData(
+        { surveyId },
+        (old) => old?.filter((c) => c.id !== deletedCase.caseId)
+      );
+      return { previousCases };
+    },
+    onError: (err, deletedCase, context) => {
+      mutationCountRef.current -= 1;
+      utils.survey.listCases.setData({ surveyId }, context?.previousCases);
+      setTimeout(() => {
+        toast.error(err.message ?? "Failed to remove case");
+      }, 100);
+    },
+    onSuccess: () => {
+      mutationCountRef.current -= 1;
+      setTimeout(() => {
+        toast.success("Case removed successfully");
+      }, 100);
+    },
+    onSettled: () => {
+      if (mutationCountRef.current === 0) {
+        utils.survey.listCases.invalidate({ surveyId });
+        utils.survey.checkCompletion.invalidate({ surveyId });
+      }
+    },
+  });
+
+
+  // Fetch all surveyors for dropdown
+  const [search, setSearch] = useState("");
+  const debouncedSearch = useDebounce(search, 300);
+
+  // Get current organization ID from session
+  const user = authClient.useSession();
+  const currentOrgId = user.data?.session.activeOrganizationId;
+
+  // Fetch users with search
+  const users = api.user.listInOrg.useQuery({
+    organizationId: currentOrgId || "",
+    page: 1,
+    pageSize: 100,
+    search: debouncedSearch,
+  }, {
+    enabled: !!currentOrgId,
+  });
+
+  // Fetch available residents (from same facility)
+  const availableResidents = api.resident.list.useQuery({
+    facilityId: survey.data?.facilityId,
+    page: 1,
+    pageSize: 100,
+  });
 
   // ✅ Updated: Fetch all responses across residents AND cases
   useEffect(() => {
@@ -673,141 +810,141 @@ export default function SurveyDetailPage() {
   }, [allResponses]);
 
   // ✅ Updated: Question strengths calculation including case responses
-const questionStrengths: QuestionStrength[] = useMemo(() => {
-  const qrows: QuestionRow[] = (questions.data ?? []) as QuestionRow[];
-  if (qrows.length === 0) return [];
+  const questionStrengths: QuestionStrength[] = useMemo(() => {
+    const qrows: QuestionRow[] = (questions.data ?? []) as QuestionRow[];
+    if (qrows.length === 0) return [];
 
-  const out: QuestionStrength[] = [];
+    const out: QuestionStrength[] = [];
 
-  for (const q of qrows) {
-    const questionPoints = q.points ?? 0;
-    let anyUnmet = false;
-    let anyMet = false;
-    let allNA = true;
+    for (const q of qrows) {
+      const questionPoints = q.points ?? 0;
+      let anyUnmet = false;
+      let anyMet = false;
+      let allNA = true;
 
-    if (survey.data?.template?.type === "resident") {
-      // Check all resident responses for this question
-      for (const r of (residents.data ?? [])) {
-        const entityKey = `resident-${r.residentId}`;
-        const cell = byEntity.get(entityKey)?.get(q.id);
-        
-        if (!cell?.status) {
-          allNA = false;
-          continue;
+      if (survey.data?.template?.type === "resident") {
+        // Check all resident responses for this question
+        for (const r of (residents.data ?? [])) {
+          const entityKey = `resident-${r.residentId}`;
+          const cell = byEntity.get(entityKey)?.get(q.id);
+
+          if (!cell?.status) {
+            allNA = false;
+            continue;
+          }
+
+          if (cell.status === "unmet") {
+            anyUnmet = true;
+            allNA = false;
+            break;
+          }
+          if (cell.status === "met") {
+            anyMet = true;
+            allNA = false;
+          }
+          if (cell.status === "not_applicable") {
+            // NA doesn't change flags
+          }
         }
-        
-        if (cell.status === "unmet") {
-          anyUnmet = true;
-          allNA = false;
-          break;
-        }
-        if (cell.status === "met") {
-          anyMet = true;
-          allNA = false;
-        }
-        if (cell.status === "not_applicable") {
-          // NA doesn't change flags
+      } else if (survey.data?.template?.type === "case") {
+        // Check all case responses for this question
+        for (const c of (cases.data ?? [])) {
+          const entityKey = `case-${c.id}`;
+          const cell = byEntity.get(entityKey)?.get(q.id);
+
+          if (!cell?.status) {
+            allNA = false;
+            continue;
+          }
+
+          if (cell.status === "unmet") {
+            anyUnmet = true;
+            allNA = false;
+            break;
+          }
+          if (cell.status === "met") {
+            anyMet = true;
+            allNA = false;
+          }
         }
       }
-    } else if (survey.data?.template?.type === "case") {
-      // Check all case responses for this question
-      for (const c of (cases.data ?? [])) {
-        const entityKey = `case-${c.id}`;
-        const cell = byEntity.get(entityKey)?.get(q.id);
-        
-        if (!cell?.status) {
-          allNA = false;
-          continue;
-        }
-        
-        if (cell.status === "unmet") {
-          anyUnmet = true;
-          allNA = false;
-          break;
-        }
-        if (cell.status === "met") {
-          anyMet = true;
-          allNA = false;
-        }
+
+      // Apply scoring logic: if any unmet = 0, if all met or all NA = full points
+      const shouldAward = !anyUnmet && (anyMet || allNA);
+      const awarded = shouldAward ? questionPoints : 0;
+
+      // Calculate strength percentage
+      const strengthPct = questionPoints > 0 ? Math.round((awarded / questionPoints) * 100) : 0;
+
+      // Count met/unmet for display
+      let metCount = 0, unmetCount = 0;
+      for (const r of allResponses) {
+        if (r.questionId !== q.id) continue;
+        if (r.status === "met") metCount++;
+        else if (r.status === "unmet") unmetCount++;
       }
+
+      out.push({
+        questionId: q.id,
+        text: q.text,
+        points: awarded, // ← This is now the earned score
+        strengthPct,
+        metCount,
+        unmetCount,
+        ftags: ftagsMap.get(q.id) ?? [],
+      });
     }
 
-    // Apply scoring logic: if any unmet = 0, if all met or all NA = full points
-    const shouldAward = !anyUnmet && (anyMet || allNA);
-    const awarded = shouldAward ? questionPoints : 0;
-
-    // Calculate strength percentage
-    const strengthPct = questionPoints > 0 ? Math.round((awarded / questionPoints) * 100) : 0;
-
-    // Count met/unmet for display
-    let metCount = 0, unmetCount = 0;
-    for (const r of allResponses) {
-      if (r.questionId !== q.id) continue;
-      if (r.status === "met") metCount++;
-      else if (r.status === "unmet") unmetCount++;
-    }
-
-    out.push({
-      questionId: q.id,
-      text: q.text,
-      points: awarded, // ← This is now the earned score
-      strengthPct,
-      metCount,
-      unmetCount,
-      ftags: ftagsMap.get(q.id) ?? [],
-    });
-  }
-
-  return out;
-}, [questions.data, allResponses, byEntity, residents.data, cases.data, survey.data?.template?.type, ftagsMap]);
+    return out;
+  }, [questions.data, allResponses, byEntity, residents.data, cases.data, survey.data?.template?.type, ftagsMap]);
 
 
   // Add after allResponses, questions, etc are available
-const generalStrengths = React.useMemo(() => {
-  if (survey.data?.template?.type !== "general" || !questions.data || !allResponses) return [];
+  const generalStrengths = React.useMemo(() => {
+    if (survey.data?.template?.type !== "general" || !questions.data || !allResponses) return [];
 
-  const generalResponses = allResponses.filter(r => !r.residentId && !r.surveyCaseId);
+    const generalResponses = allResponses.filter(r => !r.residentId && !r.surveyCaseId);
 
-  return (questions.data ?? []).map(q => {
-    const resp = generalResponses.find(r => r.questionId === q.id);
-    const questionPoints = q.points ?? 0;
+    return (questions.data ?? []).map(q => {
+      const resp = generalResponses.find(r => r.questionId === q.id);
+      const questionPoints = q.points ?? 0;
 
-    let metCount = 0, unmetCount = 0, naCount = 0;
-    let anyUnmet = false;
-    let anyMet = false;
-    let allNA = false;
+      let metCount = 0, unmetCount = 0, naCount = 0;
+      let anyUnmet = false;
+      let anyMet = false;
+      let allNA = false;
 
-    if (resp) {
-      if (resp.status === "met") {
-        metCount = 1;
-        anyMet = true;
-      } else if (resp.status === "unmet") {
-        unmetCount = 1;
-        anyUnmet = true;
-      } else if (resp.status === "not_applicable") {
-        naCount = 1;
-        allNA = true;
+      if (resp) {
+        if (resp.status === "met") {
+          metCount = 1;
+          anyMet = true;
+        } else if (resp.status === "unmet") {
+          unmetCount = 1;
+          anyUnmet = true;
+        } else if (resp.status === "not_applicable") {
+          naCount = 1;
+          allNA = true;
+        }
       }
-    }
 
-    // Apply scoring logic
-    const shouldAward = !anyUnmet && (anyMet || allNA);
-    const awarded = shouldAward ? questionPoints : 0;
-    const strengthPct = questionPoints > 0 ? Math.round((awarded / questionPoints) * 100) : 0;
+      // Apply scoring logic
+      const shouldAward = !anyUnmet && (anyMet || allNA);
+      const awarded = shouldAward ? questionPoints : 0;
+      const strengthPct = questionPoints > 0 ? Math.round((awarded / questionPoints) * 100) : 0;
 
-    return {
-      questionId: q.id,
-      text: q.text,
-      points: questionPoints,
-      awarded, // ← This is the earned score
-      strengthPct,
-      metCount,
-      unmetCount,
-      naCount,
-      ftags: ftagsMap.get(q.id) ?? [],
-    };
-  });
-}, [survey.data?.template?.type, questions.data, allResponses, ftagsMap]);
+      return {
+        questionId: q.id,
+        text: q.text,
+        points: questionPoints,
+        awarded, // ← This is the earned score
+        strengthPct,
+        metCount,
+        unmetCount,
+        naCount,
+        ftags: ftagsMap.get(q.id) ?? [],
+      };
+    });
+  }, [survey.data?.template?.type, questions.data, allResponses, ftagsMap]);
 
 
 
@@ -1098,35 +1235,35 @@ const generalStrengths = React.useMemo(() => {
       });
     }
     else if (templateType === "general") {
-  // DEBUG: Let's see what's actually in the data
-  const generalResponses = allResponses.filter(r => !r.residentId && !r.surveyCaseId);
-  
-  console.log("🔍 GENERAL SURVEY DEBUG:");
-  console.log("Total Questions:", questions.data.length);
-  console.log("All Responses:", allResponses.length);
-  console.log("General Responses:", generalResponses.length);
-  console.log("General Responses Data:", generalResponses);
-  
-  const result = questions.data.every(q => {
-    const response = generalResponses.find(r => r.questionId === q.id);
-    const isValid = response && (
-      response.status === "met" || 
-      response.status === "unmet" || 
-      response.status === "not_applicable"
-    );
-    
-    console.log(`Question ${q.id}:`, {
-      found: !!response,
-      status: response?.status,
-      isValid
-    });
-    
-    return isValid;
-  });
-  
-  console.log("✅ Survey Complete:", result);
-  return result;
-}
+      // DEBUG: Let's see what's actually in the data
+      const generalResponses = allResponses.filter(r => !r.residentId && !r.surveyCaseId);
+
+      console.log("🔍 GENERAL SURVEY DEBUG:");
+      console.log("Total Questions:", questions.data.length);
+      console.log("All Responses:", allResponses.length);
+      console.log("General Responses:", generalResponses.length);
+      console.log("General Responses Data:", generalResponses);
+
+      const result = questions.data.every(q => {
+        const response = generalResponses.find(r => r.questionId === q.id);
+        const isValid = response && (
+          response.status === "met" ||
+          response.status === "unmet" ||
+          response.status === "not_applicable"
+        );
+
+        console.log(`Question ${q.id}:`, {
+          found: !!response,
+          status: response?.status,
+          isValid
+        });
+
+        return isValid;
+      });
+
+      console.log("✅ Survey Complete:", result);
+      return result;
+    }
 
 
 
@@ -1793,6 +1930,305 @@ const generalStrengths = React.useMemo(() => {
     );
   };
 
+  const ManageResidentsDialog = () => (
+    <Dialog open={editResidentsOpen} onOpenChange={setEditResidentsOpen}>
+      <DialogTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={isLocked}
+          className="ml-auto"
+        >
+          <Pencil className="mr-2 h-4 w-4" />
+          Manage Residents
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>Manage Survey Residents</DialogTitle>
+          <DialogDescription>
+            Add or remove residents from this survey
+          </DialogDescription>
+        </DialogHeader>
+
+        {/* Add Resident Section */}
+        <div className="space-y-4 border-b pb-4">
+          <Label>Add Resident</Label>
+          <div className="flex gap-2">
+            <Select
+              value={selectedResidentId?.toString() ?? ""}
+              onValueChange={(val) => setSelectedResidentId(Number(val))}
+            >
+              <SelectTrigger className="flex-1">
+                <SelectValue placeholder="Select resident to add" />
+              </SelectTrigger>
+              <SelectContent>
+                {availableResidents.data?.data
+                  ?.filter(r => !residents.data?.some(sr => sr.residentId === r.id))
+                  .map((resident) => (
+                    <SelectItem key={resident.id} value={resident.id.toString()}>
+                      {resident.name} - PCCI: {resident.pcciId}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+            <Button
+              onClick={() => {
+                if (selectedResidentId) {
+                  addResident.mutate({
+                    surveyId,
+                    residentId: selectedResidentId,
+                  });
+                }
+              }}
+              disabled={!selectedResidentId || addResident.isPending}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add
+            </Button>
+          </div>
+        </div>
+
+        {/* Current Residents List */}
+        <div className="flex-1 overflow-y-auto">
+          <Label className="mb-2 block">Current Residents ({residents.data?.length})</Label>
+          <div className="space-y-2">
+            {residents.data?.map((r) => (
+              <div
+                key={r.id}
+                className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50"
+              >
+                <div>
+                  <div className="font-medium">{r.name}</div>
+                  <div className="text-sm text-muted-foreground">
+                    PCCI: {r.pcciId} • Room: {r.roomId}
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                  onClick={() => {
+                    removeResident.mutate({
+                      surveyId,
+                      residentId: r.residentId,
+                    });
+                  }}
+                  disabled={removeResident.isPending}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={() => setEditResidentsOpen(false)}
+          >
+            Close
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+  ManageResidentsDialog.displayName = "ManageResidentsDialog";
+
+  const EditSurveyorDialog = () => (
+    <Dialog open={editSurveyorOpen} onOpenChange={setEditSurveyorOpen}>
+      <DialogTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-6 px-2 text-xs"
+          disabled={isLocked}
+        >
+          <Pencil className="mr-1 h-3 w-3" />
+          Manage Surveyor
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Change Surveyor</DialogTitle>
+          <DialogDescription>
+            Select a new surveyor for this survey
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-4">
+          <div className="space-y-2">
+            <Label>Surveyor</Label>
+            <Select
+              value={selectedSurveyorId}
+              onValueChange={setSelectedSurveyorId}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select surveyor" />
+              </SelectTrigger>
+              <SelectContent>
+                {users.data?.map((userMember) => (
+                  <SelectItem key={userMember.id} value={userMember.id}>
+                    {userMember.name || userMember.email}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+
+            </Select>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={() => setEditSurveyorOpen(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={() => {
+              if (selectedSurveyorId) {
+                updateSurveyor.mutate({
+                  surveyId,
+                  surveyorId: selectedSurveyorId,
+                });
+              }
+            }}
+            disabled={!selectedSurveyorId || updateSurveyor.isPending}
+          >
+            {updateSurveyor.isPending ? "Updating..." : "Update Surveyor"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+
+  EditSurveyorDialog.displayName = "EditSurveyorDialog";
+
+  // Manage Cases Dialog Component
+  // Memoized Manage Cases Dialog Component
+  // Manage Cases Dialog Component - UNCONTROLLED
+  const ManageCasesDialog = () => {
+    // Local state inside the dialog - doesn't cause parent re-render
+    const [localCaseCode, setLocalCaseCode] = React.useState("");
+
+    return (
+      <Dialog>
+        <DialogTrigger asChild>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isLocked}
+            className="ml-auto"
+          >
+            <Pencil className="mr-2 h-4 w-4" />
+            Manage Cases
+          </Button>
+        </DialogTrigger>
+        <DialogContent
+          className="max-w-2xl max-h-[80vh] flex flex-col"
+          onInteractOutside={(e) => e.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle>Manage Survey Cases</DialogTitle>
+            <DialogDescription>
+              Add or remove cases from this survey
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Add Case Section */}
+          <div className="space-y-4 border-b pb-4">
+            <Label>Add Case</Label>
+            <div className="flex gap-2">
+              <Input
+                placeholder="Enter case code..."
+                value={localCaseCode}
+                onChange={(e) => setLocalCaseCode(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && localCaseCode.trim()) {
+                    addCase.mutate({
+                      surveyId,
+                      caseCode: localCaseCode.trim(),
+                    });
+                    setLocalCaseCode("");
+                  }
+                }}
+                className="flex-1"
+              />
+              <Button
+                onClick={() => {
+                  if (localCaseCode.trim()) {
+                    addCase.mutate({
+                      surveyId,
+                      caseCode: localCaseCode.trim(),
+                    });
+                    setLocalCaseCode("");
+                  }
+                }}
+                disabled={!localCaseCode.trim() || addCase.isPending}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add
+              </Button>
+            </div>
+          </div>
+
+          {/* Current Cases List */}
+          <div className="flex-1 overflow-y-auto">
+            <Label className="mb-2 block">Current Cases ({cases.data?.length})</Label>
+            <div className="space-y-2">
+              {cases.data?.map((c) => (
+                <div
+                  key={c.id}
+                  className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50"
+                >
+                  <div>
+                    <div className="font-medium">Case {c.caseCode}</div>
+                    <div className="text-sm text-muted-foreground">
+                      ID: {c.id}
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    onClick={() => {
+                      removeCase.mutate({
+                        surveyId,
+                        caseId: c.id,
+                      });
+                    }}
+                    disabled={removeCase.isPending}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+              {(!cases.data || cases.data.length === 0) && (
+                <div className="text-center py-8 text-gray-500">
+                  <FileText className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                  <p className="text-sm">No cases added yet</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">
+                Close
+              </Button>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  };
+
+
+  ManageCasesDialog.displayName = "ManageCasesDialog";
+
+
 
 
   // POC control component - UPDATED LOGIC
@@ -2173,7 +2609,10 @@ const generalStrengths = React.useMemo(() => {
               {/* Display facility name with separate query */}
               <FacilityInfo facilityId={survey.data.facilityId} />
               {/* Display surveyor name with separate query */}
-              <SurveyorInfo surveyorId={survey.data.surveyorId} />
+              <div className="flex items-center gap-1">
+                <SurveyorInfo surveyorId={survey.data.surveyorId} />
+                {!isLocked && <EditSurveyorDialog />}
+              </div>
             </div>
           </div>
 
@@ -2304,6 +2743,7 @@ const generalStrengths = React.useMemo(() => {
             {/* Residents */}
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-xl font-semibold">Residents</h2>
+              {!isLocked && <ManageResidentsDialog />}
             </div>
 
             <Table>
@@ -2384,7 +2824,10 @@ const generalStrengths = React.useMemo(() => {
               </p>
             </div> */}
 
-            <h2 className="mb-3 text-xl font-semibold">Cases</h2>
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-xl font-semibold">Cases</h2>
+              {!isLocked && <ManageCasesDialog />}
+            </div>
             <Table>
               <TableHeader>
                 <TableRow>
