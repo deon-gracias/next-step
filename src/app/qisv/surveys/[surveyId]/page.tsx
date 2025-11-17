@@ -33,6 +33,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Pencil, Plus, Trash2, X } from "lucide-react";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 
 // Import jsPDF - you'll need to install it: npm install jspdf html2canvas
@@ -337,116 +338,133 @@ export default function SurveyDetailPage() {
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
   const [editSurveyorOpen, setEditSurveyorOpen] = useState(false);
-  const [selectedSurveyorId, setSelectedSurveyorId] = useState<string>("");
   const [editResidentsOpen, setEditResidentsOpen] = useState(false);
-  const [selectedResidentId, setSelectedResidentId] = useState<number | null>(null);
 
   const [editCasesOpen, setEditCasesOpen] = useState(false);
   const [newCaseCode, setNewCaseCode] = useState("");
   const mutationCountRef = useRef(0);
+
+  // Manage Survey Dialog states (moved outside component to prevent re-renders)
+// Manage Survey Dialog states (moved outside component to prevent re-renders)
+const [manageSurveyDialogOpen, setManageSurveyDialogOpen] = useState(false);
+const [selectedSurveyorId, setSelectedSurveyorId] = useState<string>("");
+const [selectedResidentId, setSelectedResidentId] = useState<number | null>(null);
+const [activeTab, setActiveTab] = useState<string>("surveyor"); // ✅ ADD THIS
+
+
 
   // PDF ref for hidden content
   const pdfContentRef = useRef<HTMLDivElement>(null);
 
 
   const updateSurveyor = api.survey.updateSurveyor.useMutation({
-    onSuccess: async () => {
-      await utils.survey.byId.invalidate({ id: surveyId });
-      setEditSurveyorOpen(false);
-      toast.success("Surveyor updated successfully");
-    },
-    onError: (e) => toast.error(e.message ?? "Failed to update surveyor"),
-  });
+  onSuccess: async () => {
+    await utils.survey.byId.invalidate({ id: surveyId });
+    setManageSurveyDialogOpen(false); // ✅ ADD THIS
+    toast.success("Surveyor updated successfully");
+  },
+  onError: (e) => toast.error(e.message ?? "Failed to update surveyor"),
+});
+
 
   const addResident = api.survey.addResident.useMutation({
-    onSuccess: async () => {
-      await utils.survey.listResidents.invalidate({ surveyId });
-      setSelectedResidentId(null);
-      toast.success("Resident added successfully");
-    },
-    onError: (e) => toast.error(e.message ?? "Failed to add resident"),
-  });
+  onSuccess: async () => {
+    await utils.survey.listResidents.invalidate({ surveyId });
+    setSelectedResidentId(null);
+    setManageSurveyDialogOpen(false); // ✅ ADD THIS
+    toast.success("Resident added successfully");
+  },
+  onError: (e) => toast.error(e.message ?? "Failed to add resident"),
+});
+
 
   const removeResident = api.survey.removeResident.useMutation({
-    onMutate: async (deletedResident) => {
-      // Cancel any outgoing refetches
-      await utils.survey.listResidents.cancel({ surveyId });
-
-      // Snapshot the previous value
-      const previousResidents = utils.survey.listResidents.getData({ surveyId });
-
-      // Optimistically update to the new value
-      utils.survey.listResidents.setData(
-        { surveyId },
-        (old) => old?.filter((r) => r.residentId !== deletedResident.residentId)
-      );
-
-      // Return a context object with the snapshotted value
-      return { previousResidents };
-    },
-    onError: (err, deletedResident, context) => {
-      // If the mutation fails, use the context returned from onMutate to roll back
-      utils.survey.listResidents.setData(
-        { surveyId },
-        context?.previousResidents
-      );
+  onMutate: async (deletedResident) => {
+    mutationCountRef.current += 1;
+    await utils.survey.listResidents.cancel({ surveyId });
+    const previousResidents = utils.survey.listResidents.getData({ surveyId });
+    utils.survey.listResidents.setData(
+      { surveyId },
+      (old) => old?.filter((r) => r.residentId !== deletedResident.residentId)
+    );
+    return { previousResidents };
+  },
+  onError: (err, deletedResident, context) => {
+    mutationCountRef.current -= 1;
+    utils.survey.listResidents.setData({ surveyId }, context?.previousResidents);
+    setTimeout(() => {
       toast.error(err.message ?? "Failed to remove resident");
-    },
-    onSettled: () => {
-      // Always refetch after error or success to ensure data is correct
+    }, 100);
+  },
+  onSuccess: () => {
+    mutationCountRef.current -= 1;
+    setManageSurveyDialogOpen(false); // ✅ ADD THIS
+    setTimeout(() => {
+      toast.success("Resident removed successfully");
+    }, 100);
+  },
+  onSettled: () => {
+    if (mutationCountRef.current === 0) {
       utils.survey.listResidents.invalidate({ surveyId });
       utils.survey.checkCompletion.invalidate({ surveyId });
-    },
-    onSuccess: () => {
-      toast.success("Resident removed successfully");
-    },
-  });
+    }
+  },
+});
+
 
   const addCase = api.survey.addCase.useMutation({
-    onSuccess: async () => {
-      await utils.survey.listCases.invalidate({ surveyId });
-      setNewCaseCode("");
-      toast.success("Case added successfully");
-    },
-    onError: (e) => toast.error(e.message ?? "Failed to add case"),
-  });
+  onSuccess: async () => {
+    await utils.survey.listCases.invalidate({ surveyId });
+    setManageSurveyDialogOpen(false); // ✅ ADD THIS
+    toast.success("Case added successfully");
+  },
+  onError: (e) => toast.error(e.message ?? "Failed to add case"),
+});
 
   const removeCase = api.survey.removeCase.useMutation({
-    onMutate: async (deletedCase) => {
-      mutationCountRef.current += 1;
-      await utils.survey.listCases.cancel({ surveyId });
-      const previousCases = utils.survey.listCases.getData({ surveyId });
-      utils.survey.listCases.setData(
-        { surveyId },
-        (old) => old?.filter((c) => c.id !== deletedCase.caseId)
-      );
-      return { previousCases };
-    },
-    onError: (err, deletedCase, context) => {
-      mutationCountRef.current -= 1;
-      utils.survey.listCases.setData({ surveyId }, context?.previousCases);
-      setTimeout(() => {
-        toast.error(err.message ?? "Failed to remove case");
-      }, 100);
-    },
-    onSuccess: () => {
-      mutationCountRef.current -= 1;
-      setTimeout(() => {
-        toast.success("Case removed successfully");
-      }, 100);
-    },
-    onSettled: () => {
-      if (mutationCountRef.current === 0) {
-        utils.survey.listCases.invalidate({ surveyId });
-        utils.survey.checkCompletion.invalidate({ surveyId });
-      }
-    },
-  });
+  onMutate: async (deletedCase) => {
+    mutationCountRef.current += 1;
+    await utils.survey.listCases.cancel({ surveyId });
+    const previousCases = utils.survey.listCases.getData({ surveyId });
+    utils.survey.listCases.setData(
+      { surveyId },
+      (old) => old?.filter((c) => c.id !== deletedCase.caseId)
+    );
+    return { previousCases };
+  },
+  onError: (err, deletedCase, context) => {
+    mutationCountRef.current -= 1;
+    utils.survey.listCases.setData({ surveyId }, context?.previousCases);
+    setTimeout(() => {
+      toast.error(err.message ?? "Failed to remove case");
+    }, 100);
+  },
+  onSuccess: () => {
+    mutationCountRef.current -= 1;
+    setManageSurveyDialogOpen(false); // ✅ ADD THIS
+    setTimeout(() => {
+      toast.success("Case removed successfully");
+    }, 100);
+  },
+  onSettled: () => {
+    if (mutationCountRef.current === 0) {
+      utils.survey.listCases.invalidate({ surveyId });
+      utils.survey.checkCompletion.invalidate({ surveyId });
+    }
+  },
+});
+
 
 
   // Fetch all surveyors for dropdown
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 300);
+
+  useEffect(() => {
+  if (manageSurveyDialogOpen && survey.data?.surveyorId) {
+    setSelectedSurveyorId(survey.data.surveyorId);
+  }
+}, [manageSurveyDialogOpen, survey.data?.surveyorId]);
 
   // Get current organization ID from session
   const user = authClient.useSession();
@@ -2231,6 +2249,263 @@ export default function SurveyDetailPage() {
 
 
 
+  // Unified Manage Survey Dialog
+  // Unified Manage Survey Dialog - FIXED SELECT ISSUE
+  // Unified Manage Survey Dialog - FULLY CONTROLLED
+// Unified Manage Survey Dialog - WITH EXTERNAL STATE
+// Unified Manage Survey Dialog - WITH EXTERNAL STATE
+const ManageSurveyDialog = () => {
+  const [localCaseCode, setLocalCaseCode] = React.useState("");
+  const templateType = survey.data?.template?.type;
+
+  return (
+    <Dialog open={manageSurveyDialogOpen} onOpenChange={setManageSurveyDialogOpen} modal={false}>
+      <DialogTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={isLocked}
+        >
+          <Pencil className="mr-2 h-4 w-4" />
+          Manage Survey
+        </Button>
+      </DialogTrigger>
+      <DialogContent 
+        className="max-w-3xl max-h-[85vh] flex flex-col"
+        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
+      >
+        <DialogHeader>
+          <DialogTitle>Manage Survey</DialogTitle>
+          <DialogDescription>
+            Edit survey details, surveyor, and participants
+          </DialogDescription>
+        </DialogHeader>
+
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
+          <TabsList className="grid w-full" style={{ gridTemplateColumns: templateType === 'resident' ? '1fr 1fr' : templateType === 'case' ? '1fr 1fr' : '1fr' }}>
+            <TabsTrigger value="surveyor">Surveyor</TabsTrigger>
+            {templateType === 'resident' && <TabsTrigger value="residents">Residents</TabsTrigger>}
+            {templateType === 'case' && <TabsTrigger value="cases">Cases</TabsTrigger>}
+          </TabsList>
+
+          {/* Surveyor Tab */}
+          <TabsContent value="surveyor" className="flex-1 space-y-4 overflow-y-auto p-4">
+            <div className="space-y-2">
+              <Label>Change Surveyor</Label>
+              <Select
+                value={selectedSurveyorId}
+                onValueChange={setSelectedSurveyorId}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select surveyor" />
+                </SelectTrigger>
+                <SelectContent>
+                  {users.data?.map((userMember) => (
+                    <SelectItem key={userMember.id} value={userMember.id}>
+                      {userMember.name || userMember.email}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              onClick={() => {
+                if (selectedSurveyorId) {
+                  updateSurveyor.mutate({
+                    surveyId,
+                    surveyorId: selectedSurveyorId,
+                  });
+                }
+              }}
+              disabled={!selectedSurveyorId || updateSurveyor.isPending}
+              className="w-full"
+            >
+              {updateSurveyor.isPending ? "Updating..." : "Update Surveyor"}
+            </Button>
+          </TabsContent>
+
+          {/* Residents Tab (only for resident templates) */}
+          {templateType === 'resident' && (
+            <TabsContent value="residents" className="flex-1 flex flex-col overflow-hidden">
+              {/* Add Resident Section */}
+              <div className="space-y-4 border-b pb-4 px-4">
+                <Label>Add Resident</Label>
+                <div className="flex gap-2">
+                  <Select
+                    value={selectedResidentId?.toString() ?? ""}
+                    onValueChange={(val) => setSelectedResidentId(Number(val))}
+                  >
+                    <SelectTrigger className="flex-1">
+                      <SelectValue placeholder="Select resident to add" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableResidents.data?.data
+                        ?.filter(r => !residents.data?.some(sr => sr.residentId === r.id))
+                        .map((resident) => (
+                          <SelectItem key={resident.id} value={resident.id.toString()}>
+                            {resident.name} - PCCI: {resident.pcciId}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    onClick={() => {
+                      if (selectedResidentId) {
+                        addResident.mutate({
+                          surveyId,
+                          residentId: selectedResidentId,
+                        });
+                      }
+                    }}
+                    disabled={!selectedResidentId || addResident.isPending}
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add
+                  </Button>
+                </div>
+              </div>
+
+              {/* Current Residents List */}
+              <div className="flex-1 overflow-y-auto px-4 pt-4">
+                <Label className="mb-2 block">Current Residents ({residents.data?.length})</Label>
+                <div className="space-y-2">
+                  {residents.data?.map((r) => (
+                    <div
+                      key={r.id}
+                      className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50"
+                    >
+                      <div>
+                        <div className="font-medium">{r.name}</div>
+                        <div className="text-sm text-muted-foreground">
+                          PCCI: {r.pcciId} • Room: {r.roomId}
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        onClick={() => {
+                          removeResident.mutate({
+                            surveyId,
+                            residentId: r.residentId,
+                          });
+                        }}
+                        disabled={removeResident.isPending}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                  {(!residents.data || residents.data.length === 0) && (
+                    <div className="text-center py-8 text-gray-500">
+                      <Users className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                      <p className="text-sm">No residents added yet</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </TabsContent>
+          )}
+
+          {/* Cases Tab (only for case templates) */}
+          {templateType === 'case' && (
+            <TabsContent value="cases" className="flex-1 flex flex-col overflow-hidden">
+              {/* Add Case Section */}
+              <div className="space-y-4 border-b pb-4 px-4">
+                <Label>Add Case</Label>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Enter case code..."
+                    value={localCaseCode}
+                    onChange={(e) => setLocalCaseCode(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && localCaseCode.trim()) {
+                        addCase.mutate({
+                          surveyId,
+                          caseCode: localCaseCode.trim(),
+                        });
+                        setLocalCaseCode("");
+                      }
+                    }}
+                    className="flex-1"
+                  />
+                  <Button
+                    onClick={() => {
+                      if (localCaseCode.trim()) {
+                        addCase.mutate({
+                          surveyId,
+                          caseCode: localCaseCode.trim(),
+                        });
+                        setLocalCaseCode("");
+                      }
+                    }}
+                    disabled={!localCaseCode.trim() || addCase.isPending}
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add
+                  </Button>
+                </div>
+              </div>
+
+              {/* Current Cases List */}
+              <div className="flex-1 overflow-y-auto px-4 pt-4">
+                <Label className="mb-2 block">Current Cases ({cases.data?.length})</Label>
+                <div className="space-y-2">
+                  {cases.data?.map((c) => (
+                    <div
+                      key={c.id}
+                      className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50"
+                    >
+                      <div>
+                        <div className="font-medium">Case {c.caseCode}</div>
+                        <div className="text-sm text-muted-foreground">
+                          ID: {c.id}
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        onClick={() => {
+                          removeCase.mutate({
+                            surveyId,
+                            caseId: c.id,
+                          });
+                        }}
+                        disabled={removeCase.isPending}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                  {(!cases.data || cases.data.length === 0) && (
+                    <div className="text-center py-8 text-gray-500">
+                      <FileText className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                      <p className="text-sm">No cases added yet</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </TabsContent>
+          )}
+        </Tabs>
+
+        <DialogFooter className="border-t pt-4">
+          <Button variant="outline" onClick={() => setManageSurveyDialogOpen(false)}>
+            Close
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+
+
+
+
+
   // POC control component - UPDATED LOGIC
   const renderPOCControl = () => {
     if (!isLocked) return null;
@@ -2609,9 +2884,9 @@ export default function SurveyDetailPage() {
               {/* Display facility name with separate query */}
               <FacilityInfo facilityId={survey.data.facilityId} />
               {/* Display surveyor name with separate query */}
-              <div className="flex items-center gap-1">
+              <div className="flex items-center justify-between gap-4">
                 <SurveyorInfo surveyorId={survey.data.surveyorId} />
-                {!isLocked && <EditSurveyorDialog />}
+                {!isLocked && <ManageSurveyDialog />}
               </div>
             </div>
           </div>
@@ -2741,9 +3016,8 @@ export default function SurveyDetailPage() {
           <>
 
             {/* Residents */}
-            <div className="mb-3 flex items-center justify-between">
+            <div className="mb-3">
               <h2 className="text-xl font-semibold">Residents</h2>
-              {!isLocked && <ManageResidentsDialog />}
             </div>
 
             <Table>
@@ -2824,10 +3098,10 @@ export default function SurveyDetailPage() {
               </p>
             </div> */}
 
-            <div className="mb-3 flex items-center justify-between">
+            <div className="mb-3">
               <h2 className="text-xl font-semibold">Cases</h2>
-              {!isLocked && <ManageCasesDialog />}
             </div>
+
             <Table>
               <TableHeader>
                 <TableRow>
