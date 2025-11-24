@@ -113,6 +113,7 @@ export default function CaseSurveyPage() {
     if (questions.data) {
       const prefilled = questions.data.map((q) => {
         const existing = responsesQuery.data?.find((r) => r.questionId === q.id);
+        console.log(`Question ${q.id} findings:`, existing?.findings); 
         const status = typeof existing?.requirementsMetOrUnmet === "string"
           ? existing.requirementsMetOrUnmet
           : undefined;
@@ -126,6 +127,7 @@ export default function CaseSurveyPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [questions.data, responsesQuery.data]);
+
   
   const router = useRouter();
 
