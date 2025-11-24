@@ -1090,89 +1090,93 @@ export default function SurveyDetailPage() {
   // }, [questions.data, byEntity, residents.data, cases.data, allResponses, survey.data?.template?.type]);
 
   // ✅ UPDATED: Add the allNA condition here
-  const { overallScore, maxTemplatePoints, overallPercent } = useMemo(() => {
-    const qs: QuestionRow[] = (questions.data ?? []) as QuestionRow[];
-    let awarded = 0;
+const { overallScore, maxTemplatePoints, overallPercent } = useMemo(() => {
+  const qs: QuestionRow[] = (questions.data ?? []) as QuestionRow[];
+  let awarded = 0;
 
-    for (const q of qs) {
-      let anyUnmetOrUnanswered = false;
-      let anyMet = false;
-      let allNA = true; // ✅ ADD THIS LINE
+  for (const q of qs) {
+    let hasUnmet = false;
+    let hasMet = false;
+    let responseCount = 0;
+    let naCount = 0;
 
-      if (survey.data?.template?.type === "resident") {
-        for (const r of residents.data ?? []) {
-          const entityKey = `resident-${r.residentId}`;
-          const cell = byEntity.get(entityKey)?.get(q.id);
+    if (survey.data?.template?.type === "resident") {
+      for (const r of residents.data ?? []) {
+        const entityKey = `resident-${r.residentId}`;
+        const cell = byEntity.get(entityKey)?.get(q.id);
 
-          if (!cell?.status) {
-            anyUnmetOrUnanswered = true;
-            allNA = false; // ✅ ADD THIS
-            break;
-          }
-          if (cell.status === "unmet") {
-            anyUnmetOrUnanswered = true;
-            allNA = false; // ✅ ADD THIS
-            break;
-          }
-          if (cell.status === "met") {
-            anyMet = true;
-            allNA = false; // ✅ ADD THIS
-          }
-          // ✅ ADD THIS: N/A doesn't change anyUnmetOrUnanswered or anyMet, keeps allNA true
+        if (!cell?.status) {
+          hasUnmet = true;
+          break;
         }
-      }
-      else if (survey.data?.template?.type === "case") {
-        for (const c of cases.data ?? []) {
-          const entityKey = `case-${c.id}`;
-          const cell = byEntity.get(entityKey)?.get(q.id);
-
-          if (!cell?.status) {
-            anyUnmetOrUnanswered = true;
-            allNA = false; // ✅ ADD THIS
-            break;
-          }
-          if (cell.status === "unmet") {
-            anyUnmetOrUnanswered = true;
-            allNA = false; // ✅ ADD THIS
-            break;
-          }
-          if (cell.status === "met") {
-            anyMet = true;
-            allNA = false; // ✅ ADD THIS
-          }
-        }
-      }
-      else if (survey.data?.template?.type === "general") {
-        const generalResponses = allResponses.filter(r => !r.residentId && !r.surveyCaseId);
-        const cell = generalResponses.find(r => r.questionId === q.id);
-
-        if (!cell || !cell.status) {
-          anyUnmetOrUnanswered = true;
-          allNA = false; // ✅ ADD THIS
-        } else if (cell.status === "unmet") {
-          anyUnmetOrUnanswered = true;
-          allNA = false; // ✅ ADD THIS
+        
+        responseCount++;
+        
+        if (cell.status === "unmet") {
+          hasUnmet = true;
+          break;
         } else if (cell.status === "met") {
-          anyMet = true;
-          allNA = false; // ✅ ADD THIS
+          hasMet = true;
+        } else if (cell.status === "not_applicable") {
+          naCount++;
         }
       }
+    } else if (survey.data?.template?.type === "case") {
+      for (const c of cases.data ?? []) {
+        const entityKey = `case-${c.id}`;
+        const cell = byEntity.get(entityKey)?.get(q.id);
 
-      // ✅ CHANGE THIS LINE:
-      // OLD: const shouldAward = !anyUnmetOrUnanswered && anyMet;
-      // NEW:
-      const shouldAward = !anyUnmetOrUnanswered && (anyMet || allNA);
+        if (!cell?.status) {
+          hasUnmet = true;
+          break;
+        }
+        
+        responseCount++;
+        
+        if (cell.status === "unmet") {
+          hasUnmet = true;
+          break;
+        } else if (cell.status === "met") {
+          hasMet = true;
+        } else if (cell.status === "not_applicable") {
+          naCount++;
+        }
+      }
+    } else if (survey.data?.template?.type === "general") {
+      const generalResponses = allResponses.filter((r: any) => !r.residentId && !r.surveyCaseId);
+      const cell = generalResponses.find((r: any) => r.questionId === q.id);
 
-      if (shouldAward) {
-        awarded += q.points ?? 0;
+      if (!cell || !cell.status) {
+        hasUnmet = true;
+      } else {
+        responseCount++;
+        
+        if (cell.status === "unmet") {
+          hasUnmet = true;
+        } else if (cell.status === "met") {
+          hasMet = true;
+        } else if (cell.status === "not_applicable") {
+          naCount++;
+        }
       }
     }
 
-    const max = qs.reduce((s, q) => s + (q.points ?? 0), 0);
-    const pct = max > 0 ? Math.round((awarded / max) * 100) : 0;
+    const allNA = responseCount > 0 && naCount === responseCount;
+    const shouldAward = !hasUnmet && (hasMet || allNA);
 
-    return { overallScore: awarded, maxTemplatePoints: max, overallPercent: pct };
-  }, [questions.data, byEntity, residents.data, cases.data, allResponses, survey.data?.template?.type]);
+    if (shouldAward) {
+      awarded += q.points ?? 0;
+    }
+  }
+
+  const max = qs.reduce((s, q) => s + (q.points ?? 0), 0);
+  const pct = max > 0 ? Math.round((awarded / max) * 100) : 0;
+
+  return { overallScore: awarded, maxTemplatePoints: max, overallPercent: pct };
+}, [questions.data, byEntity, residents.data, cases.data, allResponses, survey.data?.template?.type]);
+
+
+
 
 
 
@@ -2897,7 +2901,7 @@ export default function SurveyDetailPage() {
                         : <span className="text-[11px] text-muted-foreground">No F-Tags</span>
                       }
                     </div>
-                    <div className="mt-1 font-bold">Score: {qs.points}</div>
+                    <div className="mt-1 font-bold"> Score: {qs.unmetCount > 0 ? 0 : qs.points}</div>
 
                     <div className="mt-1">Strength: {qs.strengthPct}%</div>
                     <div className="text-muted-foreground">
@@ -2955,7 +2959,7 @@ export default function SurveyDetailPage() {
                         : <span className="text-[11px] text-muted-foreground">No F-Tags</span>
                       }
                     </div>
-                    <div className="mt-1 font-bold">Score: {qs.points}</div>
+                    <div className="mt-1 font-bold"> Score: {qs.unmetCount > 0 ? 0 : qs.points}</div>
                     <div className="mt-1">Strength: {qs.strengthPct}%</div>
                     <div className="text-muted-foreground">
                       Met: {qs.metCount} • Unmet: {qs.unmetCount} • NA: {qs.naCount || 0}
