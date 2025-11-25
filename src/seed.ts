@@ -352,7 +352,7 @@ async function main() {
         { text: "Handwashing was being conducted as appropriate.", points: 8, ftags: ["F880"] },
         { text: "Resident care equipment was prperly cleaned, changed and stored. ", points: 5, ftags: ["F880"] },
         { text: "Staff handled linen appropriately to prevent the spread of infection. Clean and soiled linen was stored seperately(Observe laundry area))", points: 5, ftags: ["F880"] },
-        { text: "Staff were washing their hands and equipment between residents. Gloves were used properly (Gloves are not worn in the hallway)", points: 5, ftags: ["F880"] },
+        { text: "Staff were washing their hands and equipment between residents. Gloves were used properly (Gloves are not worn in the hallway)", points: 10, ftags: ["F880"] }  ,
         { text: "Oxygen tubing was changed and dated weekly and bagged when not in use. O2 filters are clean", points: 7, ftags: ["F880"] },
         { text: "Nebulizer tubing was changed weekly and bagged or in the holder when not in use.", points: 5, ftags: ["F880"] },
         { text: "Feeding tube, piston syringes and Tube Feeding bottles are changed and dated Q 24-hours.", points: 5, ftags: ["F880"] },
