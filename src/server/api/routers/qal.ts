@@ -9,12 +9,16 @@ import {
   qalSurveySection,
   qalQuestionResponse,
   facility,
+  qalPOC,          // ✅ NEW
+  qalPocComment,   // ✅ NEW
 } from "@/server/db/schema";
-import { and, eq, inArray, asc, desc } from "drizzle-orm";
+import { and, eq, inArray, asc, desc, sql } from "drizzle-orm"; // ✅ sql added
+
 
 function toDbNumeric(value: number): string {
   return value.toFixed(4);
 }
+
 
 export const qalRouter = createTRPCRouter({
   createTemplate: protectedProcedure
@@ -38,12 +42,14 @@ export const qalRouter = createTRPCRouter({
       return template;
     }),
 
+
   listTemplates: protectedProcedure.query(async ({ ctx }) => {
     return await ctx.db
       .select()
       .from(qalTemplate)
       .orderBy(desc(qalTemplate.createdAt));
   }),
+
 
   getTemplate: protectedProcedure
     .input(z.object({ id: z.number().int().positive() }))
@@ -83,6 +89,7 @@ export const qalRouter = createTRPCRouter({
       };
     }),
 
+
   createSection: protectedProcedure
     .input(
       z.object({
@@ -108,6 +115,7 @@ export const qalRouter = createTRPCRouter({
       return section;
     }),
 
+
   updateSection: protectedProcedure
     .input(
       z.object({
@@ -130,6 +138,7 @@ export const qalRouter = createTRPCRouter({
       return updated;
     }),
 
+
   deleteSection: protectedProcedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ ctx, input }) => {
@@ -139,6 +148,7 @@ export const qalRouter = createTRPCRouter({
 
       return { success: true };
     }),
+
 
   createQuestion: protectedProcedure
     .input(
@@ -166,6 +176,7 @@ export const qalRouter = createTRPCRouter({
 
       return question;
     }),
+
 
   updateQuestion: protectedProcedure
     .input(
@@ -195,6 +206,7 @@ export const qalRouter = createTRPCRouter({
       return updated;
     }),
 
+
   deleteQuestion: protectedProcedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ ctx, input }) => {
@@ -205,70 +217,63 @@ export const qalRouter = createTRPCRouter({
       return { success: true };
     }),
 
-createSurvey: protectedProcedure
-  .input(
-    z.object({
-      templateId: z.number().int().positive(),
-      facilityId: z.number().int().positive(),
-      surveyDate: z.date(),
-      auditorUserId: z.string(),
-      surveyType: z.enum(["onsite", "offsite"]), // ✅ ADD THIS
-      administrator: z.string().min(1, "Administrator is required"),
-      businessOfficeManager: z.string().min(1, "Business Office Manager is required"),
-      assistantBusinessOfficeManager: z.string().optional(),
-    })
-  )
-  .mutation(async ({ ctx, input }) => {
-    const [survey] = await ctx.db
-      .insert(qalSurvey)
-      .values({
-        templateId: input.templateId,
-        facilityId: input.facilityId,
-        surveyDate: input.surveyDate,
-        auditorUserId: input.auditorUserId,
-        surveyType: input.surveyType, // ✅ ADD THIS
-        administrator: input.administrator,
-        businessOfficeManager: input.businessOfficeManager,
-        assistantBusinessOfficeManager: input.assistantBusinessOfficeManager || null,
-        isLocked: false,
-        totalPossible: "0",
-        totalEarned: "0",
-        overallPercent: "0",
+
+  createSurvey: protectedProcedure
+    .input(
+      z.object({
+        templateId: z.number().int().positive(),
+        facilityId: z.number().int().positive(),
+        surveyDate: z.date(),
+        auditorUserId: z.string(),
+        surveyType: z.enum(["onsite", "offsite"]),
+        administrator: z.string().min(1, "Administrator is required"),
+        businessOfficeManager: z.string().min(1, "Business Office Manager is required"),
+        assistantBusinessOfficeManager: z.string().optional(),
       })
-      .returning();
+    )
+    .mutation(async ({ ctx, input }) => {
+      const [survey] = await ctx.db
+        .insert(qalSurvey)
+        .values({
+          templateId: input.templateId,
+          facilityId: input.facilityId,
+          surveyDate: input.surveyDate,
+          auditorUserId: input.auditorUserId,
+          surveyType: input.surveyType,
+          administrator: input.administrator,
+          businessOfficeManager: input.businessOfficeManager,
+          assistantBusinessOfficeManager: input.assistantBusinessOfficeManager || null,
+          isLocked: false,
+          totalPossible: "0",
+          totalEarned: "0",
+          overallPercent: "0",
+          // pocGenerated defaults in schema
+        })
+        .returning();
 
-    if (!survey) throw new Error("Failed to create survey");
+      if (!survey) throw new Error("Failed to create survey");
 
-    return survey;
-  }),
-
-
-  // Add this to your qalRouter in server/api/routers/qal.ts
-
-deleteSurvey: protectedProcedure
-  .input(z.object({ id: z.number().int().positive() }))
-  .mutation(async ({ ctx, input }) => {
-    // Delete all related data first (cascade)
-    
-    // Delete question responses
-    await ctx.db
-      .delete(qalQuestionResponse)
-      .where(eq(qalQuestionResponse.surveyId, input.id));
-    
-    // Delete section responses
-    await ctx.db
-      .delete(qalSurveySection)
-      .where(eq(qalSurveySection.surveyId, input.id));
-    
-    // Delete survey
-    await ctx.db
-      .delete(qalSurvey)
-      .where(eq(qalSurvey.id, input.id));
-    
-    return { success: true };
-  }),
+      return survey;
+    }),
 
 
+  deleteSurvey: protectedProcedure
+    .input(z.object({ id: z.number().int().positive() }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.db
+        .delete(qalQuestionResponse)
+        .where(eq(qalQuestionResponse.surveyId, input.id));
+      
+      await ctx.db
+        .delete(qalSurveySection)
+        .where(eq(qalSurveySection.surveyId, input.id));
+      
+      await ctx.db
+        .delete(qalSurvey)
+        .where(eq(qalSurvey.id, input.id));
+      
+      return { success: true };
+    }),
 
 
   listSurveys: protectedProcedure
@@ -291,6 +296,7 @@ deleteSurvey: protectedProcedure
         .from(qalSurvey)
         .orderBy(desc(qalSurvey.surveyDate));
     }),
+
 
   getSurvey: protectedProcedure
     .input(z.object({ id: z.number().int().positive() }))
@@ -331,6 +337,7 @@ deleteSurvey: protectedProcedure
         facility: fac || null,
       };
     }),
+
 
   getSectionWithQuestions: protectedProcedure
     .input(
@@ -387,6 +394,7 @@ deleteSurvey: protectedProcedure
         sectionResponse,
       };
     }),
+
 
   saveQuestionResponse: protectedProcedure
     .input(
@@ -449,6 +457,7 @@ deleteSurvey: protectedProcedure
       return { ok: true };
     }),
 
+
   lock: protectedProcedure
     .input(z.object({ surveyId: z.number().int().positive() }))
     .mutation(async ({ ctx, input }) => {
@@ -461,6 +470,7 @@ deleteSurvey: protectedProcedure
       return updated;
     }),
 
+
   unlock: protectedProcedure
     .input(z.object({ surveyId: z.number().int().positive() }))
     .mutation(async ({ ctx, input }) => {
@@ -472,7 +482,192 @@ deleteSurvey: protectedProcedure
 
       return updated;
     }),
+
+
+  // ========= NEW POC + COMMENTS ROUTES =========
+
+  generatePOCs: protectedProcedure
+    .input(z.object({ surveyId: z.number().int().positive() }))
+    .mutation(async ({ ctx, input }) => {
+      const [survey] = await ctx.db
+        .select()
+        .from(qalSurvey)
+        .where(eq(qalSurvey.id, input.surveyId))
+        .limit(1);
+
+      if (!survey) throw new Error("Survey not found");
+      if (!survey.isLocked) throw new Error("Lock survey before generating POCs");
+
+      // Clear existing POCs
+      await ctx.db.delete(qalPOC).where(eq(qalPOC.surveyId, input.surveyId));
+
+      // Load sections & questions
+      const sections = await ctx.db
+        .select()
+        .from(qalSection)
+        .where(eq(qalSection.templateId, survey.templateId));
+
+      const questions = await ctx.db
+        .select()
+        .from(qalQuestion)
+        .where(
+          inArray(
+            qalQuestion.sectionId,
+            sections.map((s) => s.id)
+          )
+        );
+
+      const responses = await ctx.db
+        .select()
+        .from(qalQuestionResponse)
+        .where(eq(qalQuestionResponse.surveyId, input.surveyId));
+
+      const questionsById = new Map(questions.map((q) => [q.id, q]));
+      const sectionIdByQuestionId = new Map(
+        questions.map((q) => [q.id, q.sectionId])
+      );
+
+      const pocInserts: any[] = [];
+
+      for (const resp of responses) {
+        const q = questionsById.get(resp.questionId);
+        if (!q) continue;
+
+        if (resp.isNotApplicable) continue;
+        if (!resp.sampleSize || resp.sampleSize <= 0) continue;
+
+        const sampleSize = resp.sampleSize;
+        const passed = resp.passedCount ?? 0;
+        if (passed === sampleSize) continue; // fully passed
+
+        const sectionId = sectionIdByQuestionId.get(resp.questionId)!;
+        const possiblePoints = Number(q.possiblePoints || 0);
+
+        pocInserts.push({
+          surveyId: input.surveyId,
+          sectionId,
+          questionId: resp.questionId,
+          possiblePoints: toDbNumeric(possiblePoints),
+          sampleSize,
+          passedCount: passed,
+          testingSample: resp.testingSample ?? null,
+          comments: resp.comments ?? null,
+          pocText: "",
+          complianceDate: null,
+        });
+      }
+
+      if (pocInserts.length > 0) {
+        await ctx.db
+          .insert(qalPOC)
+          .values(pocInserts)
+          .onConflictDoUpdate({
+            target: [qalPOC.surveyId, qalPOC.questionId],
+            set: {
+              possiblePoints: sql`excluded.possible_points`,
+              sampleSize: sql`excluded.sample_size`,
+              passedCount: sql`excluded.passed_count`,
+              testingSample: sql`excluded.testing_sample`,
+              comments: sql`excluded.comments`,
+              updatedAt: sql`now()`,
+            },
+          });
+      }
+
+      await ctx.db
+        .update(qalSurvey)
+        .set({ pocGenerated: true })
+        .where(eq(qalSurvey.id, input.surveyId));
+
+      return { count: pocInserts.length };
+    }),
+
+
+  listPOCs: protectedProcedure
+    .input(z.object({ surveyId: z.number().int().positive() }))
+    .query(async ({ ctx, input }) => {
+      return ctx.db
+        .select({
+          poc: qalPOC,
+          question: qalQuestion,
+          section: qalSection,
+        })
+        .from(qalPOC)
+        .innerJoin(qalQuestion, eq(qalPOC.questionId, qalQuestion.id))
+        .innerJoin(qalSection, eq(qalPOC.sectionId, qalSection.id))
+        .where(eq(qalPOC.surveyId, input.surveyId))
+        .orderBy(asc(qalSection.sortOrder), asc(qalQuestion.sortOrder));
+    }),
+
+
+  upsertPOC: protectedProcedure
+  .input(
+    z.object({
+      id: z.number().int().positive(),            // ✅ require id
+      surveyId: z.number().int().positive(),
+      questionId: z.number().int().positive(),
+      sectionId: z.number().int().positive(),
+      pocText: z.string().min(1),
+      complianceDate: z.date().nullable().optional(),
+    })
+  )
+  .mutation(async ({ ctx, input }) => {
+    const complianceDate =
+      input.complianceDate
+        ? input.complianceDate.toISOString().slice(0, 10)
+        : null;
+
+    const [updated] = await ctx.db
+      .update(qalPOC)
+      .set({
+        pocText: input.pocText,
+        complianceDate,
+        updatedAt: new Date(),
+      })
+      .where(eq(qalPOC.id, input.id))
+      .returning();
+
+    return updated;
+  }),
+
+
+
+  listPocComments: protectedProcedure
+    .input(z.object({ pocId: z.number().int().positive() }))
+    .query(async ({ ctx, input }) => {
+      return ctx.db
+        .select()
+        .from(qalPocComment)
+        .where(eq(qalPocComment.pocId, input.pocId))
+        .orderBy(asc(qalPocComment.createdAt));
+    }),
+
+
+  addPocComment: protectedProcedure
+    .input(
+      z.object({
+        pocId: z.number().int().positive(),
+        surveyId: z.number().int().positive(),
+        commentText: z.string().min(1),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const [inserted] = await ctx.db
+        .insert(qalPocComment)
+        .values({
+          pocId: input.pocId,
+          surveyId: input.surveyId,
+          commentText: input.commentText,
+          authorId: ctx.session.user.id,
+        })
+        .returning();
+
+      return inserted;
+    }),
 });
+
+
+// ======= existing helper functions unchanged =======
 
 async function recalculateSection(ctx: any, surveyId: number, sectionId: number) {
   const [section] = await ctx.db
@@ -525,7 +720,9 @@ async function recalculateSection(ctx: any, surveyId: number, sectionId: number)
     }
   }
 
-  const allNA = responses.length > 0 && responses.every((r: { isNotApplicable: any }) => r.isNotApplicable);
+  const allNA =
+    responses.length > 0 &&
+    responses.every((r: { isNotApplicable: any }) => r.isNotApplicable);
 
   const [existing] = await ctx.db
     .select()
@@ -562,8 +759,8 @@ async function recalculateSection(ctx: any, surveyId: number, sectionId: number)
   await recalculateSurveyTotals(ctx, surveyId);
 }
 
+
 async function recalculateSurveyTotals(ctx: any, surveyId: number) {
-  // Get survey to find template
   const [survey] = await ctx.db
     .select()
     .from(qalSurvey)
@@ -572,7 +769,6 @@ async function recalculateSurveyTotals(ctx: any, surveyId: number) {
 
   if (!survey) return;
 
-  // Get all sections for this template
   const sections = await ctx.db
     .select()
     .from(qalSection)
@@ -582,13 +778,11 @@ async function recalculateSurveyTotals(ctx: any, surveyId: number) {
   let totalEarned = 0;
 
   for (const sec of sections) {
-    // Get all questions in this section
     const questions = await ctx.db
       .select()
       .from(qalQuestion)
       .where(eq(qalQuestion.sectionId, sec.id));
 
-    // Get question responses
     const questionResponses = await ctx.db
       .select()
       .from(qalQuestionResponse)
@@ -602,7 +796,6 @@ async function recalculateSurveyTotals(ctx: any, surveyId: number) {
         )
       );
 
-    // Calculate adjusted possible points (exclude N/A items)
     let sectionAdjustedPossible = 0;
     let sectionEarned = 0;
 
@@ -611,15 +804,12 @@ async function recalculateSurveyTotals(ctx: any, surveyId: number) {
       
       const questionPossiblePoints = Number(q.possiblePoints || 0);
       
-      // If N/A, exclude from both earned and possible
       if (qResponse && qResponse.isNotApplicable) {
         continue;
       }
       
-      // Add to possible total
       sectionAdjustedPossible += questionPossiblePoints;
       
-      // Calculate earned for this question
       if (qResponse && qResponse.sampleSize && qResponse.sampleSize > 0) {
         const passedCount = qResponse.passedCount || 0;
         const questionEarned = (passedCount / qResponse.sampleSize) * questionPossiblePoints;

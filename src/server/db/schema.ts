@@ -534,22 +534,27 @@ export const surveyTypeEnum = pgEnum("survey_type", ["onsite", "offsite"]);
 // Facility-level survey (no residents)
 export const qalSurvey = pgTable("qal_survey", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
-  facilityId: integer("facility_id").notNull().references(() => facility.id, { onDelete: "restrict" }), // reuse existing facility table
+  facilityId: integer("facility_id").notNull().references(() => facility.id, { onDelete: "restrict" }),
   templateId: integer("template_id").notNull().references(() => qalTemplate.id, { onDelete: "restrict" }),
   auditorUserId: text("auditor_user_id").references(() => user.id, { onDelete: "set null" }),
   surveyDate: timestamp("survey_date").defaultNow().notNull(),
-   surveyType: surveyTypeEnum("survey_type").notNull().default("onsite"),
+  surveyType: surveyTypeEnum("survey_type").notNull().default("onsite"),
   administrator: text("administrator"),
   businessOfficeManager: text("business_office_manager"),
   assistantBusinessOfficeManager: text("assistant_business_office_manager"),
   isLocked: boolean("is_locked").default(false).notNull(),
+
+  // ✅ ADD THIS
+  pocGenerated: boolean("poc_generated").default(false).notNull(),
+
   totalPossible: numeric("total_possible", { precision: 12, scale: 4 }).default("0"),
   totalEarned: numeric("total_earned", { precision: 12, scale: 4 }).default("0"),
-  overallPercent: numeric("overall_percent", { precision: 7, scale: 4 }).default("0"), // store *100 if you prefer integer
+  overallPercent: numeric("overall_percent", { precision: 7, scale: 4 }).default("0"),
   gradeBand: text("grade_band"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
 
 // Section score row for a survey
 export const qalSurveySection = pgTable("qal_survey_section", {
@@ -608,16 +613,75 @@ export const qalQuestionResponse = pgTable(
 
 
 // QAL POC per section
-export const qalPOC = pgTable("qal_poc", {
+export const qalPOC = pgTable(
+  "qal_poc",
+  {
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+
+    surveyId: integer("survey_id")
+      .notNull()
+      .references(() => qalSurvey.id, { onDelete: "cascade" }),
+
+    sectionId: integer("section_id")
+      .notNull()
+      .references(() => qalSection.id, { onDelete: "cascade" }),
+
+    questionId: integer("question_id")
+      .notNull()
+      .references(() => qalQuestion.id, { onDelete: "cascade" }),
+
+    // Snapshot of failure context
+    possiblePoints: numeric("possible_points", { precision: 12, scale: 4 }).notNull(),
+    sampleSize: integer("sample_size").notNull(),
+    passedCount: integer("passed_count").notNull(),
+    testingSample: text("testing_sample"),
+    comments: text("comments"),
+
+    // POC content
+    pocText: text("poc_text").notNull(),
+    complianceDate: date("compliance_date"),
+
+    createdByUserId: text("created_by_user_id").references(() => user.id, { onDelete: "set null" }),
+    updatedByUserId: text("updated_by_user_id").references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [
+    // one POC per survey+question
+    unique("uq_qal_poc_per_question").on(t.surveyId, t.questionId),
+  ],
+);
+
+
+export const qalPocComment = pgTable("qal_poc_comment", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
-  surveyId: integer("survey_id").notNull().references(() => qalSurvey.id, { onDelete: "cascade" }),
-  sectionId: integer("section_id").references(() => qalSection.id, { onDelete: "set null" }),
-  pocText: text("poc_text").notNull(),
-  complianceDate: date("compliance_date"),
-  createdByUserId: text("created_by_user_id").references(() => user.id, { onDelete: "set null" }),
+
+  surveyId: integer("survey_id")
+    .notNull()
+    .references(() => qalSurvey.id, { onDelete: "cascade" }),
+
+  pocId: integer("poc_id")
+    .notNull()
+    .references(() => qalPOC.id, { onDelete: "cascade" }),
+
+  commentText: text("comment_text").notNull(),
+
+  authorId: text("author_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+
+export const qalPocCommentInsertSchema = createInsertSchema(qalPocComment, {
+  commentText: (schema) => schema.min(1, "Comment cannot be empty"),
+});
+export type QALPocCommentInsertType = z.infer<typeof qalPocCommentInsertSchema>;
+
+export const qalPocCommentSelectSchema = createSelectSchema(qalPocComment);
+export type QALPocCommentSelectType = z.infer<typeof qalPocCommentSelectSchema>;
+
 
 
 // Resident
