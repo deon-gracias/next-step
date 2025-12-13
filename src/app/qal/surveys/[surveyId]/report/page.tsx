@@ -221,26 +221,27 @@ export default function QALReportPage() {
         </Card>
 
         {/* Overall Score */}
-        <Card className="border-2 border-primary shadow-lg">
-          <CardContent className="p-8">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-2xl font-bold">OVERALL SCORE</h2>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {qualityRating.label}
-                </p>
-              </div>
-              <div className="flex items-center gap-4">
-                <div className="text-right">
-                  <div className="text-sm text-muted-foreground">Total Score</div>
-                  <div className="text-5xl font-bold text-primary">
-                    {overall.toFixed(2)}%
-                  </div>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+<Card className="border-2 border-green-600 shadow-lg">
+  <CardContent className="p-8">
+    <div className="flex items-center justify-between">
+      <div>
+        <h2 className="text-2xl font-bold  text-green-600">OVERALL SCORE</h2>
+        <p className="text-sm text-muted-foreground mt-1">
+          {qualityRating.label}
+        </p>
+      </div>
+      <div className="flex items-center gap-4">
+        <div className="text-right">
+          <div className="text-sm text-muted-foreground">Total Score</div>
+          <div className="text-5xl font-bold text-green-600">
+            {overall.toFixed(2)}%
+          </div>
+        </div>
+      </div>
+    </div>
+  </CardContent>
+</Card>
+
 
         {/* Action Plan Notice */}
         {overall < 90 && (

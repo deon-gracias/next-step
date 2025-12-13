@@ -22,33 +22,167 @@ function toDbNumeric(value: number): string {
 
 export const qalRouter = createTRPCRouter({
   createTemplate: protectedProcedure
-    .input(
-      z.object({
-        name: z.string().min(1).max(255),
-        description: z.string().optional(),
-        meta: z.string().optional(),
-      })
-    )
-    .mutation(async ({ ctx, input }) => {
-      const [template] = await ctx.db
-        .insert(qalTemplate)
-        .values({
-          name: input.name,
-          meta: input.meta || null,
-          isActive: true,
+  .input(
+    z.object({
+      name: z.string().min(1).max(255),
+      meta: z.string().optional(),
+      sections: z.array(
+        z.object({
+          title: z.string().min(1),
+          description: z.string().optional(),
+          possiblePoints: z.number(),
+          sortOrder: z.number(),
+          questions: z.array(
+            z.object({
+              prompt: z.string().min(1),
+              guidance: z.string().optional(),
+              fixedSample: z.number(),
+              possiblePoints: z.number(),
+              sortOrder: z.number(),
+            })
+          ),
         })
-        .returning();
-      
-      return template;
-    }),
+      ).optional().default([]),
+    })
+  )
+  .mutation(async ({ ctx, input }) => {
+    // Create template
+    const [template] = await ctx.db
+      .insert(qalTemplate)
+      .values({
+        name: input.name,
+        meta: input.meta || null,
+        isActive: true,
+      })
+      .returning();
+
+    if (!template) throw new Error("Failed to create template");
+
+    // Create sections and questions if provided
+    if (input.sections && input.sections.length > 0) {
+      for (const sectionInput of input.sections) {
+        const [section] = await ctx.db
+          .insert(qalSection)
+          .values({
+            templateId: template.id,
+            title: sectionInput.title,
+            description: sectionInput.description || null,
+            possiblePoints: sectionInput.possiblePoints,
+            sortOrder: sectionInput.sortOrder,
+          })
+          .returning();
+
+        if (!section) continue;
+
+        // Create questions for this section
+        if (sectionInput.questions.length > 0) {
+          await ctx.db.insert(qalQuestion).values(
+            sectionInput.questions.map((q) => ({
+              sectionId: section.id,
+              prompt: q.prompt,
+              guidance: q.guidance || null,
+              fixedSample: q.fixedSample,
+              possiblePoints: toDbNumeric(q.possiblePoints),
+              sortOrder: q.sortOrder,
+            }))
+          );
+        }
+      }
+    }
+
+    return template;
+  }),
+
+  // Add these to your QAL router
+
+// Check if question is used in any surveys
+checkQuestionUsage: protectedProcedure
+  .input(z.object({ questionId: z.number().int().positive() }))
+  .query(async ({ ctx, input }) => {
+    const responses = await ctx.db
+      .select()
+      .from(qalQuestionResponse)
+      .where(eq(qalQuestionResponse.questionId, input.questionId))
+      .limit(1);
+
+    const pocs = await ctx.db
+      .select()
+      .from(qalPOC)
+      .where(eq(qalPOC.questionId, input.questionId))
+      .limit(1);
+
+    return {
+      isUsed: responses.length > 0 || pocs.length > 0,
+      responseCount: responses.length,
+      pocCount: pocs.length,
+    };
+  }),
+
+// Delete question with safety check
+deleteQuestion: protectedProcedure
+  .input(z.object({ id: z.number().int().positive() }))
+  .mutation(async ({ ctx, input }) => {
+    // Check if used
+    const responses = await ctx.db
+      .select()
+      .from(qalQuestionResponse)
+      .where(eq(qalQuestionResponse.questionId, input.id));
+
+    const pocs = await ctx.db
+      .select()
+      .from(qalPOC)
+      .where(eq(qalPOC.questionId, input.id));
+
+    if (responses.length > 0 || pocs.length > 0) {
+      throw new Error(
+        "Cannot delete question: it is being used in surveys or POCs"
+      );
+    }
+
+    await ctx.db.delete(qalQuestion).where(eq(qalQuestion.id, input.id));
+
+    return { success: true };
+  }),
+
+
 
 
   listTemplates: protectedProcedure.query(async ({ ctx }) => {
-    return await ctx.db
-      .select()
-      .from(qalTemplate)
-      .orderBy(desc(qalTemplate.createdAt));
-  }),
+  const templates = await ctx.db
+    .select()
+    .from(qalTemplate)
+    .orderBy(desc(qalTemplate.createdAt));
+
+  // Get counts for each template
+  const templatesWithCounts = await Promise.all(
+    templates.map(async (template) => {
+      const sections = await ctx.db
+        .select()
+        .from(qalSection)
+        .where(eq(qalSection.templateId, template.id));
+
+      const sectionIds = sections.map((s) => s.id);
+      
+      let questionCount = 0;
+      if (sectionIds.length > 0) {
+        const questions = await ctx.db
+          .select()
+          .from(qalQuestion)
+          .where(inArray(qalQuestion.sectionId, sectionIds));
+        questionCount = questions.length;
+      }
+
+      return {
+        ...template,
+        sectionCount: sections.length,
+        questionCount,
+      };
+    })
+  );
+
+  return templatesWithCounts;
+}),
+
 
 
   getTemplate: protectedProcedure
@@ -139,17 +273,6 @@ export const qalRouter = createTRPCRouter({
     }),
 
 
-  deleteSection: protectedProcedure
-    .input(z.object({ id: z.number().int().positive() }))
-    .mutation(async ({ ctx, input }) => {
-      await ctx.db
-        .delete(qalSection)
-        .where(eq(qalSection.id, input.id));
-
-      return { success: true };
-    }),
-
-
   createQuestion: protectedProcedure
     .input(
       z.object({
@@ -204,17 +327,6 @@ export const qalRouter = createTRPCRouter({
         .returning();
 
       return updated;
-    }),
-
-
-  deleteQuestion: protectedProcedure
-    .input(z.object({ id: z.number().int().positive() }))
-    .mutation(async ({ ctx, input }) => {
-      await ctx.db
-        .delete(qalQuestion)
-        .where(eq(qalQuestion.id, input.id));
-
-      return { success: true };
     }),
 
 
@@ -664,7 +776,144 @@ export const qalRouter = createTRPCRouter({
 
       return inserted;
     }),
+
+    // In your QAL router file
+addSection: protectedProcedure
+  .input(
+    z.object({
+      templateId: z.number(),
+      title: z.string(),
+      description: z.string().optional(),
+      possiblePoints: z.number(),
+      sortOrder: z.number(),
+    })
+  )
+  .mutation(async ({ ctx, input }) => {
+    const [section] = await ctx.db
+      .insert(qalSection)
+      .values({
+        templateId: input.templateId,
+        title: input.title,
+        description: input.description,
+        possiblePoints: input.possiblePoints,
+        sortOrder: input.sortOrder,
+      })
+      .returning();
+    return section;
+  }),    
+  addQuestion: protectedProcedure
+  .input(
+    z.object({
+      sectionId: z.number(),
+      prompt: z.string(),
+      guidance: z.string().optional(),
+      fixedSample: z.number(),
+      possiblePoints: z.number(),
+      sortOrder: z.number(),
+    })
+  )
+  .mutation(async ({ ctx, input }) => {
+    const [question] = await ctx.db
+      .insert(qalQuestion)
+      .values({
+        sectionId: input.sectionId,
+        prompt: input.prompt,
+        guidance: input.guidance || null,
+        fixedSample: input.fixedSample,
+        possiblePoints: toDbNumeric(input.possiblePoints),
+        sortOrder: input.sortOrder,
+      })
+      .returning();
+    return question;
+  }),
+
+
+  // Check if template is used anywhere
+checkTemplateUsage: protectedProcedure
+  .input(z.object({ templateId: z.number().int().positive() }))
+  .query(async ({ ctx, input }) => {
+    const surveys = await ctx.db
+      .select()
+      .from(qalSurvey)
+      .where(eq(qalSurvey.templateId, input.templateId))
+      .limit(1);
+
+    const pocDocs = await ctx.db
+      .select()
+      .from(qalPOC)
+      .innerJoin(qalSection, eq(qalPOC.sectionId, qalSection.id))
+      .where(eq(qalSection.templateId, input.templateId))
+      .limit(1);
+
+    return { isUsed: surveys.length > 0 || pocDocs.length > 0 };
+  }),
+
+// Safe delete template
+deleteTemplate: protectedProcedure
+  .input(z.object({ id: z.number().int().positive() }))
+  .mutation(async ({ ctx, input }) => {
+    const surveys = await ctx.db
+      .select()
+      .from(qalSurvey)
+      .where(eq(qalSurvey.templateId, input.id))
+      .limit(1);
+
+    if (surveys.length > 0) {
+      throw new Error("Cannot delete template: it is used by surveys");
+    }
+
+    await ctx.db.delete(qalTemplate).where(eq(qalTemplate.id, input.id));
+    return { success: true };
+  }),
+
+// Check if section is used in surveys/POCs
+checkSectionUsage: protectedProcedure
+  .input(z.object({ sectionId: z.number().int().positive() }))
+  .query(async ({ ctx, input }) => {
+    const surveySections = await ctx.db
+      .select()
+      .from(qalSurveySection)
+      .where(eq(qalSurveySection.sectionId, input.sectionId))
+      .limit(1);
+
+    const pocs = await ctx.db
+      .select()
+      .from(qalPOC)
+      .where(eq(qalPOC.sectionId, input.sectionId))
+      .limit(1);
+
+    return { isUsed: surveySections.length > 0 || pocs.length > 0 };
+  }),
+
+// Safe delete section
+deleteSection: protectedProcedure
+  .input(z.object({ id: z.number().int().positive() }))
+  .mutation(async ({ ctx, input }) => {
+    const surveySections = await ctx.db
+      .select()
+      .from(qalSurveySection)
+      .where(eq(qalSurveySection.sectionId, input.id))
+      .limit(1);
+
+    const pocs = await ctx.db
+      .select()
+      .from(qalPOC)
+      .where(eq(qalPOC.sectionId, input.id))
+      .limit(1);
+
+    if (surveySections.length > 0 || pocs.length > 0) {
+      throw new Error("Cannot delete section: it is used in surveys or POCs");
+    }
+
+    await ctx.db.delete(qalSection).where(eq(qalSection.id, input.id));
+    return { success: true };
+  }),
+
+
+
+
 });
+
 
 
 // ======= existing helper functions unchanged =======

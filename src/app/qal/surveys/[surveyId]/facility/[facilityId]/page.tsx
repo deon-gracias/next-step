@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useCallback, useRef } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/trpc/react";
 import { Button } from "@/components/ui/button";
@@ -54,22 +54,22 @@ import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import jsPDF from "jspdf";
 
-  const AuthorName = ({ authorId }: { authorId: string }) => {
-        const author = api.user.byId.useQuery(
-          { id: authorId },
-          { enabled: Boolean(authorId) }
-        );
+const AuthorName = ({ authorId }: { authorId: string }) => {
+  const author = api.user.byId.useQuery(
+    { id: authorId },
+    { enabled: Boolean(authorId) }
+  );
 
-        if (author.isPending) {
-          return <span className="text-muted-foreground">Loading...</span>;
-        }
+  if (author.isPending) {
+    return <span className="text-muted-foreground">Loading...</span>;
+  }
 
-        return (
-          <span>
-            {author.data?.name || author.data?.email || `User ${authorId}`}
-          </span>
-        );
-      };
+  return (
+    <span>
+      {author.data?.name || author.data?.email || `User ${authorId}`}
+    </span>
+  );
+};
 
 // Comments Section Component
 const CommentsSection = ({
@@ -137,8 +137,8 @@ const CommentsSection = ({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-sm font-medium text-gray-900">
-  <AuthorName authorId={comment.authorId} />
-</span>
+                      <AuthorName authorId={comment.authorId} />
+                    </span>
                     <div className="flex items-center gap-1 text-xs text-gray-500">
                       <Clock className="h-3 w-3" />
                       {comment.createdAt &&
@@ -208,13 +208,15 @@ export default function QALSurveyPage() {
 
   // POC state
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [combinedPOC, setCombinedPOC] = useState("");
-  const [combinedDOC, setCombinedDOC] = useState<Date | null>(null);
   const [showComments, setShowComments] = useState(false);
   const [newComment, setNewComment] = useState("");
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
-  // First POC for combined textarea
+  // POC state per section
+  const [sectionPOCs, setSectionPOCs] = useState<
+    Record<number, { pocText: string; complianceDate: Date | null }>
+  >({});
+
   const [firstPocId, setFirstPocId] = useState<number | null>(null);
 
   const comments = api.qal.listPocComments.useQuery(
@@ -265,20 +267,79 @@ export default function QALSurveyPage() {
     );
   }
 
-  const { survey, facility: surveyFacility } = surveyQ.data;
+  const { survey, facility: surveyFacility, sections } = surveyQ.data;
 
   const overallPercent = Number(survey.overallPercent || 0);
   const totalEarned = Number(survey.totalEarned || 0);
   const totalPossible = Number(survey.totalPossible || 0);
   const pocGenerated = Boolean(survey.pocGenerated);
-  const scoreAllowsPOC = overallPercent < 85;
-  const canOpenPOCSheet = isLocked && pocGenerated && scoreAllowsPOC;
+
+  // Check if ALL questions are filled (have responses)
+  const allQuestionsFilled = useMemo(() => {
+    if (!sections || sections.length === 0) return false;
+
+    for (const secRow of sections) {
+      const sectionData = utils.qal.getSectionWithQuestions.getData({
+        surveyId,
+        sectionId: secRow.section.id,
+      });
+
+      if (!sectionData) return false;
+
+      const { questions } = sectionData;
+
+      // Check if all questions have a response
+      for (const q of questions) {
+        if (!q.response) return false;
+      }
+    }
+
+    return true;
+  }, [sections, surveyId, utils.qal.getSectionWithQuestions]);
+
+  // Calculate section scores and filter sections below 90%
+  const sectionsBelow90 = useMemo(() => {
+    if (!sections) return [];
+
+    return sections
+      .map((secRow) => {
+        const sectionData = utils.qal.getSectionWithQuestions.getData({
+          surveyId,
+          sectionId: secRow.section.id,
+        });
+
+        if (!sectionData) return null;
+
+        const { questions, sectionResponse } = sectionData;
+
+        const adjustedPossible = questions.reduce((sum, q) => {
+          if (q.response?.isNotApplicable) return sum;
+          return sum + Number(q.possiblePoints || 0);
+        }, 0);
+
+        const earned = Number(sectionResponse?.earnedPoints ?? 0);
+        const pct = adjustedPossible > 0 ? (earned / adjustedPossible) * 100 : 0;
+
+        return {
+          section: secRow.section,
+          percentage: pct,
+          earned,
+          possible: adjustedPossible,
+        };
+      })
+      .filter((s) => s !== null && s.percentage < 90);
+  }, [sections, surveyId, utils.qal.getSectionWithQuestions]);
 
   const handleViewReport = () => {
     router.push(`/qal/surveys/${surveyId}/report`);
   };
 
   const handleLockSurvey = async () => {
+    if (!allQuestionsFilled) {
+      toast.error("Please fill all questions before locking");
+      return;
+    }
+
     try {
       await lock.mutateAsync({ surveyId });
       await surveyQ.refetch();
@@ -311,62 +372,145 @@ export default function QALSurveyPage() {
     });
   };
 
-  // Build sheet blocks from POC list
-  const sheetBlocks = useMemo(() => {
-    if (!pocList.data || !canOpenPOCSheet) return [];
-    return pocList.data.map((row) => ({
-      pocId: row.poc.id,
-      questionId: row.poc.questionId,
-      sectionTitle: row.section.title,
-      questionText: row.question.prompt,
-      possiblePoints: Number(row.poc.possiblePoints || 0),
-      sampleSize: row.poc.sampleSize,
-      passedCount: row.poc.passedCount,
-      testingSample: row.poc.testingSample,
-      comments: row.poc.comments,
-      pocText: row.poc.pocText,
-      complianceDate: row.poc.complianceDate
-        ? new Date(row.poc.complianceDate)
-        : null,
-    }));
-  }, [pocList.data, canOpenPOCSheet]);
+  // Group sheet blocks by section - only for sections below 90% and questions with 0 earned points
+  const sheetBlocksBySection = useMemo(() => {
+    if (!pocList.data) return {};
 
-  const hasAnyPOC = sheetBlocks.some((b) => b.pocText && b.pocText.trim());
+    const grouped: Record<
+      number,
+      {
+        sectionTitle: string;
+        sectionId: number;
+        blocks: Array<{
+          pocId: number;
+          questionId: number;
+          questionText: string;
+          possiblePoints: number;
+          sampleSize: number;
+          passedCount: number;
+          testingSample: string | null;
+          comments: string | null;
+          pocText: string | null;
+          complianceDate: Date | null;
+          earnedPoints: number;
+        }>;
+      }
+    > = {};
 
-  // Set first POC ID for comments
+    // Get section IDs that are below 90%
+    const below90SectionIds = new Set(
+      sectionsBelow90.map((s) => s!.section.id)
+    );
+
+    for (const row of pocList.data) {
+      const sectionId = row.section.id;
+
+      // Only include if section is below 90%
+      if (!below90SectionIds.has(sectionId)) continue;
+
+      // Calculate earned points for this question
+      const sampleSize = row.poc.sampleSize || 0;
+      const passedCount = row.poc.passedCount || 0;
+      const possiblePoints = Number(row.poc.possiblePoints || 0);
+      const earnedPoints =
+        sampleSize > 0 ? (passedCount / sampleSize) * possiblePoints : 0;
+
+      // Only include questions with 0 earned points
+      if (earnedPoints !== 0) continue;
+
+      if (!grouped[sectionId]) {
+        grouped[sectionId] = {
+          sectionTitle: row.section.title,
+          sectionId,
+          blocks: [],
+        };
+      }
+
+      grouped[sectionId].blocks.push({
+        pocId: row.poc.id,
+        questionId: row.poc.questionId,
+        questionText: row.question.prompt,
+        possiblePoints,
+        sampleSize: row.poc.sampleSize || 0,
+        passedCount: row.poc.passedCount || 0,
+        testingSample: row.poc.testingSample,
+        comments: row.poc.comments,
+        pocText: row.poc.pocText,
+        complianceDate: row.poc.complianceDate
+          ? new Date(row.poc.complianceDate)
+          : null,
+        earnedPoints,
+      });
+    }
+
+    return grouped;
+  }, [pocList.data, sectionsBelow90]);
+
+  const totalUnmetQuestions = Object.values(sheetBlocksBySection).reduce(
+    (sum, section) => sum + section.blocks.length,
+    0
+  );
+
+  const hasAnyPOC = Object.values(sheetBlocksBySection).some((section) =>
+    section.blocks.some((b) => b.pocText && b.pocText.trim())
+  );
+
+  // Initialize section POCs
   React.useEffect(() => {
-    if (sheetBlocks.length > 0 && !firstPocId) {
-      const firstBlock = sheetBlocks[0];
-      if (firstBlock) {
-        setFirstPocId(firstBlock.pocId);
-        setCombinedPOC(firstBlock.pocText || "");
-        setCombinedDOC(firstBlock.complianceDate);
+    if (Object.keys(sheetBlocksBySection).length > 0) {
+      const initial: Record<
+        number,
+        { pocText: string; complianceDate: Date | null }
+      > = {};
+
+      for (const [sectionId, sectionData] of Object.entries(
+        sheetBlocksBySection
+      )) {
+        const firstBlock = sectionData.blocks[0];
+        if (firstBlock) {
+          initial[Number(sectionId)] = {
+            pocText: firstBlock.pocText || "",
+            complianceDate: firstBlock.complianceDate,
+          };
+        }
+      }
+
+      setSectionPOCs(initial);
+
+      // Set first POC ID for comments
+      const firstSection = Object.values(sheetBlocksBySection)[0];
+      if (firstSection && firstSection.blocks[0]) {
+        setFirstPocId(firstSection.blocks[0].pocId);
       }
     }
-  }, [sheetBlocks, firstPocId]);
+  }, [sheetBlocksBySection]);
 
-  const handleSaveCombinedPOC = async () => {
-    if (!combinedPOC.trim()) {
+  const handleSavePOC = async (sectionId: number) => {
+    const pocData = sectionPOCs[sectionId];
+    if (!pocData?.pocText?.trim()) {
       toast.error("POC text cannot be empty");
       return;
     }
 
+    const sectionBlocks = sheetBlocksBySection[sectionId]?.blocks || [];
+
     try {
       await Promise.all(
-        sheetBlocks.map((block) =>
+        sectionBlocks.map((block) =>
           pocUpsert.mutateAsync({
             id: block.pocId,
             surveyId,
             questionId: block.questionId,
-            sectionId: pocList.data?.find((r) => r.poc.id === block.pocId)
-              ?.section.id!,
-            pocText: combinedPOC.trim(),
-            complianceDate: combinedDOC,
+            sectionId,
+            pocText: pocData.pocText.trim(),
+            complianceDate: pocData.complianceDate,
           })
         )
       );
-      setSheetOpen(false);
-      toast.success("POC updated for all items successfully");
+
+      toast.success(
+        `POC updated for ${sectionBlocks.length} question(s) in this section`
+      );
     } catch (e: any) {
       toast.error(e?.message ?? "Failed to save POC");
     }
@@ -396,7 +540,8 @@ export default function QALSurveyPage() {
       doc.text(`Survey Number: ${surveyId}`, 20, yPos);
       yPos += 8;
 
-      const facilityName = surveyFacility?.name || `Facility ID ${survey.facilityId}`;
+      const facilityName =
+        surveyFacility?.name || `Facility ID ${survey.facilityId}`;
       doc.text(`Facility: ${facilityName}`, 20, yPos);
       yPos += 8;
 
@@ -410,136 +555,61 @@ export default function QALSurveyPage() {
       );
       yPos += 15;
 
-      // Plan of Correction Section
-      doc.setFontSize(16);
-      doc.setFont("helvetica", "bold");
-      doc.text("Plan of Correction", 20, yPos);
-      yPos += 10;
+      // POC by section
+      for (const [sectionId, sectionData] of Object.entries(
+        sheetBlocksBySection
+      )) {
+        const pocData = sectionPOCs[Number(sectionId)];
+        if (!pocData?.pocText) continue;
 
-      doc.setFontSize(11);
-      doc.setFont("helvetica", "normal");
-      const pocLines = doc.splitTextToSize(combinedPOC, 170);
-
-      if (yPos + pocLines.length * 5 > 280) {
-        doc.addPage();
-        yPos = 20;
-      }
-
-      doc.text(pocLines, 20, yPos);
-      yPos += pocLines.length * 5 + 15;
-
-      // DOC SECTION
-      if (combinedDOC) {
-        if (yPos + 20 > 280) {
+        if (yPos + 30 > 280) {
           doc.addPage();
           yPos = 20;
         }
 
+        // Section title
         doc.setFontSize(16);
         doc.setFont("helvetica", "bold");
-        doc.text("Date of Compliance", 20, yPos);
+        doc.text(`Section: ${sectionData.sectionTitle}`, 20, yPos);
         yPos += 10;
 
+        // POC text
         doc.setFontSize(11);
         doc.setFont("helvetica", "normal");
-        doc.text(
-          `Compliance Date: ${format(combinedDOC, "MMM dd, yyyy")}`,
-          20,
-          yPos
-        );
-        yPos += 15;
-      }
+        const pocLines = doc.splitTextToSize(pocData.pocText, 170);
+        doc.text(pocLines, 20, yPos);
+        yPos += pocLines.length * 5 + 10;
 
-      // Comments Section
-      if (comments.data && comments.data.length > 0) {
-        if (yPos + 30 > 280) {
-          doc.addPage();
-          yPos = 20;
-        }
-
-        doc.setFontSize(16);
-        doc.setFont("helvetica", "bold");
-        doc.text("Comments", 20, yPos);
-        yPos += 10;
-
-        doc.setFontSize(10);
-        doc.setFont("helvetica", "normal");
-
-        for (const comment of comments.data) {
-          if (yPos + 25 > 280) {
-            doc.addPage();
-            yPos = 20;
-          }
-
-          const authorName = comment.authorId;
-          const commentDate = comment.createdAt
-            ? format(new Date(comment.createdAt), "MMM dd, yyyy 'at' h:mm a")
-            : "";
-
-          doc.setFont("helvetica", "bold");
-          doc.text(`${authorName} - ${commentDate}`, 20, yPos);
-          yPos += 6;
-
-          doc.setFont("helvetica", "normal");
-          const commentLines = doc.splitTextToSize(comment.commentText, 170);
-          doc.text(commentLines, 20, yPos);
-          yPos += commentLines.length * 4 + 8;
-        }
-      }
-
-      // Unmet Questions Summary
-      if (sheetBlocks.length > 0) {
-        if (yPos + 30 > 280) {
-          doc.addPage();
-          yPos = 20;
-        }
-
-        doc.setFontSize(16);
-        doc.setFont("helvetica", "bold");
-        doc.text("Questions Requiring Attention", 20, yPos);
-        yPos += 10;
-
-        doc.setFontSize(10);
-        doc.setFont("helvetica", "normal");
-
-        for (const block of sheetBlocks) {
-          if (yPos + 30 > 280) {
-            doc.addPage();
-            yPos = 20;
-          }
-
-          // Question text
-          doc.setFont("helvetica", "bold");
-          const questionLines = doc.splitTextToSize(block.questionText, 170);
-          doc.text(questionLines, 20, yPos);
-          yPos += questionLines.length * 4 + 3;
-
-          // Details
-          doc.setFont("helvetica", "normal");
+        // Compliance date
+        if (pocData.complianceDate) {
+          doc.setFont("helvetica", "italic");
           doc.text(
-            `Sample: ${block.sampleSize} | Passed: ${block.passedCount} | Points: ${block.possiblePoints.toFixed(1)}`,
+            `Compliance Date: ${format(pocData.complianceDate, "MMM dd, yyyy")}`,
             20,
             yPos
           );
-          yPos += 6;
-
-          if (block.testingSample) {
-            doc.text(`Testing Sample: ${block.testingSample}`, 20, yPos);
-            yPos += 6;
-          }
-
-          if (block.comments) {
-            doc.setFont("helvetica", "italic");
-            const commentLines = doc.splitTextToSize(
-              `Comments: ${block.comments}`,
-              160
-            );
-            doc.text(commentLines, 25, yPos);
-            yPos += commentLines.length * 4 + 3;
-          }
-
-          yPos += 5;
+          yPos += 8;
         }
+
+        // Questions in this section
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "bold");
+        doc.text("Questions:", 20, yPos);
+        yPos += 6;
+
+        doc.setFont("helvetica", "normal");
+        for (const block of sectionData.blocks) {
+          if (yPos + 20 > 280) {
+            doc.addPage();
+            yPos = 20;
+          }
+
+          const qLines = doc.splitTextToSize(` • ${block.questionText}`, 165);
+          doc.text(qLines, 25, yPos);
+          yPos += qLines.length * 4 + 3;
+        }
+
+        yPos += 10;
       }
 
       doc.save(
@@ -552,26 +622,17 @@ export default function QALSurveyPage() {
     } finally {
       setIsGeneratingPDF(false);
     }
-  }, [
-    survey,
-    hasAnyPOC,
-    surveyId,
-    combinedPOC,
-    combinedDOC,
-    comments.data,
-    sheetBlocks,
-    surveyFacility,
-  ]);
+  }, [survey, hasAnyPOC, surveyId, sheetBlocksBySection, sectionPOCs, surveyFacility]);
 
   // POC control
   const renderPOCControl = () => {
     if (!isLocked) return null;
 
-    if (!scoreAllowsPOC) {
+    if (sectionsBelow90.length === 0) {
       return (
-        <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded-lg border border-amber-200">
+        <div className="flex items-center gap-2 text-xs text-green-600 bg-green-50 px-3 py-2 rounded-lg border border-green-200">
           <AlertTriangle className="h-4 w-4" />
-          POC available when score is below 85%
+          All sections scored 90% or above - POC not required
         </div>
       );
     }
@@ -597,7 +658,6 @@ export default function QALSurveyPage() {
     }
 
     const label = hasAnyPOC ? "View POC" : "Fill POC";
-    const totalUnmetQuestions = sheetBlocks.length;
 
     return (
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
@@ -616,7 +676,7 @@ export default function QALSurveyPage() {
           </Button>
         </SheetTrigger>
 
-        <SheetContent className="w-full sm:max-w-5xl p-0 flex flex-col">
+        <SheetContent className="w-full sm:max-w-5xl p-0 flex flex-col overflow-hidden">
           <SheetHeader className="px-6 pt-6 pb-4 border-b bg-gradient-to-r from-red-50 to-orange-50">
             <div className="flex items-start justify-between">
               <div>
@@ -627,7 +687,7 @@ export default function QALSurveyPage() {
                   Plan of Correction
                 </SheetTitle>
                 <div className="text-sm text-muted-foreground mt-1">
-                  QAL Audit Survey
+                  QAL Audit Survey - Sections Below 90%
                 </div>
                 <div className="h-px bg-border mt-2" />
                 <SheetDescription className="text-sm text-gray-600 mt-1">
@@ -645,6 +705,12 @@ export default function QALSurveyPage() {
                     </div>
                     <div className="text-gray-500">Questions</div>
                   </div>
+                  <div className="text-center">
+                    <div className="font-semibold text-amber-600">
+                      {Object.keys(sheetBlocksBySection).length}
+                    </div>
+                    <div className="text-gray-500">Sections</div>
+                  </div>
                 </div>
               )}
             </div>
@@ -652,7 +718,7 @@ export default function QALSurveyPage() {
 
           <div className="flex-1 overflow-y-auto">
             <div className="px-6 py-4">
-              {sheetBlocks.length === 0 ? (
+              {totalUnmetQuestions === 0 ? (
                 <div className="text-center py-12 bg-green-50 rounded-lg border-2 border-dashed border-green-200">
                   <div className="h-12 w-12 rounded-full bg-green-100 mx-auto mb-4 flex items-center justify-center">
                     <FileText className="h-6 w-6 text-green-600" />
@@ -661,12 +727,11 @@ export default function QALSurveyPage() {
                     All Good!
                   </h3>
                   <p className="text-gray-500">
-                    No questions have unmet answers that require a Plan of
-                    Correction.
+                    No questions with 0 points in sections below 90%.
                   </p>
                 </div>
               ) : (
-                <div className="space-y-6">
+                <div className="space-y-8">
                   {/* Summary Card */}
                   <Card className="border-l-4 border-l-red-500 bg-red-50/50">
                     <CardContent className="p-4">
@@ -676,140 +741,209 @@ export default function QALSurveyPage() {
                         </div>
                         <div className="flex-1">
                           <h3 className="font-semibold text-gray-900 mb-1">
-                            Questions Requiring Attention
+                            Sections Requiring Attention
                           </h3>
                           <p className="text-sm text-gray-600 leading-relaxed">
-                            The following {totalUnmetQuestions} question
-                            {totalUnmetQuestions !== 1 ? "s" : ""}{" "}
-                            {totalUnmetQuestions === 1 ? "has" : "have"} unmet
-                            requirements. Please review each question and
-                            provide a comprehensive Plan of Correction.
+                            {Object.keys(sheetBlocksBySection).length} section
+                            {Object.keys(sheetBlocksBySection).length !== 1
+                              ? "s"
+                              : ""}{" "}
+                            scored below 90% with {totalUnmetQuestions} question
+                            {totalUnmetQuestions !== 1 ? "s" : ""} earning 0
+                            points. Please provide a Plan of Correction for each
+                            section.
                           </p>
                         </div>
                       </div>
                     </CardContent>
                   </Card>
 
-                  {/* Questions List */}
-                  <div className="space-y-4">
-                    {sheetBlocks.map((block, idx) => (
-                      <Card key={block.pocId} className="border-l-2 border-l-red-400">
-                        <CardHeader className="pb-3">
-                          <div className="flex items-start justify-between gap-4">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-1">
-                                <Badge
-                                  variant="outline"
-                                  className="text-xs font-mono"
-                                >
-                                  Q{idx + 1}
-                                </Badge>
-                                <span className="text-xs text-muted-foreground">
-                                  {block.sectionTitle}
-                                </span>
-                              </div>
-                              <CardTitle className="text-sm font-medium leading-tight">
-                                {block.questionText}
-                              </CardTitle>
-                            </div>
-                          </div>
-                        </CardHeader>
-                        <CardContent className="space-y-3 text-xs">
-                          <div className="grid grid-cols-3 gap-3 p-3 bg-slate-50 rounded-lg border">
-                            <div>
-                              <div className="text-muted-foreground mb-1">
-                                Sample / Passed
-                              </div>
-                              <div className="font-semibold">
-                                {block.sampleSize} / {block.passedCount}
-                              </div>
-                            </div>
-                            <div>
-                              <div className="text-muted-foreground mb-1">
-                                Possible Points
-                              </div>
-                              <div className="font-semibold">
-                                {block.possiblePoints.toFixed(1)}
-                              </div>
-                            </div>
-                            <div>
-                              <div className="text-muted-foreground mb-1">
-                                Testing Sample
-                              </div>
-                              <div className="font-mono text-xs">
-                                {block.testingSample || "—"}
-                              </div>
-                            </div>
-                          </div>
-
-                          {block.comments && (
-                            <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-                              <div className="text-muted-foreground mb-1">
-                                Response Comments
-                              </div>
-                              <p className="text-sm leading-relaxed">
-                                {block.comments}
-                              </p>
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-
-                  {/* Combined POC Input */}
-                  <Card className="border-2 border-dashed border-gray-300">
-                    <CardHeader>
-                      <CardTitle className="text-base flex items-center gap-2">
-                        <FileText className="h-4 w-4 text-red-600" />
-                        Combined Plan of Correction
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <Textarea
-                        placeholder="Enter your comprehensive Plan of Correction for all unmet items above..."
-                        value={combinedPOC}
-                        onChange={(e) => setCombinedPOC(e.target.value)}
-                        rows={8}
-                        className="text-sm resize-none"
-                      />
-
-                      <div className="flex items-center gap-3">
-                        <div className="flex items-center gap-2">
-                          <Calendar className="h-4 w-4 text-gray-500" />
-                          <span className="text-sm text-muted-foreground">
-                            Compliance Date:
-                          </span>
+                  {/* Sections */}
+                  {Object.entries(sheetBlocksBySection).map(
+                    ([sectionId, sectionData]) => (
+                      <div
+                        key={sectionId}
+                        className="border-2 border-red-200 rounded-lg p-4 space-y-4"
+                      >
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-lg font-bold text-gray-900">
+                            {sectionData.sectionTitle}
+                          </h3>
+                          <Badge variant="destructive">
+                            {sectionData.blocks.length} question
+                            {sectionData.blocks.length !== 1 ? "s" : ""}
+                          </Badge>
                         </div>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className={cn(
-                                "justify-start text-left font-normal",
-                                !combinedDOC && "text-muted-foreground"
-                              )}
+
+                        {/* Questions in this section */}
+                        <div className="space-y-3">
+                          {sectionData.blocks.map((block, idx) => (
+                            <Card
+                              key={block.pocId}
+                              className="border-l-2 border-l-red-400"
                             >
-                              {combinedDOC
-                                ? format(combinedDOC, "MMM dd, yyyy")
-                                : "Select date"}
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <CalendarComponent
-                              mode="single"
-                              selected={combinedDOC ?? undefined}
-                              onSelect={(date) =>
-                                setCombinedDOC(date ?? null)
+                              <CardHeader className="pb-3">
+                                <div className="flex items-start justify-between gap-4">
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <Badge
+                                        variant="outline"
+                                        className="text-xs font-mono"
+                                      >
+                                        Q{idx + 1}
+                                      </Badge>
+                                    </div>
+                                    <CardTitle className="text-sm font-medium leading-tight">
+                                      {block.questionText}
+                                    </CardTitle>
+                                  </div>
+                                </div>
+                              </CardHeader>
+                              <CardContent className="space-y-3 text-xs">
+                                <div className="grid grid-cols-3 gap-3 p-3 bg-slate-50 rounded-lg border">
+                                  <div>
+                                    <div className="text-muted-foreground mb-1">
+                                      Sample / Passed
+                                    </div>
+                                    <div className="font-semibold">
+                                      {block.sampleSize} / {block.passedCount}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <div className="text-muted-foreground mb-1">
+                                      Possible Points
+                                    </div>
+                                    <div className="font-semibold">
+                                      {block.possiblePoints.toFixed(1)}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <div className="text-muted-foreground mb-1">
+                                      Testing Sample
+                                    </div>
+                                    <div className="font-mono text-xs">
+                                      {block.testingSample || "—"}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {block.comments && (
+                                  <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                                    <div className="text-muted-foreground mb-1">
+                                      Response Comments
+                                    </div>
+                                    <p className="text-sm leading-relaxed">
+                                      {block.comments}
+                                    </p>
+                                  </div>
+                                )}
+                              </CardContent>
+                            </Card>
+                          ))}
+                        </div>
+
+                        {/* POC Input for this section */}
+                        <Card className="border-2 border-dashed border-gray-300">
+                          <CardHeader>
+                            <CardTitle className="text-base flex items-center gap-2">
+                              <FileText className="h-4 w-4 text-red-600" />
+                              Plan of Correction for {sectionData.sectionTitle}
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="space-y-4">
+                            <Textarea
+                              placeholder="Enter your Plan of Correction for this section..."
+                              value={
+                                sectionPOCs[Number(sectionId)]?.pocText || ""
                               }
-                              initialFocus
+                              onChange={(e) =>
+                                setSectionPOCs((prev) => ({
+                                  ...prev,
+                                  [Number(sectionId)]: {
+                                    pocText: e.target.value,
+                                    complianceDate: prev[Number(sectionId)]?.complianceDate ?? null,
+                                  },
+                                }))
+                              }
+                              rows={6}
+                              className="text-sm resize-none"
                             />
-                          </PopoverContent>
-                        </Popover>
+
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className="flex items-center gap-2">
+                                  <Calendar className="h-4 w-4 text-gray-500" />
+                                  <span className="text-sm text-muted-foreground">
+                                    Compliance Date:
+                                  </span>
+                                </div>
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className={cn(
+                                        "justify-start text-left font-normal",
+                                        !sectionPOCs[Number(sectionId)]
+                                          ?.complianceDate &&
+                                        "text-muted-foreground"
+                                      )}
+                                    >
+                                      {sectionPOCs[Number(sectionId)]
+                                        ?.complianceDate
+                                        ? format(
+                                          sectionPOCs[Number(sectionId)]?.complianceDate!,
+                                          "MMM dd, yyyy"
+                                        )
+
+                                        : "Select date"}
+                                    </Button>
+                                  </PopoverTrigger>
+                                  <PopoverContent
+                                    className="w-auto p-0"
+                                    align="start"
+                                  >
+                                    <CalendarComponent
+                                      mode="single"
+                                      selected={
+                                        sectionPOCs[Number(sectionId)]
+                                          ?.complianceDate ?? undefined
+                                      }
+                                      onSelect={(date) =>
+                                        setSectionPOCs((prev) => ({
+                                          ...prev,
+                                          [Number(sectionId)]: {
+                                            pocText: prev[Number(sectionId)]?.pocText ?? "",
+                                            complianceDate: date ?? null,
+                                          },
+                                        }))
+                                      }
+
+                                      initialFocus
+                                    />
+                                  </PopoverContent>
+                                </Popover>
+                              </div>
+
+                              <Button
+                                onClick={() => handleSavePOC(Number(sectionId))}
+                                disabled={
+                                  pocUpsert.isPending ||
+                                  !sectionPOCs[Number(sectionId)]?.pocText?.trim()
+                                }
+                                className="bg-red-600 hover:bg-red-700"
+                                size="sm"
+                              >
+                                {pocUpsert.isPending
+                                  ? "Saving..."
+                                  : "Save Section POC"}
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
                       </div>
-                    </CardContent>
-                  </Card>
+                    )
+                  )}
 
                   {/* Comments Section */}
                   <CommentsSection
@@ -846,20 +980,9 @@ export default function QALSurveyPage() {
             <div className="flex items-center gap-3">
               <SheetClose asChild>
                 <Button variant="ghost" size="sm">
-                  Cancel
+                  Close
                 </Button>
               </SheetClose>
-              <Button
-                onClick={handleSaveCombinedPOC}
-                disabled={pocUpsert.isPending || !combinedPOC.trim()}
-                className="bg-red-600 hover:bg-red-700 min-w-32"
-              >
-                {pocUpsert.isPending
-                  ? "Saving..."
-                  : hasAnyPOC
-                    ? "Update POC"
-                    : "Save POC"}
-              </Button>
             </div>
           </SheetFooter>
         </SheetContent>
@@ -880,9 +1003,7 @@ export default function QALSurveyPage() {
 
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="space-y-1">
-          <h1 className="text-2xl font-bold">
-            QAL Audit Survey #{surveyId}
-          </h1>
+          <h1 className="text-2xl font-bold">QAL Audit Survey #{surveyId}</h1>
           <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
             <span>
               Facility: {surveyFacility?.name ?? `ID ${survey.facilityId}`}
@@ -940,7 +1061,7 @@ export default function QALSurveyPage() {
                   <div>
                     <Button
                       onClick={handleLockSurvey}
-                      disabled={lock.isPending || overallPercent === 0}
+                      disabled={lock.isPending || !allQuestionsFilled}
                       className="gap-2"
                     >
                       <Lock className="h-4 w-4" />
@@ -948,9 +1069,9 @@ export default function QALSurveyPage() {
                     </Button>
                   </div>
                 </TooltipTrigger>
-                {overallPercent === 0 && (
+                {!allQuestionsFilled && (
                   <TooltipContent>
-                    <p>Complete survey responses before locking</p>
+                    <p>Fill all questions before locking</p>
                   </TooltipContent>
                 )}
               </Tooltip>
@@ -959,12 +1080,12 @@ export default function QALSurveyPage() {
         </div>
       </div>
 
-      {!isLocked && overallPercent === 0 && (
+      {!isLocked && !allQuestionsFilled && (
         <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            Please complete survey questions before locking. Enter sample size
-            and # Passed or mark items as N/A for each question.
+            Please complete all survey questions before locking. Enter sample
+            size and # Passed or mark items as N/A for each question.
           </AlertDescription>
         </Alert>
       )}
@@ -1243,9 +1364,7 @@ function QuestionRow({
   const [testingSample, setTestingSample] = useState(
     question.response?.testingSample ?? ""
   );
-  const [comments, setComments] = useState(
-    question.response?.comments ?? ""
-  );
+  const [comments, setComments] = useState(question.response?.comments ?? "");
 
   const saveMutation = api.qal.saveQuestionResponse.useMutation();
 
