@@ -52,10 +52,31 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { authClient } from "@/components/providers/auth-client";
 import { toast } from "sonner";
+import { canUI } from "@/lib/ui-permissions";
+import type { AppRole } from "@/lib/ui-permissions";
+
+// Add normalizeRole helper (same as other pages)
+function normalizeRole(role: unknown): AppRole | null {
+  const r = String(role ?? "").toLowerCase().trim();
+  if (r === "owner") return "admin";
+  if (r === "admin") return "admin";
+  if (r === "member") return "viewer";
+  if (
+    r === "viewer" ||
+    r === "lead_surveyor" ||
+    r === "surveyor" ||
+    r === "facility_coordinator" ||
+    r === "facility_viewer" ||
+    r === "admin"
+  ) {
+    return r as AppRole;
+  }
+  return null;
+}
 
 const PAGE_SIZES = [10, 50, 100];
 
-export default function () {
+export default function FacilitiesPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -67,6 +88,24 @@ export default function () {
     id: number;
     name: string;
   } | null>(null);
+
+  const activeOrg = authClient.useActiveOrganization();
+
+  // SAME LOGIC AS OTHER PAGES: Fetch role and normalize it
+  const { data: appRole, isLoading: roleLoading } = useQuery({
+    queryKey: ["active-member-role", activeOrg.data?.id],
+    queryFn: async () => {
+      const res = await authClient.organization.getActiveMemberRole();
+      const rawRole = (res as any)?.data?.role;
+      return normalizeRole(rawRole);
+    },
+    enabled: !!activeOrg.data,
+  });
+
+  // SAME LOGIC: Define permissions using canUI
+  const canViewFacilities = canUI(appRole, "facilities.view");
+  const canManageFacilities = canUI(appRole, "facilities.manage");
+  const canDeleteFacilities = canUI(appRole, "facilities.manage");
 
   const facilities = api.facility.list.useQuery({
     page,
@@ -88,32 +127,51 @@ export default function () {
   function handlePageSize(pageSize: number) {
     const newSearchParams = new URLSearchParams(searchParams.toString());
     newSearchParams.set("pageSize", String(pageSize));
+    newSearchParams.set("page", "1");
     router.replace(`?${newSearchParams.toString()}`);
   }
+
   function handlePage(page: number) {
     const newSearchParams = new URLSearchParams(searchParams.toString());
     newSearchParams.set("page", String(page));
     router.replace(`?${newSearchParams.toString()}`);
   }
 
-  const hasNewFacilityPermission = useQuery({
-    queryKey: [],
-    queryFn: async () =>
-      (
-        await authClient.organization.hasPermission({
-          permissions: { organization: ["update"] },
-        })
-      ).data?.success ?? false,
-  });
-  const hasDeleteFacilityPermission = useQuery({
-    queryKey: [],
-    queryFn: async () =>
-      (
-        await authClient.organization.hasPermission({
-          permissions: { organization: ["delete"] },
-        })
-      ).data?.success ?? false,
-  });
+  // SAME LOGIC: Loading state
+  if (roleLoading) {
+    return (
+      <>
+        <QISVHeader crumbs={[{ label: "Facilities" }]} />
+        <main className="px-4 py-6">
+          <div className="flex items-center justify-center py-12">
+            <div className="text-center">
+              <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+              <p className="mt-4 text-sm text-muted-foreground">Loading permissions...</p>
+            </div>
+          </div>
+        </main>
+      </>
+    );
+  }
+
+  // SAME LOGIC: Access denied state
+  if (!canViewFacilities) {
+    return (
+      <>
+        <QISVHeader crumbs={[{ label: "Facilities" }]} />
+        <main className="px-4 py-6">
+          <div className="flex items-center justify-center py-12">
+            <div className="text-center">
+              <h2 className="text-lg font-semibold">Access Denied</h2>
+              <p className="mt-2 text-sm text-muted-foreground">
+                You don't have permission to view facilities.
+              </p>
+            </div>
+          </div>
+        </main>
+      </>
+    );
+  }
 
   return (
     <>
@@ -124,7 +182,8 @@ export default function () {
             <h1 className="text-2xl font-bold tracking-tight">Facilities</h1>
             <p className="text-muted-foreground">Manage facilities</p>
           </div>
-          {hasNewFacilityPermission.data && (
+          {/* UPDATED: Use canManageFacilities */}
+          {canManageFacilities && (
             <Dialog open={isSheetOpen} onOpenChange={setIsSheetOpen}>
               <DialogTrigger asChild>
                 <Button>
@@ -149,7 +208,8 @@ export default function () {
                 <TableHead className="w-[120px]">Facility Code</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Address</TableHead>
-                {hasDeleteFacilityPermission.data && (
+                {/* UPDATED: Use canDeleteFacilities */}
+                {canDeleteFacilities && (
                   <TableHead className="w-[100px]">Actions</TableHead>
                 )}
               </TableRow>
@@ -166,7 +226,7 @@ export default function () {
                         <Skeleton className="h-6" />
                       </TableCell>
                     ))}
-                    {hasDeleteFacilityPermission.data && (
+                    {canDeleteFacilities && (
                       <TableCell>
                         <Skeleton className="h-8 w-8" />
                       </TableCell>
@@ -178,7 +238,7 @@ export default function () {
                 facilities.data.data.length === 0 && (
                   <TableRow>
                     <TableCell
-                      colSpan={hasDeleteFacilityPermission.data ? 5 : 4}
+                      colSpan={canDeleteFacilities ? 5 : 4}
                       className="text-muted-foreground py-8 text-center"
                     >
                       No facilities found. Add your first facility to get
@@ -200,11 +260,11 @@ export default function () {
                       {facility.name}
                     </TableCell>
                     <TableCell>{facility.address}</TableCell>
-                    {hasDeleteFacilityPermission.data && (
+                    {/* UPDATED: Use canDeleteFacilities */}
+                    {canDeleteFacilities && (
                       <TableCell>
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
-                            {/* The button opens the dialog, and we set facilityToDelete state HERE */}
                             <Button
                               variant="ghost"
                               size="icon"

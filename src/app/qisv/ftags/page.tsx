@@ -63,17 +63,38 @@ import {
     FormLabel,
     FormMessage,
 } from "@/components/ui/form";
+import { useQuery } from "@tanstack/react-query";
+import { authClient } from "@/components/providers/auth-client";
+import { canUI } from "@/lib/ui-permissions";
+import type { AppRole } from "@/lib/ui-permissions";
+
+// Add normalizeRole helper (same as other pages)
+function normalizeRole(role: unknown): AppRole | null {
+    const r = String(role ?? "").toLowerCase().trim();
+    if (r === "owner") return "admin";
+    if (r === "admin") return "admin";
+    if (r === "member") return "viewer";
+    if (
+        r === "viewer" ||
+        r === "lead_surveyor" ||
+        r === "surveyor" ||
+        r === "facility_coordinator" ||
+        r === "facility_viewer" ||
+        r === "admin"
+    ) {
+        return r as AppRole;
+    }
+    return null;
+}
 
 const PAGE_SIZES = [10, 50, 100];
 
-// ✅ Simplified schema - only code required, description will be empty string
 const ftagFormSchema = z.object({
     code: z.string().min(1, "Code is required").max(10, "Code must be 10 characters or less"),
 });
 
 type FtagFormData = z.infer<typeof ftagFormSchema>;
 
-// ✅ Simplified F-Tag Form Component - only for creating
 function FtagForm({
     onSuccess,
 }: {
@@ -100,7 +121,6 @@ function FtagForm({
     });
 
     const onSubmit = (data: FtagFormData) => {
-        // ✅ Pass empty string as description
         createFtag.mutate({ 
             code: data.code, 
             description: "Auto-generated F-Tag" 
@@ -154,6 +174,24 @@ export default function FtagsPage() {
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
     const [selectedFtags, setSelectedFtags] = useState<Set<number>>(new Set());
     const [searchInput, setSearchInput] = useState(search);
+
+    const activeOrg = authClient.useActiveOrganization();
+
+    // SAME LOGIC AS OTHER PAGES: Fetch role and normalize it
+    const { data: appRole, isLoading: roleLoading } = useQuery({
+        queryKey: ["active-member-role", activeOrg.data?.id],
+        queryFn: async () => {
+            const res = await authClient.organization.getActiveMemberRole();
+            const rawRole = (res as any)?.data?.role;
+            return normalizeRole(rawRole);
+        },
+        enabled: !!activeOrg.data,
+    });
+
+    // SAME LOGIC: Define permissions using canUI
+    const canViewFtags = canUI(appRole, "ftags.view");
+    const canManageFtags = canUI(appRole, "ftags.manage");
+    const canDeleteFtags = canUI(appRole, "ftags.manage");
 
     const ftags = api.ftag.list.useQuery({
         page,
@@ -258,6 +296,42 @@ export default function FtagsPage() {
         selectedFtags.size > 0 && selectedFtags.size < ftags.data.data.length :
         false;
 
+    // SAME LOGIC: Loading state
+    if (roleLoading) {
+        return (
+            <>
+                <QISVHeader crumbs={[{ label: "F-Tags" }]} />
+                <main className="px-4 py-6">
+                    <div className="flex items-center justify-center py-12">
+                        <div className="text-center">
+                            <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+                            <p className="mt-4 text-sm text-muted-foreground">Loading permissions...</p>
+                        </div>
+                    </div>
+                </main>
+            </>
+        );
+    }
+
+    // SAME LOGIC: Access denied state
+    if (!canViewFtags) {
+        return (
+            <>
+                <QISVHeader crumbs={[{ label: "F-Tags" }]} />
+                <main className="px-4 py-6">
+                    <div className="flex items-center justify-center py-12">
+                        <div className="text-center">
+                            <h2 className="text-lg font-semibold">Access Denied</h2>
+                            <p className="mt-2 text-sm text-muted-foreground">
+                                You don't have permission to view F-Tags.
+                            </p>
+                        </div>
+                    </div>
+                </main>
+            </>
+        );
+    }
+
     return (
         <>
             <QISVHeader crumbs={[{ label: "F-Tags" }]} />
@@ -270,23 +344,24 @@ export default function FtagsPage() {
                         </p>
                     </div>
                     <div className="flex items-center gap-3">
-                        {/* Bulk Delete Button */}
-                        {selectedFtags.size > 0 && (
+                        {/* Bulk Delete Button - UPDATED with canDeleteFtags */}
+                        {canDeleteFtags && selectedFtags.size > 0 && (
                             <Button variant="destructive" size="sm" onClick={handleBulkDelete}>
                                 <Trash2Icon className="mr-2 size-4" />
                                 Delete Selected ({selectedFtags.size})
                             </Button>
                         )}
 
-                        {/* New F-Tag Button */}
-                        <Button onClick={() => setCreateDialogOpen(true)}>
-                            <PlusIcon className="mr-2 size-4" />
-                            New F-Tag
-                        </Button>
+                        {/* New F-Tag Button - UPDATED with canManageFtags */}
+                        {canManageFtags && (
+                            <Button onClick={() => setCreateDialogOpen(true)}>
+                                <PlusIcon className="mr-2 size-4" />
+                                New F-Tag
+                            </Button>
+                        )}
                     </div>
                 </div>
 
-                {/* ✅ Only Create Dialog - no edit dialog */}
                 <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
                     <DialogContent className="w-[400px] sm:w-[480px]">
                         <DialogHeader>
@@ -326,37 +401,47 @@ export default function FtagsPage() {
                     <Table>
                         <TableHeader>
                             <TableRow className="bg-secondary text-secondary-foreground">
-                                <TableHead className="w-[50px]">
-                                    <Checkbox
-                                        checked={isAllSelected}
-                                        ref={(el) => {
-                                            if (el) (el as unknown as HTMLInputElement).indeterminate = isIndeterminate;
-                                        }}
-                                        onCheckedChange={handleSelectAll}
-                                        aria-label="Select all F-Tags"
-                                    />
-                                </TableHead>
+                                {/* UPDATED: Only show checkbox if can delete */}
+                                {canDeleteFtags && (
+                                    <TableHead className="w-[50px]">
+                                        <Checkbox
+                                            checked={isAllSelected}
+                                            ref={(el) => {
+                                                if (el) (el as unknown as HTMLInputElement).indeterminate = isIndeterminate;
+                                            }}
+                                            onCheckedChange={handleSelectAll}
+                                            aria-label="Select all F-Tags"
+                                        />
+                                    </TableHead>
+                                )}
                                 <TableHead className="w-[120px] text-right">System ID</TableHead>
                                 <TableHead>F-Tag</TableHead>
-                                <TableHead className="w-[80px]">Actions</TableHead>
+                                {/* UPDATED: Only show Actions column if can delete */}
+                                {canDeleteFtags && (
+                                    <TableHead className="w-[80px]">Actions</TableHead>
+                                )}
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {ftags.isPending &&
                                 Array.from({ length: pageSize }).map((_, i) => (
                                     <TableRow key={i}>
-                                        <TableCell>
-                                            <Skeleton className="h-4 w-4" />
-                                        </TableCell>
+                                        {canDeleteFtags && (
+                                            <TableCell>
+                                                <Skeleton className="h-4 w-4" />
+                                            </TableCell>
+                                        )}
                                         <TableCell className="text-right">
                                             <Skeleton className="ml-auto h-6 w-12" />
                                         </TableCell>
                                         <TableCell>
                                             <Skeleton className="h-6 w-16" />
                                         </TableCell>
-                                        <TableCell>
-                                            <Skeleton className="h-8 w-8" />
-                                        </TableCell>
+                                        {canDeleteFtags && (
+                                            <TableCell>
+                                                <Skeleton className="h-8 w-8" />
+                                            </TableCell>
+                                        )}
                                     </TableRow>
                                 ))}
 
@@ -364,7 +449,7 @@ export default function FtagsPage() {
                                 ftags.data &&
                                 ftags.data.data.length === 0 && (
                                     <TableRow>
-                                        <TableCell colSpan={4} className="text-muted-foreground py-8 text-center">
+                                        <TableCell colSpan={canDeleteFtags ? 4 : 2} className="text-muted-foreground py-8 text-center">
                                             {search ? (
                                                 <div className="flex flex-col items-center gap-2">
                                                     <SearchIcon className="h-8 w-8 text-muted-foreground/50" />
@@ -385,17 +470,19 @@ export default function FtagsPage() {
 
                             {!ftags.isPending &&
                                 ftags.data &&
-                                ftags.data.data.map((ftag) => (
+                               ftags.data.data.map((ftag) => (
                                     <TableRow key={ftag.id}>
-                                        <TableCell>
-                                            <Checkbox
-                                                checked={selectedFtags.has(ftag.id)}
-                                                onCheckedChange={(checked) =>
-                                                    handleSelectFtag(ftag.id, checked as boolean)
-                                                }
-                                                aria-label={`Select F-Tag ${ftag.code}`}
-                                            />
-                                        </TableCell>
+                                        {canDeleteFtags && (
+                                            <TableCell>
+                                                <Checkbox
+                                                    checked={selectedFtags.has(ftag.id)}
+                                                    onCheckedChange={(checked) =>
+                                                        handleSelectFtag(ftag.id, checked as boolean)
+                                                    }
+                                                    aria-label={`Select F-Tag ${ftag.code}`}
+                                                />
+                                            </TableCell>
+                                        )}
                                         <TableCell className="text-right font-mono tabular-nums">
                                             {ftag.id}
                                         </TableCell>
@@ -404,60 +491,61 @@ export default function FtagsPage() {
                                                 {ftag.code}
                                             </Badge>
                                         </TableCell>
-                                        <TableCell>
-                                            {/* ✅ Only delete button - no edit button */}
-                                            <AlertDialog>
-                                                <AlertDialogTrigger asChild>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-                                                        disabled={deleteFtag.isPending}
-                                                    >
-                                                        <TrashIcon className="h-4 w-4" />
-                                                        <span className="sr-only">Delete F-Tag</span>
-                                                    </Button>
-                                                </AlertDialogTrigger>
-                                                <AlertDialogContent className="max-w-md">
-                                                    <AlertDialogHeader>
-                                                        <AlertDialogTitle>
-                                                            <div className="flex items-center gap-2">
-                                                                <TrashIcon className="h-5 w-5 text-destructive" />
-                                                                Delete F-Tag
-                                                            </div>
-                                                        </AlertDialogTitle>
-                                                        <AlertDialogDescription className="text-sm text-muted-foreground">
-                                                            Are you sure you want to delete F-Tag <span className="font-semibold text-foreground">"{ftag.code}"</span>?
-                                                            This action cannot be undone and will remove this F-Tag
-                                                            and all its associations from the system.
-                                                        </AlertDialogDescription>
-                                                    </AlertDialogHeader>
-                                                    <div className="flex justify-end gap-3 mt-6">
-                                                        <AlertDialogCancel>
-                                                            Cancel
-                                                        </AlertDialogCancel>
+                                        {canDeleteFtags && (
+                                            <TableCell>
+                                                <AlertDialog>
+                                                    <AlertDialogTrigger asChild>
                                                         <Button
-                                                            variant="destructive"
-                                                            size="sm"
-                                                            onClick={() => deleteFtag.mutate({ id: ftag.id })}
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
                                                             disabled={deleteFtag.isPending}
                                                         >
-                                                            {deleteFtag.isPending ? (
-                                                                <>
-                                                                    <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                                                                    Deleting...
-                                                                </>
-                                                            ) : (
-                                                                <>
-                                                                    <TrashIcon className="mr-2 h-4 w-4" />
-                                                                    Delete
-                                                                </>
-                                                            )}
+                                                            <TrashIcon className="h-4 w-4" />
+                                                            <span className="sr-only">Delete F-Tag</span>
                                                         </Button>
-                                                    </div>
-                                                </AlertDialogContent>
-                                            </AlertDialog>
-                                        </TableCell>
+                                                    </AlertDialogTrigger>
+                                                    <AlertDialogContent className="max-w-md">
+                                                        <AlertDialogHeader>
+                                                            <AlertDialogTitle>
+                                                                <div className="flex items-center gap-2">
+                                                                    <TrashIcon className="h-5 w-5 text-destructive" />
+                                                                    Delete F-Tag
+                                                                </div>
+                                                            </AlertDialogTitle>
+                                                            <AlertDialogDescription className="text-sm text-muted-foreground">
+                                                                Are you sure you want to delete F-Tag <span className="font-semibold text-foreground">"{ftag.code}"</span>?
+                                                                This action cannot be undone and will remove this F-Tag
+                                                                and all its associations from the system.
+                                                            </AlertDialogDescription>
+                                                        </AlertDialogHeader>
+                                                        <div className="flex justify-end gap-3 mt-6">
+                                                            <AlertDialogCancel>
+                                                                Cancel
+                                                            </AlertDialogCancel>
+                                                            <Button
+                                                                variant="destructive"
+                                                                size="sm"
+                                                                onClick={() => deleteFtag.mutate({ id: ftag.id })}
+                                                                disabled={deleteFtag.isPending}
+                                                            >
+                                                                {deleteFtag.isPending ? (
+                                                                    <>
+                                                                        <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                                                                        Deleting...
+                                                                    </>
+                                                                ) : (
+                                                                    <>
+                                                                        <TrashIcon className="mr-2 h-4 w-4" />
+                                                                        Delete
+                                                                    </>
+                                                                )}
+                                                            </Button>
+                                                        </div>
+                                                    </AlertDialogContent>
+                                                </AlertDialog>
+                                            </TableCell>
+                                        )}
                                     </TableRow>
                                 ))}
                         </TableBody>

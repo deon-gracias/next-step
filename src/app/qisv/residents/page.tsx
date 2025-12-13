@@ -63,6 +63,27 @@ import { authClient } from "@/components/providers/auth-client";
 import { FacilityHoverCard } from "../_components/facility-card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { canUI } from "@/lib/ui-permissions"; // Import your canUI function
+import type { AppRole } from "@/lib/ui-permissions"; // Import AppRole type
+
+// Add this helper function (same as surveys page)
+function normalizeRole(role: unknown): AppRole | null {
+  const r = String(role ?? "").toLowerCase().trim();
+  if (r === "owner") return "admin";
+  if (r === "admin") return "admin";
+  if (r === "member") return "viewer";
+  if (
+    r === "viewer" ||
+    r === "lead_surveyor" ||
+    r === "surveyor" ||
+    r === "facility_coordinator" ||
+    r === "facility_viewer" ||
+    r === "admin"
+  ) {
+    return r as AppRole;
+  }
+  return null;
+}
 
 function FacilityValue({ id }: { id: number }) {
   const facility = api.facility.byId.useQuery({ id });
@@ -105,31 +126,43 @@ export default function ResidentsPage() {
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
-  const activeOrganization = authClient.useActiveOrganization();
+  const activeOrg = authClient.useActiveOrganization();
+
+  // SAME LOGIC AS SURVEYS PAGE: Fetch role and normalize it
+  const { data: appRole, isLoading: roleLoading } = useQuery({
+    queryKey: ["active-member-role", activeOrg.data?.id],
+    queryFn: async () => {
+      const res = await authClient.organization.getActiveMemberRole();
+      const rawRole = (res as any)?.data?.role;
+      return normalizeRole(rawRole);
+    },
+    enabled: !!activeOrg.data,
+  });
+
+  // SAME LOGIC AS SURVEYS PAGE: Define permissions using canUI
+  const canViewResidents = canUI(appRole, "residents.view");
+  const canManageResidents = canUI(appRole, "residents.manage");
+  const canDeleteResidents = canUI(appRole, "residents.manage");
 
   // Get facilities for the filter dropdown
   const facilities = api.facility.list.useQuery({ page: 1, pageSize: 100 });
 
-  // FIXED: Remove sortBy and sortDirection from API query
   const residentsQuery = api.resident.list.useQuery({
     page,
     pageSize,
     facilityId: facilityFilter ? Number(facilityFilter) : undefined,
   });
 
-  // NEW: Client-side sorted and paginated data
   const sortedResidents = useMemo(() => {
     if (!residentsQuery.data?.data) return { data: [], totalPages: 0, total: 0 };
 
     let sortedData = [...residentsQuery.data.data];
 
-    // Apply sorting if sortField is set
     if (sortField) {
       sortedData.sort((a, b) => {
         let aValue: any = a[sortField as keyof typeof a];
         let bValue: any = b[sortField as keyof typeof b];
 
-        // Handle different data types
         if (typeof aValue === 'string') aValue = aValue.toLowerCase();
         if (typeof bValue === 'string') bValue = bValue.toLowerCase();
         
@@ -190,33 +223,10 @@ export default function ResidentsPage() {
     },
   });
 
-  const hasNewResidentPermission = useQuery({
-    queryKey: ["residentPermission"],
-    queryFn: async () =>
-      (
-        await authClient.organization.hasPermission({
-          permissions: { member: ["create"] },
-        })
-      ).data?.success ?? false,
-  });
-
-  const hasDeleteResidentPermission = useQuery({
-    queryKey: ["residentDeletePermission"],
-    queryFn: async () =>
-      (
-        await authClient.organization.hasPermission({
-          permissions: { member: ["delete"] },
-        })
-      ).data?.success ?? false,
-  });
-
-  // FIXED: Sorting handler - no need to call handlePage(1)
   const handleSort = (field: string) => {
     if (sortField === field) {
-      // Toggle direction if same field
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
-      // New field, default to ascending
       setSortField(field);
       setSortDirection('asc');
     }
@@ -224,7 +234,6 @@ export default function ResidentsPage() {
     setSelectedResidents(new Set());
   };
 
-  // Get sort icon for column header
   const getSortIcon = (field: string) => {
     if (sortField !== field) {
       return <ArrowUpDownIcon className="ml-2 h-4 w-4 text-muted-foreground" />;
@@ -250,7 +259,6 @@ export default function ResidentsPage() {
     setSelectedResidents(new Set());
   }
 
-  // Facility filter handlers
   function handleFacilityFilter(facilityId: string | null) {
     const newSearchParams = new URLSearchParams(searchParams.toString());
     if (facilityId && facilityId !== "all") {
@@ -261,7 +269,6 @@ export default function ResidentsPage() {
     newSearchParams.set("page", "1");
     router.replace(`?${newSearchParams.toString()}`);
     setSelectedResidents(new Set());
-    // Reset sorting when filter changes
     setSortField(null);
     setSortDirection('asc');
   }
@@ -272,12 +279,10 @@ export default function ResidentsPage() {
     newSearchParams.set("page", "1");
     router.replace(`?${newSearchParams.toString()}`);
     setSelectedResidents(new Set());
-    // Reset sorting when clearing filters
     setSortField(null);
     setSortDirection('asc');
   }
 
-  // Bulk selection handlers
   const handleSelectAll = (checked: boolean) => {
     if (!sortedResidents.data) return;
 
@@ -413,10 +418,45 @@ export default function ResidentsPage() {
     selectedResidents.size > 0 && selectedResidents.size < sortedResidents.data.length :
     false;
 
-  // Get the selected facility name for display
   const selectedFacilityName = facilityFilter 
     ? facilities.data?.data.find(f => f.id === Number(facilityFilter))?.name
     : null;
+
+  // SAME LOGIC AS SURVEYS PAGE: Loading state
+  if (roleLoading) {
+    return (
+      <>
+        <QISVHeader crumbs={[{ label: "Residents" }]} />
+        <main className="px-4 py-6">
+          <div className="flex items-center justify-center py-12">
+            <div className="text-center">
+              <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+              <p className="mt-4 text-sm text-muted-foreground">Loading permissions...</p>
+            </div>
+          </div>
+        </main>
+      </>
+    );
+  }
+
+  // SAME LOGIC AS SURVEYS PAGE: Access denied state
+  if (!canViewResidents) {
+    return (
+      <>
+        <QISVHeader crumbs={[{ label: "Residents" }]} />
+        <main className="px-4 py-6">
+          <div className="flex items-center justify-center py-12">
+            <div className="text-center">
+              <h2 className="text-lg font-semibold">Access Denied</h2>
+              <p className="mt-2 text-sm text-muted-foreground">
+                You don't have permission to view residents.
+              </p>
+            </div>
+          </div>
+        </main>
+      </>
+    );
+  }
 
   return (
     <>
@@ -430,8 +470,8 @@ export default function ResidentsPage() {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            {/* Bulk Delete Button */}
-            {hasDeleteResidentPermission.data && selectedResidents.size > 0 && (
+            {/* Bulk Delete Button - UPDATED with canDeleteResidents */}
+            {canDeleteResidents && selectedResidents.size > 0 && (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button variant="destructive" size="sm">
@@ -477,7 +517,8 @@ export default function ResidentsPage() {
               </AlertDialog>
             )}
 
-            {hasNewResidentPermission.data && (
+            {/* CSV Upload and New Resident - UPDATED with canManageResidents */}
+            {canManageResidents && (
               <>
                 <input
                   ref={fileInputRef}
@@ -545,7 +586,6 @@ export default function ResidentsPage() {
             </Select>
           </div>
 
-          {/* Active Filter Display */}
           {selectedFacilityName && (
             <div className="flex items-center gap-2">
               <Badge variant="secondary" className="flex items-center gap-1">
@@ -593,7 +633,8 @@ export default function ResidentsPage() {
           <Table>
             <TableHeader>
               <TableRow className="bg-secondary text-secondary-foreground">
-                {hasDeleteResidentPermission.data && (
+                {/* UPDATED: Only show checkbox column if can delete */}
+                {canDeleteResidents && (
                   <TableHead className="w-[50px]">
                     <Checkbox
                       checked={isAllSelected}
@@ -659,7 +700,8 @@ export default function ResidentsPage() {
                     {getSortIcon('createdAt')}
                   </div>
                 </TableHead>
-                {hasDeleteResidentPermission.data && (
+                {/* UPDATED: Only show Actions column if can delete */}
+                {canDeleteResidents && (
                   <TableHead className="w-[100px]">Actions</TableHead>
                 )}
               </TableRow>
@@ -668,7 +710,7 @@ export default function ResidentsPage() {
               {residentsQuery.isPending &&
                 Array.from({ length: pageSize }).map((_, i) => (
                   <TableRow key={i}>
-                    {hasDeleteResidentPermission.data && (
+                    {canDeleteResidents && (
                       <TableCell>
                         <Skeleton className="h-4 w-4" />
                       </TableCell>
@@ -681,7 +723,7 @@ export default function ResidentsPage() {
                         <Skeleton className="h-6" />
                       </TableCell>
                     ))}
-                    {hasDeleteResidentPermission.data && (
+                    {canDeleteResidents && (
                       <TableCell>
                         <Skeleton className="h-8 w-8" />
                       </TableCell>
@@ -693,7 +735,7 @@ export default function ResidentsPage() {
                 sortedResidents.data.length === 0 && (
                   <TableRow>
                     <TableCell
-                      colSpan={hasDeleteResidentPermission.data ? 8 : 6}
+                      colSpan={canDeleteResidents ? 8 : 6}
                       className="text-muted-foreground py-8 text-center"
                     >
                       {selectedFacilityName ? (
@@ -714,7 +756,7 @@ export default function ResidentsPage() {
                 sortedResidents.data &&
                 sortedResidents.data.map((resident) => (
                   <TableRow key={resident.id}>
-                    {hasDeleteResidentPermission.data && (
+                    {canDeleteResidents && (
                       <TableCell>
                         <Checkbox
                           checked={selectedResidents.has(resident.id)}
@@ -745,7 +787,7 @@ export default function ResidentsPage() {
                     <TableCell className="text-sm text-muted-foreground">
                       {resident.createdAt ? formatDate(resident.createdAt) : 'N/A'}
                     </TableCell>
-                    {hasDeleteResidentPermission.data && (
+                    {canDeleteResidents && (
                       <TableCell>
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
