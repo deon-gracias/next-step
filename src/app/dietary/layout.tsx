@@ -3,7 +3,7 @@
 import { authClient } from "@/components/providers/auth-client";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { redirect } from "next/navigation";
-import { QISVSidebar } from "./_components/sidebar";
+import { DietarySidebar } from "./_components/sidebar";
 
 export default function({ children }: { children: React.ReactNode }) {
   const session = authClient.useSession();
@@ -18,7 +18,7 @@ export default function({ children }: { children: React.ReactNode }) {
 
   return (
     <SidebarProvider>
-      <QISVSidebar />
+      <DietarySidebar />
       <SidebarInset>{children}</SidebarInset>
     </SidebarProvider>
   );

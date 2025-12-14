@@ -1,3 +1,4 @@
+import { relations } from "drizzle-orm";
 import {
   pgTable,
   text,
@@ -672,6 +673,153 @@ export const qalPocComment = pgTable("qal_poc_comment", {
 
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+// ==================== DIETARY TABLES ====================
+
+// Dietary Template (High Temp vs Low Temp machine types)
+export const dietaryTemplate = pgTable("dietary_template", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organization.id, { onDelete: "cascade" }),
+  name: text("name").notNull(), // "High Temp Machine" or "Low Temp Machine"
+  machineType: text("machine_type").notNull(), // "high_temp" or "low_temp"
+  description: text("description"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const dietarySection = pgTable("dietary_section", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  templateId: integer("template_id")
+    .notNull()
+    .references(() => dietaryTemplate.id, { onDelete: "cascade" }),
+  sectionNumber: integer("section_number").notNull(), // 1, 2, 3...
+  title: text("title").notNull(), // "STOREROOMS", "KITCHEN REFRIGERATORS"
+  maxPoints: integer("max_points").notNull(),
+  sortOrder: integer("sort_order").notNull(),
+});
+
+export const dietaryQuestion = pgTable("dietary_question", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  sectionId: integer("section_id")
+    .notNull()
+    .references(() => dietarySection.id, { onDelete: "cascade" }),
+  questionLetter: text("question_letter").notNull(), // "A", "B", "C"
+  questionText: text("question_text").notNull(),
+  points: integer("points").notNull(),
+  sortOrder: integer("sort_order").notNull(),
+});
+
+// NEW: Dietary Survey (replaces dietarySurveys)
+export const dietarySurvey = pgTable("dietary_survey", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organization.id, { onDelete: "cascade" }),
+  facilityId: integer("facility_id")
+    .notNull()
+    .references(() => facility.id, { onDelete: "restrict" }),
+  templateId: integer("template_id")
+    .notNull()
+    .references(() => dietaryTemplate.id, { onDelete: "restrict" }),
+  surveyorId: text("surveyor_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "set null" }),
+  surveyDate: text("survey_date").notNull(), // Store as ISO string
+  isLocked: boolean("is_locked").notNull().default(false),
+  totalScore: text("total_score").notNull().default("0"),
+  possibleScore: text("possible_score").notNull().default("0"),
+  compliancePercentage: text("compliance_percentage").notNull().default("0"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Dietary Survey Responses
+export const dietarySurveyResponse = pgTable("dietary_survey_response", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  surveyId: integer("survey_id")
+    .notNull()
+    .references(() => dietarySurvey.id, { onDelete: "cascade" }),
+  questionId: integer("question_id")
+    .notNull()
+    .references(() => dietaryQuestion.id, { onDelete: "cascade" }),
+  status: text("status"), // "met", "unmet", "na"
+  comments: text("comments"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+
+// Relations
+export const dietaryTemplateRelations = relations(dietaryTemplate, ({ many }) => ({
+  sections: many(dietarySection),
+  surveys: many(dietarySurvey),
+}));
+
+export const dietarySectionRelations = relations(dietarySection, ({ one, many }) => ({
+  template: one(dietaryTemplate, {
+    fields: [dietarySection.templateId],
+    references: [dietaryTemplate.id],
+  }),
+  questions: many(dietaryQuestion),
+}));
+
+export const dietaryQuestionRelations = relations(dietaryQuestion, ({ one }) => ({
+  section: one(dietarySection, {
+    fields: [dietaryQuestion.sectionId],
+    references: [dietarySection.id],
+  }),
+}));
+
+export const dietarySurveyRelations = relations(dietarySurvey, ({ one, many }) => ({
+  facility: one(facility, {
+    fields: [dietarySurvey.facilityId],
+    references: [facility.id],
+  }),
+  template: one(dietaryTemplate, {
+    fields: [dietarySurvey.templateId],
+    references: [dietaryTemplate.id],
+  }),
+  surveyor: one(user, {
+    fields: [dietarySurvey.surveyorId],
+    references: [user.id],
+  }),
+  responses: many(dietarySurveyResponse),
+}));
+
+export const dietarySurveyResponseRelations = relations(dietarySurveyResponse, ({ one }) => ({
+  survey: one(dietarySurvey, {
+    fields: [dietarySurveyResponse.surveyId],
+    references: [dietarySurvey.id],
+  }),
+  question: one(dietaryQuestion, {
+    fields: [dietarySurveyResponse.questionId],
+    references: [dietaryQuestion.id],
+  }),
+}));
+
+// Zod schemas
+export const dietaryTemplateInsertSchema = createInsertSchema(dietaryTemplate);
+export type DietaryTemplateInsertType = z.infer<typeof dietaryTemplateInsertSchema>;
+export const dietaryTemplateSelectSchema = createSelectSchema(dietaryTemplate);
+export type DietaryTemplateSelectType = z.infer<typeof dietaryTemplateSelectSchema>;
+
+export const dietarySectionInsertSchema = createInsertSchema(dietarySection);
+export type DietarySectionInsertType = z.infer<typeof dietarySectionInsertSchema>;
+export const dietarySectionSelectSchema = createSelectSchema(dietarySection);
+export type DietarySectionSelectType = z.infer<typeof dietarySectionSelectSchema>;
+
+export const dietarySurveyInsertSchema = createInsertSchema(dietarySurvey);
+export type DietarySurveyInsertType = z.infer<typeof dietarySurveyInsertSchema>;
+export const dietarySurveySelectSchema = createSelectSchema(dietarySurvey);
+export type DietarySurveySelectType = z.infer<typeof dietarySurveySelectSchema>;
+
+export const dietaryResponseInsertSchema = createInsertSchema(dietarySurveyResponse);
+export type DietaryResponseInsertType = z.infer<typeof dietaryResponseInsertSchema>;
+export const dietaryResponseSelectSchema = createSelectSchema(dietarySurveyResponse);
+export type DietaryResponseSelectType = z.infer<typeof dietaryResponseSelectSchema>;
+
 
 
 export const qalPocCommentInsertSchema = createInsertSchema(qalPocComment, {

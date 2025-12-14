@@ -1506,14 +1506,24 @@ function QuestionRow({
         </span>
       </td>
       <td className="p-3 align-top border-r" style={{ width: "12%" }}>
-        <Input
+        <Textarea
           placeholder="IDs..."
           value={testingSample}
           onChange={(e) => setTestingSample(e.target.value)}
           disabled={isLocked || !isSampleSet}
-          className="text-sm h-8 w-full"
+          className="text-sm w-full resize-none overflow-hidden min-h-[32px]"
+          style={{
+            height: testingSample ? 'auto' : '32px',
+            maxHeight: '200px'
+          }}
+          onInput={(e) => {
+            const target = e.target as HTMLTextAreaElement;
+            target.style.height = '32px';
+            target.style.height = `${target.scrollHeight}px`;
+          }}
         />
       </td>
+
       <td className="p-3 align-top" style={{ width: "29%" }}>
         <div className="space-y-2">
           <Textarea

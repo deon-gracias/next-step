@@ -1,8 +1,8 @@
-import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
+import { createTRPCRouter, protectedProcedure, publicProcedure } from "@/server/api/trpc";
 import { z } from "zod";
 import { eq, ilike, and, ne } from "drizzle-orm";
 import { paginationInputSchema } from "@/server/utils/schema";
-import { user, member, resident } from "@/server/db/schema";
+import { user, member, resident, invitation } from "@/server/db/schema"; // ✅ Add invitation
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { ac } from "@/lib/permissions";
@@ -127,26 +127,18 @@ export const userRouter = createTRPCRouter({
       return results;
     }),
 
+  // ✅ UPDATED: Now stores the custom role in invitation table
   assignToFacility: protectedProcedure
     .input(
       z.object({
-        email: z.email(),
+        email: z.string().email(),
         organizationId: z.string(),
         facilityId: z.number(),
+        role: z.string(), // ✅ Add custom role
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const [userFromEmail] = await ctx.db
-        .select()
-        .from(user)
-        .where(eq(user.email, input.email))
-        .limit(1);
-
-      if (!userFromEmail) {
-        throw new Error("Couldn't find email");
-      }
-
-      // Check if requestion member exists in the database
+      // Check if requesting member exists in the database
       const [requestingMember] = await ctx.db
         .select()
         .from(member)
@@ -187,14 +179,158 @@ export const userRouter = createTRPCRouter({
         throw new Error("Facility not found");
       }
 
-      // 6. Insert the assignment
-      await ctx.db.insert(memberFacility).values({
-        userId: userFromEmail.id,
-        facilityId: input.facilityId,
-      });
+      // ✅ Update the pending invitation with the custom role
+      await ctx.db
+        .update(invitation)
+        .set({ role: input.role })
+        .where(
+          and(
+            eq(invitation.email, input.email),
+            eq(invitation.organizationId, input.organizationId),
+            eq(invitation.status, "pending")
+          )
+        );
+
+      // Check if user already exists
+      const [userFromEmail] = await ctx.db
+        .select()
+        .from(user)
+        .where(eq(user.email, input.email))
+        .limit(1);
+
+      // If user exists, assign to facility and update role
+      if (userFromEmail) {
+        // ✅ Update member role if they're already a member
+        const [existingMember] = await ctx.db
+          .select()
+          .from(member)
+          .where(
+            and(
+              eq(member.userId, userFromEmail.id),
+              eq(member.organizationId, input.organizationId)
+            )
+          )
+          .limit(1);
+
+        if (existingMember) {
+          await ctx.db
+            .update(member)
+            .set({ role: input.role })
+            .where(eq(member.id, existingMember.id));
+        }
+
+        // Insert facility assignment
+        await ctx.db.insert(memberFacility).values({
+          userId: userFromEmail.id,
+          facilityId: input.facilityId,
+        });
+      }
 
       return { success: true };
     }),
+
+  // ✅ NEW: Update member role when they accept invitation
+  // In your user router
+  updateRoleOnAcceptance: publicProcedure // ✅ Change from protectedProcedure
+    .input(
+      z.object({
+        userId: z.string(),
+        organizationId: z.string(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      // ✅ Manual auth check - allow if updating your own role
+      const session = await auth.api.getSession({
+        headers: await headers(),
+      });
+
+      if (!session) {
+        throw new Error("Not authenticated");
+      }
+
+      // ✅ Only allow updating your own role
+      if (session.user.id !== input.userId) {
+        throw new Error("Can only update your own role");
+      }
+
+      // Get user email
+      const [userRecord] = await ctx.db
+        .select()
+        .from(user)
+        .where(eq(user.id, input.userId))
+        .limit(1);
+
+      if (!userRecord) {
+        throw new Error("User not found");
+      }
+
+      // Find the invitation with custom role
+      const [inv] = await ctx.db
+        .select()
+        .from(invitation)
+        .where(
+          and(
+            eq(invitation.email, userRecord.email),
+            eq(invitation.organizationId, input.organizationId)
+          )
+        )
+        .limit(1);
+
+      if (!inv || !inv.role) {
+        return { success: false, message: "No custom role found" };
+      }
+
+      // Find the member record
+      const [memberRecord] = await ctx.db
+        .select()
+        .from(member)
+        .where(
+          and(
+            eq(member.userId, input.userId),
+            eq(member.organizationId, input.organizationId)
+          )
+        )
+        .limit(1);
+
+      if (memberRecord) {
+        // ✅ Update member table with custom role from invitation
+        await ctx.db
+          .update(member)
+          .set({ role: inv.role })
+          .where(eq(member.id, memberRecord.id));
+
+        return { success: true, role: inv.role };
+      }
+
+      return { success: false, message: "Member not found" };
+    }),
+
+  // In your invitation router
+  updateRole: protectedProcedure
+    .input(
+      z.object({
+        email: z.string().email(),
+        organizationId: z.string(),
+        role: z.string(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      // Update the invitation with the custom role
+      await ctx.db
+        .update(invitation)
+        .set({ role: input.role })
+        .where(
+          and(
+            eq(invitation.email, input.email),
+            eq(invitation.organizationId, input.organizationId),
+            eq(invitation.status, "pending")
+          )
+        );
+
+      return { success: true };
+    }),
+
+
 
   getForOrg: protectedProcedure
     .input(z.object({}))

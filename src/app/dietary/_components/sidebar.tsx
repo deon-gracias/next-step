@@ -2,13 +2,16 @@
 
 import * as React from "react";
 import {
-  BuildingIcon,
-  FileQuestionIcon,
-  FileSearchIcon,
+  ClipboardListIcon,
+  FileTextIcon,
   LayoutDashboardIcon,
-  LayoutListIcon,
   UsersIcon,
+  BuildingIcon,
+  UserCircleIcon,
   type LucideIcon,
+  FileSearchIcon,
+  LayoutListIcon,
+  User2,
 } from "lucide-react";
 
 import { OrganizationSwitcher } from "@/components/org-switcher";
@@ -33,19 +36,34 @@ const navItemSchema = z.object({
 });
 type NavItemType = z.infer<typeof navItemSchema>;
 
-export function QISVSidebar({
+export function DietarySidebar({
   ...props
 }: React.ComponentProps<typeof Sidebar>) {
-  const navItems = [
+  const navItems: NavItemType[] = [
     {
       name: "Dashboard",
       href: "/dietary/dashboard",
       icon: LayoutDashboardIcon,
     },
     {
-      name: "Questions",
-      href: "/dietary/questions",
-      icon: FileQuestionIcon,
+      name: "Surveys",
+      href: "/dietary/surveys",
+      icon: FileSearchIcon,
+    },
+    {
+      name: "Templates",
+      href: "/dietary/templates",
+      icon: LayoutListIcon,
+    },
+    {
+      name: "Facilities",
+      href: "/dietary/facilities",
+      icon: BuildingIcon,
+    },
+    {
+      name: "Users",
+      href: "/dietary/users",
+      icon: User2,
     },
   ];
 
@@ -58,16 +76,16 @@ export function QISVSidebar({
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              <SidebarMenuItem>
-                {navItems.map((e) => (
-                  <SidebarMenuButton tooltip={e.name} asChild key={e.href}>
+              {navItems.map((e) => (
+                <SidebarMenuItem key={e.href}>
+                  <SidebarMenuButton tooltip={e.name} asChild>
                     <a href={e.href}>
                       <e.icon className="!size-5" />
                       <span>{e.name}</span>
                     </a>
                   </SidebarMenuButton>
-                ))}
-              </SidebarMenuItem>
+                </SidebarMenuItem>
+              ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

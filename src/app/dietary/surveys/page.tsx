@@ -1,34 +1,47 @@
 "use client";
 
 import { api } from "@/trpc/react";
-import Link from "next/link";
-import React, { useState } from "react";
-import { format } from "date-fns";
-import { Button, buttonVariants } from "@/components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { toast } from "sonner";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
-  CalendarIcon,
-  ChevronDownIcon,
-  ChevronRightIcon,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import Link from "next/link";
+import { cn } from "@/lib/utils";
+import { buttonVariants } from "@/components/ui/button";
+import {
   ExternalLinkIcon,
   PlusIcon,
-  Trash2Icon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  CalendarIcon,
   ArrowUpIcon,
   ArrowDownIcon,
   XIcon,
-  ClipboardCheck,
+  TrashIcon,
+  ChefHat,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { authClient } from "@/components/providers/auth-client";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import React, { useState } from "react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { format } from "date-fns";
 import {
   AlertDialog,
   AlertDialogTrigger,
@@ -40,11 +53,23 @@ import {
   AlertDialogCancel,
   AlertDialogAction,
 } from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { useRouter } from "next/navigation";
 
 type DateGroup = {
   date: string;
   surveys: any[];
-  totalSurveys: number;
+  totalTemplates: number;
 };
 
 type GroupedSurvey = {
@@ -52,26 +77,82 @@ type GroupedSurvey = {
   facilityName: string;
   facility: any;
   dates: Map<string, DateGroup>;
-  totalSurveys: number;
+  totalTemplates: number;
 };
 
 type DateSortOrder = "asc" | "desc" | null;
 
-export default function QALSurveysIndex() {
-  const utils = api.useUtils();
-  const session = authClient.useSession();
+export default function DietarySurveysPage() {
+  const router = useRouter();
 
+  // Filters
+  const [closedFacilityFilter, setClosedFacilityFilter] = useState<string>("all");
+  const [pendingFacilityFilter, setPendingFacilityFilter] = useState<string>("all");
+  const [closedTemplateFilter, setClosedTemplateFilter] = useState<string>("all");
+  const [pendingTemplateFilter, setPendingTemplateFilter] = useState<string>("all");
+  const [closedStatusFilter, setClosedStatusFilter] = useState<string>("all");
+  const [pendingStatusFilter, setPendingStatusFilter] = useState<string>("all");
+
+  // Date filtering states
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
+  const [dateSortOrder, setDateSortOrder] = useState<DateSortOrder>(null);
+  const [datePopoverOpen, setDatePopoverOpen] = useState(false);
+
+  // Expanded states for facility and date groups
+  const [expandedClosedFacilities, setExpandedClosedFacilities] = useState<Set<number>>(
+    new Set()
+  );
+  const [expandedPendingFacilities, setExpandedPendingFacilities] = useState<Set<number>>(
+    new Set()
+  );
+  const [expandedClosedDates, setExpandedClosedDates] = useState<Set<string>>(new Set());
+  const [expandedPendingDates, setExpandedPendingDates] = useState<Set<string>>(new Set());
+
+  // DELETE FUNCTIONALITY
+  const [surveyToDelete, setSurveyToDelete] = useState<{ id: number; name: string } | null>(
+    null
+  );
+
+  // New survey dialog state
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [selectedFacility, setSelectedFacility] = useState<string>("");
+  const [selectedTemplate, setSelectedTemplate] = useState<string>("");
+  const [selectedCreateDate, setSelectedCreateDate] = useState<Date | undefined>(new Date());
+
+  // Fetch surveys
+  const surveys = api.dietary.list.useQuery({
+    page: 1,
+    pageSize: 100,
+  });
+
+  // Fetch facilities and templates
   const facilities = api.facility.list.useQuery({ page: 1, pageSize: 100 });
-  const templates = api.qal.listTemplates.useQuery();
-  const surveys = api.qal.listSurveys.useQuery({});
+  const templates = api.dietary.listTemplates.useQuery({ page: 1, pageSize: 100 });
 
-  const create = api.qal.createSurvey.useMutation();
-  
-  // Delete Survey Mutation
-  const deleteSurvey = api.qal.deleteSurvey.useMutation({
+  // Mutations
+  const utils = api.useUtils();
+
+  const createSurvey = api.dietary.create.useMutation({
+    onSuccess: (data) => {
+      toast.success("Survey created successfully");
+      void utils.dietary.list.invalidate();
+      setCreateDialogOpen(false);
+      setSelectedFacility("");
+      setSelectedTemplate("");
+      setSelectedCreateDate(new Date());
+      if (data) {
+        router.push(`/dietary/surveys/${data.id}`);
+      }
+    },
+    onError: (error) => {
+      toast.error(error.message ?? "Failed to create survey");
+    },
+  });
+
+  const deleteSurvey = api.dietary.delete.useMutation({
     onSuccess: () => {
       toast.success("Survey deleted successfully");
-      void utils.qal.listSurveys.invalidate();
+      void utils.dietary.list.invalidate();
       setSurveyToDelete(null);
     },
     onError: (error) => {
@@ -80,100 +161,23 @@ export default function QALSurveysIndex() {
     },
   });
 
-  // Create Dialog State
-  const [open, setOpen] = useState(false);
-  const [selectedFacilityId, setSelectedFacilityId] = useState<number | undefined>(undefined);
-  const [surveyDate, setSurveyDate] = useState<Date | undefined>(new Date());
-  const [surveyType, setSurveyType] = useState<"onsite" | "offsite">("onsite");
-  const [administrator, setAdministrator] = useState("");
-  const [businessOfficeManager, setBusinessOfficeManager] = useState("");
-  const [assistantBusinessOfficeManager, setAssistantBusinessOfficeManager] = useState("");
+  const handleCreateSurvey = () => {
+    if (!selectedFacility || !selectedTemplate || !selectedCreateDate) {
+      toast.error("Please fill all fields");
+      return;
+    }
 
-  const [surveyToDelete, setSurveyToDelete] = useState<{ id: number; name: string } | null>(null);
-
-  // Filters
-  const [completedFacilityFilter, setCompletedFacilityFilter] = useState<string>("all");
-  const [pendingFacilityFilter, setPendingFacilityFilter] = useState<string>("all");
-  const [completedStatusFilter, setCompletedStatusFilter] = useState<string>("all");
-  const [pendingStatusFilter, setPendingStatusFilter] = useState<string>("all");
-
-  // Date Filtering
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
-  const [dateSortOrder, setDateSortOrder] = useState<DateSortOrder>(null);
-  const [datePopoverOpen, setDatePopoverOpen] = useState(false);
-
-  // Expanded States
-  const [expandedCompletedFacilities, setExpandedCompletedFacilities] = useState<Set<number>>(new Set());
-  const [expandedPendingFacilities, setExpandedPendingFacilities] = useState<Set<number>>(new Set());
-  const [expandedCompletedDates, setExpandedCompletedDates] = useState<Set<string>>(new Set());
-  const [expandedPendingDates, setExpandedPendingDates] = useState<Set<string>>(new Set());
-
-  const handleOpenCreate = () => {
-    const firstFacility = facilities.data?.data?.[0]?.id;
-    setSelectedFacilityId(firstFacility);
-    setSurveyDate(new Date());
-    setSurveyType("onsite");
-    setAdministrator("");
-    setBusinessOfficeManager("");
-    setAssistantBusinessOfficeManager("");
-    setOpen(true);
+    createSurvey.mutate({
+      facilityId: Number(selectedFacility),
+      templateId: Number(selectedTemplate),
+      surveyDate: selectedCreateDate,
+    });
   };
 
-  const handleConfirmCreate = async () => {
-    if (!session?.data?.user?.id) {
-      toast.error("You must be logged in to create a survey");
-      return;
-    }
-
-    if (!selectedFacilityId) {
-      toast.error("Please select a facility");
-      return;
-    }
-
-    if (!surveyDate) {
-      toast.error("Please select a survey date");
-      return;
-    }
-
-    if (!administrator.trim()) {
-      toast.error("Administrator name is required");
-      return;
-    }
-
-    if (!businessOfficeManager.trim()) {
-      toast.error("Business Office Manager name is required");
-      return;
-    }
-
-    const firstActiveTemplate = templates.data?.find((t) => t.isActive)?.id;
-    if (!firstActiveTemplate) {
-      toast.error("No active template found");
-      return;
-    }
-
-    try {
-      const sv = await create.mutateAsync({
-        facilityId: selectedFacilityId,
-        templateId: firstActiveTemplate,
-        surveyDate: surveyDate,
-        auditorUserId: session.data.user.id,
-        surveyType: surveyType,
-        administrator: administrator.trim(),
-        businessOfficeManager: businessOfficeManager.trim(),
-        assistantBusinessOfficeManager: assistantBusinessOfficeManager.trim() || undefined,
-      });
-
-      await utils.qal.listSurveys.invalidate();
-      toast.success("Survey created successfully");
-      setOpen(false);
-
-      window.location.href = `/qal/surveys/${sv.id}`;
-    } catch (e: any) {
-      toast.error(e?.message ?? "Failed to create survey");
-    }
-  };
-
-  const doesDateMatch = (surveyDate: string | Date | null | undefined, selectedDate: Date): boolean => {
+  const doesDateMatch = (
+    surveyDate: string | Date | null | undefined,
+    selectedDate: Date
+  ): boolean => {
     if (!surveyDate || !selectedDate) return false;
 
     try {
@@ -231,7 +235,7 @@ export default function QALSurveysIndex() {
   );
 
   const groupedSurveys = React.useMemo(() => {
-    if (!surveys.data) return { completed: [], pending: [] };
+    if (!surveys.data) return { closed: [], pending: [] };
 
     const filteredSurveys = filterAndSortSurveys(surveys.data);
 
@@ -251,19 +255,20 @@ export default function QALSurveysIndex() {
 
       surveyList.forEach((survey) => {
         const facilityId = survey.facilityId;
-        const fac = facilities.data?.data?.find((f) => f.id === facilityId);
-        const facilityName = fac?.name || `Facility ${facilityId}`;
+        const facilityName = survey.facility?.name || `Facility ${facilityId}`;
         const surveyDate = survey.surveyDate ? new Date(survey.surveyDate) : null;
         const dateKey =
-          surveyDate && !isNaN(surveyDate.getTime()) ? format(surveyDate, "yyyy-MM-dd") : "No date";
+          surveyDate && !isNaN(surveyDate.getTime())
+            ? format(surveyDate, "yyyy-MM-dd")
+            : "No date";
 
         if (!facilityMap.has(facilityId)) {
           facilityMap.set(facilityId, {
             facilityId,
             facilityName,
-            facility: fac,
+            facility: survey.facility,
             dates: new Map<string, DateGroup>(),
-            totalSurveys: 0,
+            totalTemplates: 0,
           });
         }
 
@@ -273,34 +278,35 @@ export default function QALSurveysIndex() {
           facilityGroup.dates.set(dateKey, {
             date: dateKey,
             surveys: [],
-            totalSurveys: 0,
+            totalTemplates: 0,
           });
         }
 
         const dateGroup = facilityGroup.dates.get(dateKey)!;
+
         dateGroup.surveys.push(survey);
-        dateGroup.totalSurveys++;
-        facilityGroup.totalSurveys++;
+        dateGroup.totalTemplates++;
+        facilityGroup.totalTemplates++;
       });
 
       return Array.from(facilityMap.values());
     };
 
     return {
-      completed: groupByFacilityAndDate(completedSurveys),
+      closed: groupByFacilityAndDate(completedSurveys),
       pending: groupByFacilityAndDate(pendingSurveys),
     };
-  }, [surveys.data, facilities.data, filterAndSortSurveys]);
+  }, [surveys.data, filterAndSortSurveys]);
 
-  const toggleFacilityExpanded = (facilityId: number, type: "completed" | "pending") => {
-    if (type === "completed") {
-      const newExpanded = new Set(expandedCompletedFacilities);
+  const toggleFacilityExpanded = (facilityId: number, type: "closed" | "pending") => {
+    if (type === "closed") {
+      const newExpanded = new Set(expandedClosedFacilities);
       if (newExpanded.has(facilityId)) {
         newExpanded.delete(facilityId);
       } else {
         newExpanded.add(facilityId);
       }
-      setExpandedCompletedFacilities(newExpanded);
+      setExpandedClosedFacilities(newExpanded);
     } else {
       const newExpanded = new Set(expandedPendingFacilities);
       if (newExpanded.has(facilityId)) {
@@ -312,16 +318,20 @@ export default function QALSurveysIndex() {
     }
   };
 
-  const toggleDateExpanded = (facilityId: number, dateKey: string, type: "completed" | "pending") => {
+  const toggleDateExpanded = (
+    facilityId: number,
+    dateKey: string,
+    type: "closed" | "pending"
+  ) => {
     const expandKey = `${facilityId}-${dateKey}`;
-    if (type === "completed") {
-      const newExpanded = new Set(expandedCompletedDates);
+    if (type === "closed") {
+      const newExpanded = new Set(expandedClosedDates);
       if (newExpanded.has(expandKey)) {
         newExpanded.delete(expandKey);
       } else {
         newExpanded.add(expandKey);
       }
-      setExpandedCompletedDates(newExpanded);
+      setExpandedClosedDates(newExpanded);
     } else {
       const newExpanded = new Set(expandedPendingDates);
       if (newExpanded.has(expandKey)) {
@@ -333,21 +343,83 @@ export default function QALSurveysIndex() {
     }
   };
 
-  const filteredCompletedGroups = React.useMemo(() => {
-    return groupedSurveys.completed.filter((group) => {
-      return completedFacilityFilter === "all" || String(group.facilityId) === completedFacilityFilter;
-    });
-  }, [groupedSurveys.completed, completedFacilityFilter]);
+  const filteredClosedGroups = React.useMemo(() => {
+    return groupedSurveys.closed
+      .map((group) => ({
+        ...group,
+        dates: new Map(
+          Array.from(group.dates.entries())
+            .map(([dateKey, dateGroup]) => {
+              const filteredSurveys = dateGroup.surveys.filter((survey) => {
+                const matchesFacility =
+                  closedFacilityFilter === "all" ||
+                  String(group.facilityId) === closedFacilityFilter;
+                const matchesTemplate =
+                  closedTemplateFilter === "all" ||
+                  String(survey.templateId) === closedTemplateFilter;
+                const matchesStatus = closedStatusFilter === "all";
+
+                return matchesFacility && matchesTemplate && matchesStatus;
+              });
+
+              return [
+                dateKey,
+                { ...dateGroup, surveys: filteredSurveys },
+              ] as [string, DateGroup];
+            })
+            .filter(([_, dateGroup]) => dateGroup.surveys.length > 0)
+        ),
+      }))
+      .filter((group) => group.dates.size > 0);
+  }, [
+    groupedSurveys.closed,
+    closedFacilityFilter,
+    closedTemplateFilter,
+    closedStatusFilter,
+  ]);
 
   const filteredPendingGroups = React.useMemo(() => {
-    return groupedSurveys.pending.filter((group) => {
-      return pendingFacilityFilter === "all" || String(group.facilityId) === pendingFacilityFilter;
-    });
-  }, [groupedSurveys.pending, pendingFacilityFilter]);
+    return groupedSurveys.pending
+      .map((group) => ({
+        ...group,
+        dates: new Map(
+          Array.from(group.dates.entries())
+            .map(([dateKey, dateGroup]) => {
+              const filteredSurveys = dateGroup.surveys.filter((survey) => {
+                const matchesFacility =
+                  pendingFacilityFilter === "all" ||
+                  String(group.facilityId) === pendingFacilityFilter;
+                const matchesTemplate =
+                  pendingTemplateFilter === "all" ||
+                  String(survey.templateId) === pendingTemplateFilter;
+                const matchesStatus =
+                  pendingStatusFilter === "all" ||
+                  (pendingStatusFilter === "locked" && survey.isLocked) ||
+                  (pendingStatusFilter === "unlocked" && !survey.isLocked);
+
+                return matchesFacility && matchesTemplate && matchesStatus;
+              });
+
+              return [
+                dateKey,
+                { ...dateGroup, surveys: filteredSurveys },
+              ] as [string, DateGroup];
+            })
+            .filter(([_, dateGroup]) => dateGroup.surveys.length > 0)
+        ),
+      }))
+      .filter((group) => group.dates.size > 0);
+  }, [
+    groupedSurveys.pending,
+    pendingFacilityFilter,
+    pendingTemplateFilter,
+    pendingStatusFilter,
+  ]);
 
   const facilityOptions = React.useMemo(() => {
-    const allFacilities = [...groupedSurveys.completed, ...groupedSurveys.pending];
+    const allFacilities = [...groupedSurveys.closed, ...groupedSurveys.pending];
     const uniqueFacilities = new Map();
+
     allFacilities.forEach((group) => {
       if (!uniqueFacilities.has(group.facilityId)) {
         uniqueFacilities.set(group.facilityId, {
@@ -356,24 +428,43 @@ export default function QALSurveysIndex() {
         });
       }
     });
+
     return Array.from(uniqueFacilities.values());
   }, [groupedSurveys]);
+
+  const templateOptions = React.useMemo(() => {
+    const allSurveys = [...(surveys.data ?? [])];
+    const uniqueTemplates = new Map();
+    allSurveys.forEach((survey) => {
+      if (survey.template && survey.templateId) {
+        uniqueTemplates.set(survey.templateId, {
+          id: survey.templateId,
+          name: survey.template.name || `Template ${survey.templateId}`,
+        });
+      }
+    });
+    return Array.from(uniqueTemplates.values());
+  }, [surveys.data]);
 
   const clearAllFilters = () => {
     setSelectedDate(undefined);
     setDateSortOrder(null);
-    setCompletedFacilityFilter("all");
+    setClosedFacilityFilter("all");
     setPendingFacilityFilter("all");
-    setCompletedStatusFilter("all");
+    setClosedTemplateFilter("all");
+    setPendingTemplateFilter("all");
+    setClosedStatusFilter("all");
     setPendingStatusFilter("all");
   };
 
   const hasActiveFilters =
     selectedDate ||
     dateSortOrder ||
-    completedFacilityFilter !== "all" ||
+    closedFacilityFilter !== "all" ||
     pendingFacilityFilter !== "all" ||
-    completedStatusFilter !== "all" ||
+    closedTemplateFilter !== "all" ||
+    pendingTemplateFilter !== "all" ||
+    closedStatusFilter !== "all" ||
     pendingStatusFilter !== "all";
 
   const FacilityGroupRow = ({
@@ -383,22 +474,29 @@ export default function QALSurveysIndex() {
     onToggle,
   }: {
     group: GroupedSurvey;
-    type: "completed" | "pending";
+    type: "closed" | "pending";
     isExpanded: boolean;
     onToggle: () => void;
   }) => (
     <>
-      <TableRow className="bg-muted/50 hover:bg-muted/70 cursor-pointer font-medium" onClick={onToggle}>
+      <TableRow
+        className="bg-muted/50 hover:bg-muted/70 cursor-pointer font-medium"
+        onClick={onToggle}
+      >
         <TableCell className="text-center font-mono pl-0">
           <Button variant="ghost" size="sm" className="p-0 h-auto">
-            {isExpanded ? <ChevronDownIcon className="h-4 w-4" /> : <ChevronRightIcon className="h-4 w-4" />}
+            {isExpanded ? (
+              <ChevronDownIcon className="h-4 w-4" />
+            ) : (
+              <ChevronRightIcon className="h-4 w-4" />
+            )}
           </Button>
         </TableCell>
         <TableCell colSpan={3}>
           <div className="flex items-center gap-2">
-            🏢 <span className="font-semibold">{group.facilityName}</span>
+            🏢 <span className="font-medium">{group.facilityName}</span>
             <Badge variant="outline" className="ml-2">
-              {group.totalSurveys} survey{group.totalSurveys !== 1 ? "s" : ""}
+              {group.totalTemplates} template{group.totalTemplates !== 1 ? "s" : ""}
             </Badge>
           </div>
         </TableCell>
@@ -410,7 +508,9 @@ export default function QALSurveysIndex() {
         Array.from(group.dates.entries()).map(([dateKey, dateGroup]) => {
           const expandKey = `${group.facilityId}-${dateKey}`;
           const isDateExpanded =
-            type === "completed" ? expandedCompletedDates.has(expandKey) : expandedPendingDates.has(expandKey);
+            type === "closed"
+              ? expandedClosedDates.has(expandKey)
+              : expandedPendingDates.has(expandKey);
 
           return (
             <React.Fragment key={dateKey}>
@@ -420,7 +520,11 @@ export default function QALSurveysIndex() {
               >
                 <TableCell className="text-center font-mono pl-0">
                   <Button variant="ghost" size="sm" className="p-0 h-auto">
-                    {isDateExpanded ? <ChevronDownIcon className="h-4 w-4" /> : <ChevronRightIcon className="h-4 w-4" />}
+                    {isDateExpanded ? (
+                      <ChevronDownIcon className="h-4 w-4" />
+                    ) : (
+                      <ChevronRightIcon className="h-4 w-4" />
+                    )}
                   </Button>
                 </TableCell>
                 <TableCell colSpan={2}>
@@ -436,7 +540,7 @@ export default function QALSurveysIndex() {
                         : "bg-green-100 text-green-800 border-green-300"
                     )}
                   >
-                    {dateGroup.surveys.length} survey{dateGroup.surveys.length !== 1 ? "s" : ""}
+                    {dateGroup.surveys.length} template{dateGroup.surveys.length !== 1 ? "s" : ""}
                   </Badge>
                 </TableCell>
                 <TableCell>-</TableCell>
@@ -449,7 +553,9 @@ export default function QALSurveysIndex() {
                     <div
                       className={cn(
                         "rounded-lg border-2 overflow-hidden",
-                        type === "completed" ? "border-green-300 bg-white" : "border-amber-300 bg-white"
+                        type === "closed"
+                          ? "border-green-300 bg-white"
+                          : "border-amber-300 bg-white"
                       )}
                     >
                       <Table>
@@ -457,7 +563,7 @@ export default function QALSurveysIndex() {
                           <TableRow
                             className={cn(
                               "border-b-2",
-                              type === "completed"
+                              type === "closed"
                                 ? "bg-green-50 hover:bg-green-50 border-green-200"
                                 : "bg-amber-50 hover:bg-amber-50 border-amber-200"
                             )}
@@ -465,46 +571,84 @@ export default function QALSurveysIndex() {
                             <TableHead
                               className={cn(
                                 "w-[80px] text-right font-semibold",
-                                type === "completed" ? "text-green-800" : "text-amber-800"
+                                type === "closed" ? "text-green-800" : "text-amber-800"
                               )}
                             >
                               System ID
                             </TableHead>
-                            <TableHead className={cn("font-semibold", type === "completed" ? "text-green-800" : "text-amber-800")}>
+                            <TableHead
+                              className={cn(
+                                "font-semibold",
+                                type === "closed" ? "text-green-800" : "text-amber-800"
+                              )}
+                            >
                               Date
                             </TableHead>
-                            <TableHead className={cn("font-semibold", type === "completed" ? "text-green-800" : "text-amber-800")}>
+                            <TableHead
+                              className={cn(
+                                "font-semibold",
+                                type === "closed" ? "text-green-800" : "text-amber-800"
+                              )}
+                            >
+                              Surveyor
+                            </TableHead>
+                            <TableHead
+                              className={cn(
+                                "font-semibold",
+                                type === "closed" ? "text-green-800" : "text-amber-800"
+                              )}
+                            >
                               Template
                             </TableHead>
                             <TableHead
-                              className={cn("font-semibold text-center", type === "completed" ? "text-green-800" : "text-amber-800")}
+                              className={cn(
+                                "font-semibold text-center",
+                                type === "closed" ? "text-green-800" : "text-amber-800"
+                              )}
                             >
                               Score
                             </TableHead>
-                            <TableHead className={cn("font-semibold", type === "completed" ? "text-green-800" : "text-amber-800")}>
-                              Status
-                            </TableHead>
                             <TableHead
-                              className={cn("text-right font-semibold", type === "completed" ? "text-green-800" : "text-amber-800")}
+                              className={cn(
+                                "text-right font-semibold",
+                                type === "closed" ? "text-green-800" : "text-amber-800"
+                              )}
                             >
-                              Actions
+                              Action
                             </TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {dateGroup.surveys.map((survey) => {
-                            const tpl = templates.data?.find((t) => t.id === survey.templateId);
-                            const fac = facilities.data?.data?.find((f) => f.id === survey.facilityId);
-                            const percent = Number(survey.overallPercent ?? 0);
+                            const score = Number(survey.totalScore ?? 0);
+                            const possible = Number(survey.possibleScore ?? 0);
+                            const percentage =
+                              possible > 0 ? Math.round((score / possible) * 100) : 0;
 
                             return (
-                              <TableRow key={`${type}-survey-${survey.id}`} className="hover:bg-muted/50">
-                                <TableCell className="text-right font-mono tabular-nums">{survey.id}</TableCell>
+                              <TableRow
+                                key={`${type}-survey-${survey.id}`}
+                                className="hover:bg-muted/50"
+                              >
+                                <TableCell className="text-right font-mono tabular-nums">
+                                  {survey.id}
+                                </TableCell>
                                 <TableCell>
                                   <Badge variant="secondary">{dateKey}</Badge>
                                 </TableCell>
                                 <TableCell>
-                                  <span className="font-medium">{tpl?.name ?? `Template ${survey.templateId}`}</span>
+                                  <div className="flex items-center gap-2">
+                                    {survey.surveyor ? (
+                                      <span>{survey.surveyor.name}</span>
+                                    ) : (
+                                      "-"
+                                    )}
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <span className="font-medium">
+                                    {survey.template?.name ?? "-"}
+                                  </span>
                                 </TableCell>
                                 <TableCell>
                                   <div className="flex items-center justify-center gap-2">
@@ -512,27 +656,25 @@ export default function QALSurveysIndex() {
                                       variant="outline"
                                       className={cn(
                                         "font-mono",
-                                        percent >= 90
+                                        percentage >= 80
                                           ? "bg-green-100 text-green-800 border-green-300"
-                                          : percent >= 75
+                                          : percentage >= 60
                                             ? "bg-yellow-100 text-yellow-800 border-yellow-300"
                                             : "bg-red-100 text-red-800 border-red-300"
                                       )}
                                     >
-                                      {percent.toFixed(1)}%
+                                      {percentage}%
                                     </Badge>
                                   </div>
-                                </TableCell>
-                                <TableCell>
-                                  <Badge variant={survey.isLocked ? "secondary" : "outline"}>
-                                    {survey.isLocked ? "Locked" : "In Progress"}
-                                  </Badge>
                                 </TableCell>
                                 <TableCell className="text-right">
                                   <div className="flex items-center justify-end gap-2">
                                     <Link
-                                      href={`/qal/surveys/${survey.id}`}
-                                      className={cn(buttonVariants({ variant: "outline", size: "icon" }), "size-6")}
+                                      href={`/dietary/surveys/${survey.id}`}
+                                      className={cn(
+                                        buttonVariants({ variant: "outline", size: "icon" }),
+                                        "size-6"
+                                      )}
                                     >
                                       <ExternalLinkIcon className="h-3 w-3" />
                                     </Link>
@@ -542,17 +684,17 @@ export default function QALSurveysIndex() {
                                         <Button
                                           variant="ghost"
                                           size="icon"
-                                          className="h-6 w-6 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                          className="h-6 w-6 text-destructive hover:text-destructive"
                                           onClick={(e) => {
                                             e.stopPropagation();
                                             setSurveyToDelete({
                                               id: survey.id,
-                                              name: `${fac?.name ?? "Facility"} - ${tpl?.name ?? "Survey"} (${dateKey})`,
+                                              name:
+                                                survey.template?.name ?? `Survey ${survey.id}`,
                                             });
                                           }}
-                                          disabled={deleteSurvey.isPending}
                                         >
-                                          <Trash2Icon className="h-3 w-3" />
+                                          <TrashIcon className="h-4 w-4" />
                                         </Button>
                                       </AlertDialogTrigger>
 
@@ -560,13 +702,15 @@ export default function QALSurveysIndex() {
                                         <AlertDialogHeader>
                                           <AlertDialogTitle>Delete Survey</AlertDialogTitle>
                                           <AlertDialogDescription>
-                                            Are you sure you want to delete the survey "
-                                            {surveyToDelete?.id === survey.id ? surveyToDelete?.name : `Survey ${survey.id}`}
-                                            "? This action cannot be undone and will delete all associated data.
+                                            Are you sure you want to delete survey #{survey.id}? This
+                                            action cannot be undone and will delete all associated
+                                            data.
                                           </AlertDialogDescription>
                                         </AlertDialogHeader>
                                         <AlertDialogFooter>
-                                          <AlertDialogCancel onClick={() => setSurveyToDelete(null)} disabled={deleteSurvey.isPending}>
+                                          <AlertDialogCancel
+                                            onClick={() => setSurveyToDelete(null)}
+                                          >
                                             Cancel
                                           </AlertDialogCancel>
                                           <AlertDialogAction
@@ -604,8 +748,8 @@ export default function QALSurveysIndex() {
       <div className="border-b bg-white">
         <div className="px-4 py-4">
           <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
-            <Link href="/qal" className="hover:text-foreground">
-              QAL
+            <Link href="/dietary" className="hover:text-foreground">
+              Dietary
             </Link>
             <span>/</span>
             <span className="text-foreground">Surveys</span>
@@ -616,17 +760,114 @@ export default function QALSurveysIndex() {
       <main className="px-4 py-6">
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <ClipboardCheck className="h-7 w-7 text-blue-600" />
+            <ChefHat className="h-7 w-7 text-orange-600" />
             <div>
-              <h1 className="text-2xl font-bold tracking-tight">QAL Surveys</h1>
-              <p className="text-muted-foreground">Manage Quality Assurance & Leadership surveys by facility</p>
+              <h1 className="text-2xl font-bold tracking-tight">Dietary Surveys</h1>
+              <p className="text-muted-foreground">Manage kitchen sanitation surveys by facility</p>
             </div>
           </div>
 
-          <Button onClick={handleOpenCreate} disabled={templates.isLoading || !session?.data?.user?.id}>
-            <PlusIcon className="h-4 w-4 mr-2" />
-            New Survey
-          </Button>
+          {/* Create Survey Dialog */}
+          <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <PlusIcon className="mr-2 h-4 w-4" />
+                New Survey
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[500px]">
+              <DialogHeader>
+                <DialogTitle>Create New Survey</DialogTitle>
+                <DialogDescription>
+                  Select facility, template, and date to begin a new dietary survey.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4 py-4">
+                {/* Facility Select */}
+                <div className="space-y-2">
+                  <Label htmlFor="facility">Facility</Label>
+                  <Select value={selectedFacility} onValueChange={setSelectedFacility}>
+                    <SelectTrigger id="facility">
+                      <SelectValue placeholder="Select a facility" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {facilities.data?.data?.map((facility) => (
+                        <SelectItem key={facility.id} value={String(facility.id)}>
+                          {facility.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Template Select */}
+                <div className="space-y-2">
+                  <Label htmlFor="template">Template</Label>
+                  <Select value={selectedTemplate} onValueChange={setSelectedTemplate}>
+                    <SelectTrigger id="template">
+                      <SelectValue placeholder="Select a template" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {templates.data?.data?.map((template) => (
+                        <SelectItem key={template.id} value={String(template.id)}>
+                          {template.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Date Picker */}
+                <div className="space-y-2">
+                  <Label>Survey Date</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "w-full justify-start text-left font-normal",
+                          !selectedCreateDate && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {selectedCreateDate ? (
+                          format(selectedCreateDate, "PPP")
+                        ) : (
+                          <span>Pick a date</span>
+                        )}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={selectedCreateDate}
+                        onSelect={setSelectedCreateDate}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setCreateDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleCreateSurvey}
+                  disabled={
+                    !selectedFacility ||
+                    !selectedTemplate ||
+                    !selectedCreateDate ||
+                    createSurvey.isPending
+                  }
+                >
+                  {createSurvey.isPending ? "Creating..." : "Create Survey"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
 
         {/* Global Filters */}
@@ -676,7 +917,12 @@ export default function QALSurveysIndex() {
                 </PopoverContent>
               </Popover>
               {selectedDate && (
-                <Button variant="ghost" size="sm" onClick={() => setSelectedDate(undefined)} className="h-6 w-6 p-0">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSelectedDate(undefined)}
+                  className="h-6 w-6 p-0"
+                >
                   <XIcon className="h-3 w-3" />
                 </Button>
               )}
@@ -726,11 +972,12 @@ export default function QALSurveysIndex() {
               <div className="h-3 w-3 rounded-full bg-green-500"></div>
               <span className="font-semibold text-white">Completed Surveys</span>
               <Badge variant="secondary" className="bg-green-200 text-green-800">
-                {filteredCompletedGroups.length} facilit{filteredCompletedGroups.length !== 1 ? "ies" : "y"}
+                {filteredClosedGroups.length} facilit
+                {filteredClosedGroups.length !== 1 ? "ies" : "y"}
               </Badge>
             </div>
             <div className="flex items-center gap-2">
-              <Select value={completedFacilityFilter} onValueChange={setCompletedFacilityFilter}>
+              <Select value={closedFacilityFilter} onValueChange={setClosedFacilityFilter}>
                 <SelectTrigger className="h-8 w-36 bg-white">
                   <SelectValue placeholder="All Facilities" />
                 </SelectTrigger>
@@ -743,6 +990,20 @@ export default function QALSurveysIndex() {
                   ))}
                 </SelectContent>
               </Select>
+
+              <Select value={closedTemplateFilter} onValueChange={setClosedTemplateFilter}>
+                <SelectTrigger className="h-8 w-40 bg-white">
+                  <SelectValue placeholder="All Templates" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Templates</SelectItem>
+                  {templateOptions.map((t) => (
+                    <SelectItem key={t.id} value={String(t.id)}>
+                      {t.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
@@ -750,31 +1011,33 @@ export default function QALSurveysIndex() {
             <TableBody>
               {surveys.isPending ? (
                 Array.from({ length: 3 }).map((_, i) => (
-                  <TableRow key={`completed-skel-${i}`}>
+                  <TableRow key={`closed-skel-${i}`}>
                     <TableCell className="text-right">
                       <Skeleton className="ml-auto h-6 w-10" />
                     </TableCell>
                     {Array.from({ length: 5 }).map((_, j) => (
-                      <TableCell key={`completed-skel-cell-${i}-${j}`}>
+                      <TableCell key={`closed-skel-cell-${i}-${j}`}>
                         <Skeleton className="h-6" />
                       </TableCell>
                     ))}
                   </TableRow>
                 ))
-              ) : filteredCompletedGroups.length === 0 ? (
+              ) : filteredClosedGroups.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-muted-foreground py-8 text-center">
-                    {hasActiveFilters ? "No completed surveys found with current filters." : "No completed surveys found."}
+                  <TableCell colSpan={7} className="text-muted-foreground py-8 text-center">
+                    {hasActiveFilters
+                      ? "No completed surveys found with current filters."
+                      : "No completed surveys found."}
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredCompletedGroups.map((group) => (
+                filteredClosedGroups.map((group) => (
                   <FacilityGroupRow
-                    key={`completed-group-${group.facilityId}`}
+                    key={`closed-group-${group.facilityId}`}
                     group={group}
-                    type="completed"
-                    isExpanded={expandedCompletedFacilities.has(group.facilityId)}
-                    onToggle={() => toggleFacilityExpanded(group.facilityId, "completed")}
+                    type="closed"
+                    isExpanded={expandedClosedFacilities.has(group.facilityId)}
+                    onToggle={() => toggleFacilityExpanded(group.facilityId, "closed")}
                   />
                 ))
               )}
@@ -789,7 +1052,8 @@ export default function QALSurveysIndex() {
               <div className="h-3 w-3 rounded-full bg-amber-500"></div>
               <span className="font-semibold text-white">Pending Surveys</span>
               <Badge variant="secondary" className="bg-amber-200 text-amber-800">
-                {filteredPendingGroups.length} facilit{filteredPendingGroups.length !== 1 ? "ies" : "y"}
+                {filteredPendingGroups.length} facilit
+                {filteredPendingGroups.length !== 1 ? "ies" : "y"}
               </Badge>
             </div>
             <div className="flex items-center gap-2">
@@ -802,6 +1066,20 @@ export default function QALSurveysIndex() {
                   {facilityOptions.map((f) => (
                     <SelectItem key={f.id} value={String(f.id)}>
                       {f.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={pendingTemplateFilter} onValueChange={setPendingTemplateFilter}>
+                <SelectTrigger className="h-8 w-40 bg-white">
+                  <SelectValue placeholder="All Templates" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Templates</SelectItem>
+                  {templateOptions.map((t) => (
+                    <SelectItem key={t.id} value={String(t.id)}>
+                      {t.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -837,8 +1115,10 @@ export default function QALSurveysIndex() {
                 ))
               ) : filteredPendingGroups.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-muted-foreground py-8 text-center">
-                    {hasActiveFilters ? "No pending surveys found with current filters." : "No pending surveys found."}
+                  <TableCell colSpan={7} className="text-muted-foreground py-8 text-center">
+                    {hasActiveFilters
+                      ? "No pending surveys found with current filters."
+                      : "No pending surveys found."}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -856,128 +1136,6 @@ export default function QALSurveysIndex() {
           </Table>
         </div>
       </main>
-
-      {/* Create Survey Dialog */}
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Create New QAL Survey</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="facility">
-                Facility <span className="text-red-500">*</span>
-              </Label>
-              <Select
-                value={selectedFacilityId?.toString() ?? "none"}
-                onValueChange={(val) => setSelectedFacilityId(val === "none" ? undefined : Number(val))}
-              >
-                <SelectTrigger id="facility">
-                  <SelectValue placeholder="Select facility" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none" disabled>
-                    Select facility
-                  </SelectItem>
-                  {facilities.data?.data?.map((f) => (
-                    <SelectItem key={f.id} value={f.id.toString()}>
-                      {f.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>
-                Survey Date <span className="text-red-500">*</span>
-              </Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn("w-full justify-start text-left font-normal", !surveyDate && "text-muted-foreground")}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {surveyDate ? format(surveyDate, "PPP") : <span>Pick a date</span>}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <Calendar mode="single" selected={surveyDate} onSelect={setSurveyDate} initialFocus />
-                </PopoverContent>
-              </Popover>
-            </div>
-
-            <div className="space-y-2">
-              <Label>
-                Survey Type <span className="text-red-500">*</span>
-              </Label>
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant={surveyType === "onsite" ? "default" : "outline"}
-                  className="flex-1"
-                  onClick={() => setSurveyType("onsite")}
-                >
-                  On-Site
-                </Button>
-                <Button
-                  type="button"
-                  variant={surveyType === "offsite" ? "default" : "outline"}
-                  className="flex-1"
-                  onClick={() => setSurveyType("offsite")}
-                >
-                  Off-Site
-                </Button>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="administrator">
-                Administrator <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="administrator"
-                placeholder="Enter administrator name"
-                value={administrator}
-                onChange={(e) => setAdministrator(e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="bom">
-                Business Office Manager <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="bom"
-                placeholder="Enter business office manager name"
-                value={businessOfficeManager}
-                onChange={(e) => setBusinessOfficeManager(e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="abom">
-                Assistant Business Office Manager <span className="text-muted-foreground">(Optional)</span>
-              </Label>
-              <Input
-                id="abom"
-                placeholder="Enter assistant BOM name (optional)"
-                value={assistantBusinessOfficeManager}
-                onChange={(e) => setAssistantBusinessOfficeManager(e.target.value)}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setOpen(false)} disabled={create.isPending}>
-              Cancel
-            </Button>
-            <Button onClick={handleConfirmCreate} disabled={create.isPending}>
-              {create.isPending ? "Creating..." : "Create Survey"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </>
   );
 }

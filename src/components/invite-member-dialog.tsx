@@ -22,17 +22,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "./ui/select";
-import { defaultRoles } from "better-auth/plugins";
 import { toast } from "sonner";
 import { PlusIcon } from "lucide-react";
 import { roles } from "@/lib/permissions";
 import { FacilityComboBox } from "@/app/qisv/_components/facility-dropdown";
-import { api } from "@/trpc/server";
 import { api as apiClient } from "@/trpc/react";
+import { useState } from "react";
 
 const sendInviteSchema = z.object({
-  email: z.email(),
-  role: z.enum(roles.map((e) => e.label)),
+  email: z.string().email("Invalid email address"),
+  role: z.enum(roles.map((e) => e.label) as [string, ...string[]]),
   facilityId: z.number(),
 });
 
@@ -45,51 +44,60 @@ export function InviteMemberDialog({
   organizationId: string;
   children?: React.ReactNode;
 }) {
+  const [open, setOpen] = useState(false);
+  const updateInvitationRole = apiClient.user.updateRole.useMutation(); // ✅ New mutation
   const addMemberToFacility = apiClient.user.assignToFacility.useMutation();
 
-  const form = useForm({
+  const form = useForm<SendInviteType>({
     resolver: zodResolver(sendInviteSchema),
     defaultValues: {
       email: "",
-      role: roles[0].label,
+      role: roles[0]!.label,
       facilityId: -1,
     },
   });
 
-  function onSubmit(values: SendInviteType) {
-    async function addMember() {
-      if (values.role === "facility_coordinator" && values.facilityId > -1) {
-        addMemberToFacility.mutate({
-          facilityId: values.facilityId,
-          email: values.email,
-          organizationId,
-        });
-      }
-
+  async function onSubmit(values: SendInviteType) {
+    try {
+      // ✅ Step 1: Send Better Auth invitation (always as "member" base role)
+      const betterAuthRole = values.role === "admin" ? "admin" : "member";
       const member = await authClient.organization.inviteMember({
         email: values.email,
-        role: "member", // All custom roles are mapped to 'member' in better-auth
+        role: betterAuthRole,
         organizationId,
       });
 
-      return member;
-    }
+      if (member.error) {
+        throw new Error(member.error.message);
+      }
 
-    toast.promise(addMember(), {
-      success: (res) => {
-        if (res.error) {
-          throw res.error;
-        }
-        return `Invited ${res.data?.email}`;
-      },
-      error: (err) => {
-        return err.message;
-      },
-    });
+      // ✅ Step 2: Update the invitation with custom role (for ALL roles)
+      await updateInvitationRole.mutateAsync({
+        email: values.email,
+        organizationId: organizationId,
+        role: values.role,
+      });
+
+      // ✅ Step 3: If facility_coordinator, assign to facility
+      if (values.role === "facility_coordinator" && values.facilityId > -1) {
+        await addMemberToFacility.mutateAsync({
+          facilityId: values.facilityId,
+          email: values.email,
+          organizationId,
+          role: values.role,
+        });
+      }
+
+      toast.success(`Invited ${values.email} as ${values.role}`);
+      form.reset();
+      setOpen(false);
+    } catch (error: any) {
+      toast.error(error.message || "Failed to send invitation");
+    }
   }
 
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         {children ?? (
           <Button variant={"secondary"}>
@@ -99,7 +107,7 @@ export function InviteMemberDialog({
         )}
       </DialogTrigger>
       <DialogContent>
-        <DialogTitle>Invite</DialogTitle>
+        <DialogTitle>Invite Member</DialogTitle>
 
         <Form {...form}>
           <form className="grid gap-2" onSubmit={form.handleSubmit(onSubmit)}>
@@ -165,7 +173,15 @@ export function InviteMemberDialog({
               />
             )}
 
-            <Button className="col-span-full">Send</Button>
+            <Button 
+              className="col-span-full" 
+              type="submit"
+              disabled={updateInvitationRole.isPending || addMemberToFacility.isPending}
+            >
+              {updateInvitationRole.isPending || addMemberToFacility.isPending 
+                ? "Sending..." 
+                : "Send Invitation"}
+            </Button>
           </form>
         </Form>
       </DialogContent>
