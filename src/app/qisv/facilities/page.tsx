@@ -182,7 +182,6 @@ export default function FacilitiesPage() {
             <h1 className="text-2xl font-bold tracking-tight">Facilities</h1>
             <p className="text-muted-foreground">Manage facilities</p>
           </div>
-          {/* UPDATED: Use canManageFacilities */}
           {canManageFacilities && (
             <Dialog open={isSheetOpen} onOpenChange={setIsSheetOpen}>
               <DialogTrigger asChild>
@@ -195,7 +194,9 @@ export default function FacilitiesPage() {
                 <DialogHeader>
                   <DialogTitle>Add New Facility</DialogTitle>
                 </DialogHeader>
-                <NewFacilityForm />
+                <div onSubmit={() => setIsSheetOpen(false)}>
+                  <NewFacilityForm />
+                </div>
               </DialogContent>
             </Dialog>
           )}
@@ -208,7 +209,6 @@ export default function FacilitiesPage() {
                 <TableHead className="w-[120px]">Facility Code</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Address</TableHead>
-                {/* UPDATED: Use canDeleteFacilities */}
                 {canDeleteFacilities && (
                   <TableHead className="w-[100px]">Actions</TableHead>
                 )}
@@ -260,7 +260,6 @@ export default function FacilitiesPage() {
                       {facility.name}
                     </TableCell>
                     <TableCell>{facility.address}</TableCell>
-                    {/* UPDATED: Use canDeleteFacilities */}
                     {canDeleteFacilities && (
                       <TableCell>
                         <AlertDialog>

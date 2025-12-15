@@ -57,7 +57,7 @@ export function NewResidentForm({ ...props }: React.ComponentProps<"form">) {
           name={"name"}
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Name</FormLabel>
+              <FormLabel>Initials</FormLabel>
               <FormControl>
                 <Input {...field} />
               </FormControl>

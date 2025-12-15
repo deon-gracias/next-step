@@ -30,12 +30,12 @@ import Link from "next/link";
 export default function DietaryUsersPage() {
   const session = authClient.useSession();
   const activeOrganization = authClient.useActiveOrganization();
-  
+
   const [activeSearch, setActiveSearch] = useState("");
   const [pendingSearch, setPendingSearch] = useState("");
   const [memberToDelete, setMemberToDelete] = useState<{ email: string; name: string } | null>(null);
   const [invitationToCancel, setInvitationToCancel] = useState<{ id: string; email: string } | null>(null);
-  
+
   // ✅ Track which dropdown is open
   const [openMemberDropdown, setOpenMemberDropdown] = useState<string | null>(null);
   const [openInvitationDropdown, setOpenInvitationDropdown] = useState<string | null>(null);
@@ -106,7 +106,7 @@ export default function DietaryUsersPage() {
 
   const handleDeleteMember = async () => {
     if (!memberToDelete) return;
-    
+
     try {
       await authClient.organization.removeMember({
         memberIdOrEmail: memberToDelete.email,
@@ -123,7 +123,7 @@ export default function DietaryUsersPage() {
 
   const handleCancelInvitation = () => {
     if (!invitationToCancel) return;
-    
+
     deleteInvitation.mutate({ id: invitationToCancel.id });
     setInvitationToCancel(null);
   };
@@ -222,73 +222,67 @@ export default function DietaryUsersPage() {
                   <span className="text-sm text-muted-foreground">{member.user.email}</span>
 
                   {manageMemberPermission.data &&
-                  session.data &&
-                  session.data.user.id !== member.userId ? (
+                    session.data &&
+                    session.data.user.id !== member.userId ? (
                     <>
                       <Select
-                        defaultValue={member.role}
-                        onValueChange={async (e) => {
-                          try {
-                            await authClient.organization.updateMemberRole({
-                              role: e as "member" | "admin" | "owner",
-                              memberId: member.id,
-                            });
-                            toast.success("Role updated successfully");
-                            organizationMembers.refetch();
-                          } catch (error) {
-                            toast.error("Failed to update role");
-                          }
+  defaultValue={member.role}
+  onValueChange={async (e) => {
+    try {
+      await authClient.organization.updateMemberRole({
+        role: e as "member" | "admin" | "owner",
+        memberId: member.id,
+      });
+      toast.success("Role updated successfully");
+      organizationMembers.refetch();
+    } catch (error) {
+      toast.error("Failed to update role");
+    }
+  }}
+>
+  <SelectTrigger className="w-auto min-w-[100px] h-9">
+    <Badge 
+      variant={member.role === "admin" ? "default" : "secondary"}
+      className="capitalize"
+    >
+      {member.role}
+    </Badge>
+  </SelectTrigger>
+  <SelectContent align="end">
+    {roles.map((e) => (
+      <SelectItem key={e.label} value={e.label}>
+        {e.label}
+      </SelectItem>
+    ))}
+  </SelectContent>
+</Select>
+
+
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => {
+                          setMemberToDelete({
+                            email: member.user.email,
+                            name: member.user.name || member.user.email
+                          });
                         }}
                       >
-                        <SelectTrigger className="w-[120px]">
-                          <Badge variant={member.role === "admin" ? "default" : "secondary"}>
-                            {member.role}
-                          </Badge>
-                        </SelectTrigger>
-                        <SelectContent align="end">
-                          {roles.map((e) => (
-                            <SelectItem key={e.label} value={e.label}>
-                              {e.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-
-                      <DropdownMenu 
-                        open={openMemberDropdown === member.id} 
-                        onOpenChange={(open) => setOpenMemberDropdown(open ? member.id : null)}
-                      >
-                        <DropdownMenuTrigger asChild>
-                          <Button size="icon" variant="ghost">
-                            <MoreVerticalIcon className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem>Edit Account</DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="text-destructive"
-                            onSelect={(e) => {
-                              e.preventDefault();
-                              setMemberToDelete({ 
-                                email: member.user.email, 
-                                name: member.user.name || member.user.email 
-                              });
-                              setOpenMemberDropdown(null);
-                            }}
-                          >
-                            Delete Account
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                        Delete
+                      </Button>
                     </>
                   ) : (
                     <>
-                      <Badge variant={member.role === "admin" ? "default" : "secondary"}>
+                      <Badge
+                        variant={member.role === "admin" ? "default" : "secondary"}
+                        className="capitalize"
+                      >
                         {member.role}
                       </Badge>
                       <div />
                     </>
                   )}
+
                 </div>
               ))}
 
@@ -349,10 +343,10 @@ export default function DietaryUsersPage() {
                   <span className="font-medium text-sm">{invitation.email.split("@")[0]}</span>
                   <span className="text-sm text-muted-foreground">{invitation.email}</span>
                   <Badge variant="secondary">{invitation.role || "member"}</Badge>
-                  
+
                   {manageMemberPermission.data && (
-                    <DropdownMenu 
-                      open={openInvitationDropdown === invitation.id} 
+                    <DropdownMenu
+                      open={openInvitationDropdown === invitation.id}
                       onOpenChange={(open) => setOpenInvitationDropdown(open ? invitation.id : null)}
                     >
                       <DropdownMenuTrigger asChild>
@@ -374,9 +368,9 @@ export default function DietaryUsersPage() {
                           className="text-destructive"
                           onSelect={(e) => {
                             e.preventDefault();
-                            setInvitationToCancel({ 
-                              id: invitation.id, 
-                              email: invitation.email 
+                            setInvitationToCancel({
+                              id: invitation.id,
+                              email: invitation.email
                             });
                             setOpenInvitationDropdown(null);
                           }}
@@ -401,8 +395,8 @@ export default function DietaryUsersPage() {
 
       {/* Delete Member Modal */}
       {memberToDelete && (
-        <div 
-          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center" 
+        <div
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) {
               setMemberToDelete(null);
@@ -424,8 +418,8 @@ export default function DietaryUsersPage() {
 
       {/* Cancel Invitation Modal */}
       {invitationToCancel && (
-        <div 
-          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center" 
+        <div
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) {
               setInvitationToCancel(null);

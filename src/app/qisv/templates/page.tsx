@@ -46,7 +46,6 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { authClient } from "@/components/providers/auth-client";
 import { Badge } from "@/components/ui/badge";
-
 import {
   AlertDialog,
   AlertDialogAction,
@@ -58,9 +57,28 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
+import { canUI, type AppRole } from "@/lib/ui-permissions";
+
+// ✅ Add normalizeRole helper
+function normalizeRole(role: unknown): AppRole | null {
+  const r = String(role ?? "").toLowerCase().trim();
+  if (r === "owner") return "admin";
+  if (r === "admin") return "admin";
+  if (r === "member") return "viewer";
+  if (
+    r === "viewer" ||
+    r === "lead_surveyor" ||
+    r === "surveyor" ||
+    r === "facility_coordinator" ||
+    r === "facility_viewer" ||
+    r === "admin"
+  ) {
+    return r as AppRole;
+  }
+  return null;
+}
 
 // Score Badge Component with conditional styling
 function ScoreBadge({ score }: { score: number }) {
@@ -87,7 +105,6 @@ function ScoreBadge({ score }: { score: number }) {
 
 const PAGE_SIZES = [10, 50, 100];
 
-
 export default function TemplatePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -99,8 +116,25 @@ export default function TemplatePage() {
   const [templateToDelete, setTemplateToDelete] = useState<{ id: number; name: string } | null>(null);
 
   type TemplateType = "general" | "resident" | "case";
-const [templateType, setTemplateType] = useState<TemplateType | null>(null);
-const [search, setSearch] = useState<string>("");
+  const [templateType, setTemplateType] = useState<TemplateType | null>(null);
+  const [search, setSearch] = useState<string>("");
+
+  const activeOrg = authClient.useActiveOrganization();
+
+  // ✅ Get role using proper method
+  const { data: appRole, isLoading: roleLoading } = useQuery({
+    queryKey: ["active-member-role", activeOrg.data?.id],
+    queryFn: async () => {
+      const res = await authClient.organization.getActiveMemberRole();
+      const rawRole = (res as any)?.data?.role;
+      return normalizeRole(rawRole);
+    },
+    enabled: !!activeOrg.data,
+  });
+
+  // ✅ Define permissions using canUI
+  const canViewTemplates = canUI(appRole, "templates.view");
+  const canManageTemplates = canUI(appRole, "templates.manage");
 
   const templates = api.template.list.useQuery({
     page,
@@ -123,26 +157,6 @@ const [search, setSearch] = useState<string>("");
     },
   });
 
-  const hasNewTemplatePermission = useQuery({
-    queryKey: [],
-    queryFn: async () =>
-      (
-        await authClient.organization.hasPermission({
-          permissions: { organization: ["update"] },
-        })
-      ).data?.success ?? false,
-  });
-
-  const hasDeleteTemplatePermission = useQuery({
-    queryKey: ["templateDeletePermission"],
-    queryFn: async () =>
-      (
-        await authClient.organization.hasPermission({
-          permissions: { organization: ["delete"] },
-        })
-      ).data?.success ?? false,
-  });
-
   function handlePage(newPage: number) {
     const newSearchParams = new URLSearchParams(searchParams.toString());
     newSearchParams.set("page", String(newPage));
@@ -152,8 +166,44 @@ const [search, setSearch] = useState<string>("");
   function handlePageSize(newSize: number) {
     const newSearchParams = new URLSearchParams(searchParams.toString());
     newSearchParams.set("pageSize", String(newSize));
-    newSearchParams.set("page", "1"); // reset page to 1 when page size changes
+    newSearchParams.set("page", "1");
     router.replace(`?${newSearchParams.toString()}`);
+  }
+
+  // ✅ Loading state
+  if (roleLoading) {
+    return (
+      <>
+        <QISVHeader crumbs={[{ label: "Templates" }]} />
+        <main className="px-4 py-6">
+          <div className="flex items-center justify-center py-12">
+            <div className="text-center">
+              <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+              <p className="mt-4 text-sm text-muted-foreground">Loading permissions...</p>
+            </div>
+          </div>
+        </main>
+      </>
+    );
+  }
+
+  // ✅ Access denied state
+  if (!canViewTemplates) {
+    return (
+      <>
+        <QISVHeader crumbs={[{ label: "Templates" }]} />
+        <main className="px-4 py-6">
+          <div className="flex items-center justify-center py-12">
+            <div className="text-center">
+              <h2 className="text-lg font-semibold text-destructive">Access Denied</h2>
+              <p className="mt-2 text-sm text-muted-foreground">
+                You don't have permission to view templates.
+              </p>
+            </div>
+          </div>
+        </main>
+      </>
+    );
   }
 
   return (
@@ -168,7 +218,8 @@ const [search, setSearch] = useState<string>("");
             </p>
           </div>
 
-          {hasNewTemplatePermission.data && (
+          {/* ✅ Only show "New Template" button if user can manage */}
+          {canManageTemplates && (
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
               <DialogTrigger asChild>
                 <Button>
@@ -187,32 +238,30 @@ const [search, setSearch] = useState<string>("");
         </div>
 
         <div className="mb-4 flex flex-col sm:flex-row gap-3 sm:items-center">
-  <div className="flex items-center gap-2">
-    <Label>Type:</Label>
-    <Select onValueChange={v => setTemplateType(v === "all" ? null : v as TemplateType)} value={templateType ?? "all"}>
-  <SelectTrigger className="w-[120px]">
-    <SelectValue placeholder="All Types" />
-  </SelectTrigger>
-  <SelectContent>
-    <SelectItem value="all">All Types</SelectItem>
-    <SelectItem value="general">General</SelectItem>
-    <SelectItem value="resident">Resident</SelectItem>
-    <SelectItem value="case">Case</SelectItem>
-  </SelectContent>
-</Select>
-
-  </div>
-  <div className="flex-1">
-    <Input
-      type="text"
-      placeholder="Search by name..."
-      className="w-full sm:w-[260px]"
-      value={search}
-      onChange={e => setSearch(e.target.value)}
-    />
-  </div>
-</div>
-
+          <div className="flex items-center gap-2">
+            <Label>Type:</Label>
+            <Select onValueChange={v => setTemplateType(v === "all" ? null : v as TemplateType)} value={templateType ?? "all"}>
+              <SelectTrigger className="w-[120px]">
+                <SelectValue placeholder="All Types" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="general">General</SelectItem>
+                <SelectItem value="resident">Resident</SelectItem>
+                <SelectItem value="case">Case</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex-1">
+            <Input
+              type="text"
+              placeholder="Search by name..."
+              className="w-full sm:w-[260px]"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+        </div>
 
         <div className="rounded-lg border">
           <Table>
@@ -223,8 +272,9 @@ const [search, setSearch] = useState<string>("");
                 <TableHead>Type</TableHead>
                 <TableHead className="text-right">Question Count</TableHead>
                 <TableHead className="text-center">Total Score</TableHead>
-                <TableHead className="max-w-fit w-[100px]">Actions</TableHead>
-                <TableHead className="max-w-fit"></TableHead>
+                {/* ✅ Only show Actions column if user can manage */}
+                {canManageTemplates && <TableHead className="max-w-fit w-[100px]">Actions</TableHead>}
+                <TableHead className="max-w-fit">View</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -246,9 +296,11 @@ const [search, setSearch] = useState<string>("");
                     <TableCell className="text-center">
                       <Skeleton className="h-6 w-20 mx-auto" />
                     </TableCell>
-                    <TableCell className="max-w-fit">
-                      <Skeleton className="ml-auto size-6" />
-                    </TableCell>
+                    {canManageTemplates && (
+                      <TableCell className="max-w-fit">
+                        <Skeleton className="ml-auto size-6" />
+                      </TableCell>
+                    )}
                     <TableCell className="max-w-fit">
                       <Skeleton className="ml-auto size-6" />
                     </TableCell>
@@ -258,10 +310,10 @@ const [search, setSearch] = useState<string>("");
               {!templates.isPending && templates.data?.data.length === 0 && (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={canManageTemplates ? 7 : 6}
                     className="text-muted-foreground py-8 text-center"
                   >
-                    No templates found. Add your first template to get started.
+                    No templates found. {canManageTemplates && "Add your first template to get started."}
                   </TableCell>
                 </TableRow>
               )}
@@ -284,72 +336,76 @@ const [search, setSearch] = useState<string>("");
                       <ScoreBadge score={template.totalPoints ? Number(template.totalPoints) : 0} />
                     </TableCell>
 
-                    <TableCell className="max-w-fit text-right">
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-                            onClick={() =>
-                              setTemplateToDelete({
-                                id: template.id,
-                                name: template.name,
-                              })
-                            }
-                            disabled={deleteTemplate.isPending}
-                          >
-                            <TrashIcon className="h-4 w-4" />
-                            <span className="sr-only">Delete template</span>
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent className="max-w-md">
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>
-                              <div className="flex items-center gap-2">
-                                <TrashIcon className="h-5 w-5 text-destructive" />
-                                Delete Template
-                              </div>
-                            </AlertDialogTitle>
-                            <AlertDialogDescription className="text-sm text-muted-foreground">
-                              Are you sure you want to delete <span className="font-semibold text-foreground">"{template.name}"</span>?
-                              This action cannot be undone and will permanently remove this template 
-                              and all related data from the system.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter className="gap-2">
-                            <AlertDialogCancel
-                              onClick={() => setTemplateToDelete(null)}
+                    {/* ✅ Only show delete button if user can manage */}
+                    {canManageTemplates && (
+                      <TableCell className="max-w-fit text-right">
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                              onClick={() =>
+                                setTemplateToDelete({
+                                  id: template.id,
+                                  name: template.name,
+                                })
+                              }
                               disabled={deleteTemplate.isPending}
-                              className="mt-0"
                             >
-                              Cancel
-                            </AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => {
-                                setTemplateToDelete(null);
-                                deleteTemplate.mutate({ id: template.id });
-                              }}
-                              disabled={deleteTemplate.isPending}
-                              className="bg-red-600 text-white shadow-lg hover:bg-red-700 hover:shadow-xl focus:ring-2 focus:ring-red-500 focus:ring-offset-2 active:bg-red-800 transition-all duration-200 font-medium px-4 py-2 rounded-md border-0 min-w-[100px] flex items-center justify-center gap-2"
-                            >
-                              {deleteTemplate.isPending ? (
-                                <>
-                                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                                  <span>Deleting...</span>
-                                </>
-                              ) : (
-                                <>
-                                  <TrashIcon className="h-4 w-4" />
-                                  <span>Delete</span>
-                                </>
-                              )}
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </TableCell>
+                              <TrashIcon className="h-4 w-4" />
+                              <span className="sr-only">Delete template</span>
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent className="max-w-md">
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>
+                                <div className="flex items-center gap-2">
+                                  <TrashIcon className="h-5 w-5 text-destructive" />
+                                  Delete Template
+                                </div>
+                              </AlertDialogTitle>
+                              <AlertDialogDescription className="text-sm text-muted-foreground">
+                                Are you sure you want to delete <span className="font-semibold text-foreground">"{template.name}"</span>?
+                                This action cannot be undone and will permanently remove this template 
+                                and all related data from the system.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter className="gap-2">
+                              <AlertDialogCancel
+                                onClick={() => setTemplateToDelete(null)}
+                                disabled={deleteTemplate.isPending}
+                                className="mt-0"
+                              >
+                                Cancel
+                              </AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => {
+                                  setTemplateToDelete(null);
+                                  deleteTemplate.mutate({ id: template.id });
+                                }}
+                                disabled={deleteTemplate.isPending}
+                                className="bg-red-600 text-white shadow-lg hover:bg-red-700 hover:shadow-xl focus:ring-2 focus:ring-red-500 focus:ring-offset-2 active:bg-red-800 transition-all duration-200 font-medium px-4 py-2 rounded-md border-0 min-w-[100px] flex items-center justify-center gap-2"
+                              >
+                                {deleteTemplate.isPending ? (
+                                  <>
+                                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                                    <span>Deleting...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <TrashIcon className="h-4 w-4" />
+                                    <span>Delete</span>
+                                  </>
+                                )}
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </TableCell>
+                    )}
                     
+                    {/* ✅ View button - available to all users who can view templates */}
                     <TableCell className="text-right">
                       <Link
                         href={`/qisv/templates/${template.id}`}
