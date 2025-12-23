@@ -132,6 +132,9 @@ export default function SurveysPage() {
 
   const assignedFacility = api.user.getForOrg.useQuery({});
 
+const currentUser = authClient.useSession(); // ✅ ADD LINE 1
+const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : undefined; // ✅ ADD LINE 2
+
   const page = Number(searchParams.get("page") ?? 1);
   const pageSize = Number(searchParams.get("pageSize") ?? 100);
 
@@ -142,13 +145,15 @@ export default function SurveysPage() {
 
   // Get all surveys
   const surveys = api.survey.list.useQuery(
-    {
-      facilityId: Array.isArray(assignedFacility.data) ? undefined : assignedFacility.data?.id,
-      page,
-      pageSize,
-    },
-    { enabled: !!assignedFacility.data && canViewSurveys }
-  );
+  {
+    facilityId: Array.isArray(assignedFacility.data) ? undefined : assignedFacility.data?.id,
+    surveyorId: surveyorIdFilter, // ✅ ADD THIS LINE
+    page,
+    pageSize,
+  },
+  { enabled: !!assignedFacility.data && canViewSurveys }
+);
+
 
   // Access utils for API calls
   const utils = api.useUtils();

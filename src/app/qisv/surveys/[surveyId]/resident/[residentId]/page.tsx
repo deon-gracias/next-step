@@ -19,6 +19,29 @@ import { metStatusEnum, surveyResponseInsertSchema } from "@/server/db/schema";
 import React, { useEffect } from "react";
 import { QISVHeader } from "@/app/qisv/_components/header";
 import TextareaAutosize from "react-textarea-autosize";
+import { useQuery } from "@tanstack/react-query";
+import { authClient } from "@/components/providers/auth-client";
+import { canUI, type AppRole } from "@/lib/ui-permissions";
+import { AlertTriangleIcon } from "lucide-react";
+
+// ✅ Add normalizeRole helper
+function normalizeRole(role: unknown): AppRole | null {
+  const r = String(role ?? "").toLowerCase().trim();
+  if (r === "owner") return "admin";
+  if (r === "admin") return "admin";
+  if (r === "member") return "viewer";
+  if (
+    r === "viewer" ||
+    r === "lead_surveyor" ||
+    r === "surveyor" ||
+    r === "facility_coordinator" ||
+    r === "facility_viewer" ||
+    r === "admin"
+  ) {
+    return r as AppRole;
+  }
+  return null;
+}
 
 // Allow undefined for status and findings until explicitly set
 const formSchema = z.object({
@@ -43,6 +66,23 @@ export default function ResidentSurveyPage() {
   const surveyId = Number(params.surveyId);
   const residentId = Number(params.residentId);
 
+  const activeOrg = authClient.useActiveOrganization();
+
+  // ✅ Get user role and permissions
+  const { data: appRole, isLoading: roleLoading } = useQuery({
+    queryKey: ["active-member-role", activeOrg.data?.id],
+    queryFn: async () => {
+      const res = await authClient.organization.getActiveMemberRole();
+      const rawRole = (res as any)?.data?.role;
+      return normalizeRole(rawRole);
+    },
+    enabled: !!activeOrg.data,
+  });
+
+  // ✅ Define permissions
+  const canViewSurveys = canUI(appRole, "surveys.view");
+  const canManageSurveys = canUI(appRole, "surveys.manage");
+
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: { responses: [] },
@@ -54,15 +94,15 @@ export default function ResidentSurveyPage() {
   });
 
   // Queries
-  const survey = api.survey.byId.useQuery({ id: surveyId }); // to read isLocked
-
+  const survey = api.survey.byId.useQuery({ id: surveyId }, { enabled: canViewSurveys });
   const questions = api.question.list.useQuery(
     { templateId: survey.data?.templateId ?? -1 },
-    { enabled: !!survey.data },
+    { enabled: !!survey.data && canViewSurveys },
   );
   const responsesQuery = api.survey.listResponses.useQuery(
     { surveyId, residentId },
     {
+      enabled: canViewSurveys,
       select: (rows) =>
         rows.filter((r) => r.surveyId === surveyId && r.residentId === residentId),
       refetchOnWindowFocus: false,
@@ -71,16 +111,34 @@ export default function ResidentSurveyPage() {
     },
   );
 
+  const resident = api.resident.byId.useQuery(
+    { id: residentId },
+    { enabled: Number.isFinite(residentId) && canViewSurveys }
+  );
+
+  const residentLabel =
+    resident.data?.pcciId
+      ? `Resident ${resident.data.pcciId}`
+      : `Resident ${residentId}`;
+
+  // ✅ Check if current user is the assigned surveyor
+  const currentUser = authClient.useSession();
+  const isAssignedSurveyor = survey.data?.surveyorId === currentUser.data?.user.id;
+
+  // ✅ Permission check: can user edit this survey?
+  const canEditSurvey = canManageSurveys || 
+    (appRole === "surveyor" && isAssignedSurveyor);
+
   // Collect question IDs once questions are loaded
   const questionIds = React.useMemo(
     () => (questions.data ?? []).map((q) => q.id),
     [questions.data]
   );
 
-  // Batch-fetch F-Tags for all questions (requires question.getFtagsByQuestionIds)
+  // Batch-fetch F-Tags for all questions
   const ftagsBatch = api.question.getFtagsByQuestionIds.useQuery(
     { questionIds },
-    { enabled: questionIds.length > 0 }
+    { enabled: questionIds.length > 0 && canViewSurveys }
   );
 
   // Build a lookup map: questionId -> [{ id, code, description }]
@@ -92,17 +150,7 @@ export default function ResidentSurveyPage() {
     return m;
   }, [ftagsBatch.data]);
 
-  const resident = api.resident.byId.useQuery(
-    { id: residentId },
-    { enabled: Number.isFinite(residentId) }
-  );
-
-  const residentLabel =
-    resident.data?.pcciId
-      ? `Resident ${resident.data.pcciId}`
-      : `Resident ${residentId}`;
-
-  // Mutations
+  // Mutations - only available if user can edit
   const upsertResponses = api.survey.createResponse.useMutation({
     onError: (e) => toast.error(e.message),
   });
@@ -123,14 +171,19 @@ export default function ResidentSurveyPage() {
       });
       form.reset({ responses: prefilled });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [questions.data, responsesQuery.data]);
-  
+  }, [questions.data, responsesQuery.data, form]);
+
   const router = useRouter();
   
   // Submit
   const onSubmit = async (vals: FormValues) => {
     if (!questions.data || !survey.data) return;
+
+    // ✅ Permission check before allowing submit
+    if (!canEditSurvey) {
+      toast.error("You don't have permission to edit this survey");
+      return;
+    }
 
     try {
       // Only send explicitly answered questions
@@ -194,6 +247,42 @@ export default function ResidentSurveyPage() {
 
   const isLocked = survey.data?.isLocked ?? false;
 
+  // ✅ Loading state
+  if (roleLoading) {
+    return (
+      <>
+        <QISVHeader crumbs={[{ label: "Surveys" }]} />
+        <main className="p-4">
+          <div className="flex items-center justify-center py-12">
+            <div className="text-center">
+              <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+              <p className="mt-4 text-sm text-muted-foreground">Loading permissions...</p>
+            </div>
+          </div>
+        </main>
+      </>
+    );
+  }
+
+  // ✅ Access denied state
+  if (!canViewSurveys) {
+    return (
+      <>
+        <QISVHeader crumbs={[{ label: "Surveys" }]} />
+        <main className="p-4">
+          <div className="flex items-center justify-center py-12">
+            <div className="text-center">
+              <h2 className="text-lg font-semibold text-destructive">Access Denied</h2>
+              <p className="mt-2 text-sm text-muted-foreground">
+                You don't have permission to view surveys.
+              </p>
+            </div>
+          </div>
+        </main>
+      </>
+    );
+  }
+
   return (
     <>
       <QISVHeader
@@ -205,6 +294,22 @@ export default function ResidentSurveyPage() {
       />
 
       <main className="p-4 space-y-4">
+        {/* ✅ Permission warning if user can't edit */}
+        {!canEditSurvey && (
+          <div className="rounded-md border border-amber-200 bg-amber-50 p-4">
+            <div className="flex items-center gap-2 text-sm text-amber-800">
+              <AlertTriangleIcon className="h-4 w-4" />
+              {isAssignedSurveyor ? (
+                <span>Only users with permission can edit this survey.</span>
+              ) : (
+                <span>
+                  Only the assigned surveyor ({survey.data?.surveyorId}) or users with permission can edit this survey.
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
           {responsesFieldArray.fields.map((field, idx) => {
             const qid = field.questionId;
@@ -252,7 +357,7 @@ export default function ResidentSurveyPage() {
                     <Select
                       value={(field.value as string | undefined) ?? undefined}
                       onValueChange={(v) => field.onChange(v)}
-                      disabled={isLocked}
+                      disabled={isLocked || !canEditSurvey}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select status" />
@@ -271,7 +376,7 @@ export default function ResidentSurveyPage() {
                   )}
                 />
 
-                {/* ✅ NEW: Show findings textarea when unmet - with red asterisk and auto-resize */}
+                {/* Show findings textarea when unmet - with red asterisk and auto-resize */}
                 {isUnmet && (
                   <div className="space-y-1">
                     <label className="text-sm font-medium">
@@ -285,7 +390,7 @@ export default function ResidentSurveyPage() {
                           placeholder="Enter findings / notes"
                           {...field}
                           value={field.value ?? ""}
-                          disabled={isLocked}
+                          disabled={isLocked || !canEditSurvey}
                           minRows={2}
                           className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
                         />
@@ -299,12 +404,17 @@ export default function ResidentSurveyPage() {
 
           {/* Save button disabled when survey locked, with hover hint */}
           <div className="relative group inline-block">
-            <Button type="submit" disabled={isLocked || upsertResponses.isPending}>
-              {upsertResponses.isPending ? "Saving..." : isLocked ? "Locked" : "Save"}
+            <Button 
+              type="submit" 
+              disabled={isLocked || upsertResponses.isPending || !canEditSurvey}
+            >
+              {upsertResponses.isPending ? "Saving..." : 
+               isLocked ? "Locked" : 
+               !canEditSurvey ? "Read Only" : "Save"}
             </Button>
-            {isLocked && (
+            {(isLocked || !canEditSurvey) && (
               <div className="pointer-events-none absolute -top-7 left-1/2 -translate-x-1/2 hidden group-hover:block rounded bg-popover px-2 py-1 text-[11px] text-popover-foreground shadow">
-                Survey is locked
+                {isLocked ? "Survey is locked" : "No edit permission"}
               </div>
             )}
           </div>

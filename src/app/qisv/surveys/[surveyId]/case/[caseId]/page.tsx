@@ -19,6 +19,29 @@ import { metStatusEnum, surveyResponseInsertSchema } from "@/server/db/schema";
 import React, { useEffect } from "react";
 import { QISVHeader } from "@/app/qisv/_components/header";
 import TextareaAutosize from "react-textarea-autosize";
+import { useQuery } from "@tanstack/react-query";
+import { authClient } from "@/components/providers/auth-client";
+import { canUI, type AppRole } from "@/lib/ui-permissions";
+import { AlertTriangleIcon } from "lucide-react";
+
+// ✅ Add normalizeRole helper
+function normalizeRole(role: unknown): AppRole | null {
+  const r = String(role ?? "").toLowerCase().trim();
+  if (r === "owner") return "admin";
+  if (r === "admin") return "admin";
+  if (r === "member") return "viewer";
+  if (
+    r === "viewer" ||
+    r === "lead_surveyor" ||
+    r === "surveyor" ||
+    r === "facility_coordinator" ||
+    r === "facility_viewer" ||
+    r === "admin"
+  ) {
+    return r as AppRole;
+  }
+  return null;
+}
 
 // ✅ Use the SAME schema as resident page - allow undefined/optional values
 const formSchema = z.object({
@@ -43,6 +66,23 @@ export default function CaseSurveyPage() {
   const surveyId = Number(params.surveyId);
   const caseId = Number(params.caseId);
 
+  const activeOrg = authClient.useActiveOrganization();
+
+  // ✅ Get user role and permissions
+  const { data: appRole, isLoading: roleLoading } = useQuery({
+    queryKey: ["active-member-role", activeOrg.data?.id],
+    queryFn: async () => {
+      const res = await authClient.organization.getActiveMemberRole();
+      const rawRole = (res as any)?.data?.role;
+      return normalizeRole(rawRole);
+    },
+    enabled: !!activeOrg.data,
+  });
+
+  // ✅ Define permissions
+  const canViewSurveys = canUI(appRole, "surveys.view");
+  const canManageSurveys = canUI(appRole, "surveys.manage");
+
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: { responses: [] },
@@ -54,33 +94,42 @@ export default function CaseSurveyPage() {
   });
 
   // Queries
-  const survey = api.survey.byId.useQuery({ id: surveyId }); // to read isLocked
+  const survey = api.survey.byId.useQuery({ id: surveyId });
   const questions = api.question.list.useQuery(
     { templateId: survey.data?.templateId ?? -1 },
-    { enabled: !!survey.data },
+    { enabled: !!survey.data && canViewSurveys },
   );
 
   const surveyCase = api.survey.getSurveyCaseById.useQuery(
     { id: caseId },
-    { enabled: Number.isFinite(caseId) }
+    { enabled: Number.isFinite(caseId) && canViewSurveys }
   );
 
   const caseLabel = surveyCase.data?.caseCode
     ? `Case ${surveyCase.data.caseCode}`
     : `Case ${caseId}`;
 
+  // ✅ Check if current user is the assigned surveyor
+  const currentUser = authClient.useSession();
+  const isAssignedSurveyor = survey.data?.surveyorId === currentUser.data?.user.id;
+
   // ✅ Updated query to use surveyCaseId parameter
   const responsesQuery = api.survey.listResponses.useQuery(
     {
       surveyId,
-      surveyCaseId: caseId // ✅ Pass surveyCaseId directly to the query
+      surveyCaseId: caseId
     },
     {
+      enabled: canViewSurveys,
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,
       refetchInterval: false,
     },
   );
+
+  // ✅ Permission check: can user edit this survey?
+  const canEditSurvey = canManageSurveys || 
+    (appRole === "surveyor" && isAssignedSurveyor);
 
   // Collect question IDs
   const questionIds = React.useMemo(
@@ -91,7 +140,7 @@ export default function CaseSurveyPage() {
   // Batch-fetch ftags once
   const ftagsBatch = api.question.getFtagsByQuestionIds.useQuery(
     { questionIds },
-    { enabled: questionIds.length > 0 }
+    { enabled: questionIds.length > 0 && canViewSurveys }
   );
 
   // Build a lookup: questionId -> [{ id, code, description }]
@@ -103,7 +152,7 @@ export default function CaseSurveyPage() {
     return m;
   }, [ftagsBatch.data]);
 
-  // Mutations
+  // Mutations - only available if user can edit
   const upsertResponses = api.survey.createResponse.useMutation({
     onError: (e) => toast.error(e.message),
   });
@@ -125,15 +174,19 @@ export default function CaseSurveyPage() {
       });
       form.reset({ responses: prefilled });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [questions.data, responsesQuery.data]);
+  }, [questions.data, responsesQuery.data, form]);
 
-  
   const router = useRouter();
 
   // ✅ Updated submit function with findings validation
   const onSubmit = async (vals: FormValues) => {
     if (!questions.data || !survey.data) return;
+
+    // ✅ Permission check before allowing submit
+    if (!canEditSurvey) {
+      toast.error("You don't have permission to edit this survey");
+      return;
+    }
 
     try {
       // Only send explicitly answered questions
@@ -164,12 +217,10 @@ export default function CaseSurveyPage() {
         findings: r.findings,
       }));
 
-      // ✅ Use surveyCaseId parameter directly - no more dummy residentId!
       await upsertResponses.mutateAsync({
         surveyId,
-        surveyCaseId: caseId, // ✅ Pass surveyCaseId directly
+        surveyCaseId: caseId,
         responses: payload,
-        // ✅ Don't pass residentId at all for case responses
       });
 
       // ✅ Invalidate and refresh
@@ -204,6 +255,42 @@ export default function CaseSurveyPage() {
 
   const isLocked = survey.data?.isLocked ?? false;
 
+  // ✅ Loading state
+  if (roleLoading) {
+    return (
+      <>
+        <QISVHeader crumbs={[{ label: "Surveys" }]} />
+        <main className="p-4">
+          <div className="flex items-center justify-center py-12">
+            <div className="text-center">
+              <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+              <p className="mt-4 text-sm text-muted-foreground">Loading permissions...</p>
+            </div>
+          </div>
+        </main>
+      </>
+    );
+  }
+
+  // ✅ Access denied state
+  if (!canViewSurveys) {
+    return (
+      <>
+        <QISVHeader crumbs={[{ label: "Surveys" }]} />
+        <main className="p-4">
+          <div className="flex items-center justify-center py-12">
+            <div className="text-center">
+              <h2 className="text-lg font-semibold text-destructive">Access Denied</h2>
+              <p className="mt-2 text-sm text-muted-foreground">
+                You don't have permission to view surveys.
+              </p>
+            </div>
+          </div>
+        </main>
+      </>
+    );
+  }
+
   return (
     <>
       <QISVHeader
@@ -215,6 +302,22 @@ export default function CaseSurveyPage() {
       />
 
       <main className="p-4 space-y-4">
+        {/* ✅ Permission warning if user can't edit */}
+        {!canEditSurvey && (
+          <div className="rounded-md border border-amber-200 bg-amber-50 p-4">
+            <div className="flex items-center gap-2 text-sm text-amber-800">
+              <AlertTriangleIcon className="h-4 w-4" />
+              {isAssignedSurveyor ? (
+                <span>Only users with permission can edit this survey.</span>
+              ) : (
+                <span>
+                  Only the assigned surveyor ({survey.data?.surveyorId}) or users with permission can edit this survey.
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
           {responsesFieldArray.fields.map((field, idx) => {
             const qid = field.questionId;
@@ -232,7 +335,7 @@ export default function CaseSurveyPage() {
                       {q?.text ?? `Question ID: ${qid}`}
                     </p>
 
-                    {/* NEW: F-Tag chips */}
+                    {/* F-Tag chips */}
                     <div className="mt-1 flex flex-wrap items-center gap-1">
                       F-Tags:
                       {(ftagsMap.get(qid) ?? []).map((t) => (
@@ -262,7 +365,7 @@ export default function CaseSurveyPage() {
                     <Select
                       value={(field.value as string | undefined) ?? undefined}
                       onValueChange={(v) => field.onChange(v)}
-                      disabled={isLocked}
+                      disabled={isLocked || !canEditSurvey}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select status" />
@@ -281,7 +384,7 @@ export default function CaseSurveyPage() {
                   )}
                 />
 
-                {/* ✅ NEW: Show findings textarea when unmet - with red asterisk and auto-resize */}
+                {/* Show findings textarea when unmet - with red asterisk and auto-resize */}
                 {isUnmet && (
                   <div className="space-y-1">
                     <label className="text-sm font-medium">
@@ -295,7 +398,7 @@ export default function CaseSurveyPage() {
                           placeholder="Enter findings / notes"
                           {...field}
                           value={field.value ?? ""}
-                          disabled={isLocked}
+                          disabled={isLocked || !canEditSurvey}
                           minRows={2}
                           className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
                         />
@@ -307,14 +410,19 @@ export default function CaseSurveyPage() {
             );
           })}
 
-          {/* ✅ Save button with lock state - same as resident page */}
+          {/* Save button with comprehensive disabled states */}
           <div className="relative group inline-block">
-            <Button type="submit" disabled={isLocked || upsertResponses.isPending}>
-              {upsertResponses.isPending ? "Saving..." : isLocked ? "Locked" : "Save"}
+            <Button 
+              type="submit" 
+              disabled={isLocked || upsertResponses.isPending || !canEditSurvey}
+            >
+              {upsertResponses.isPending ? "Saving..." : 
+               isLocked ? "Locked" : 
+               !canEditSurvey ? "Read Only" : "Save"}
             </Button>
-            {isLocked && (
+            {(isLocked || !canEditSurvey) && (
               <div className="pointer-events-none absolute -top-7 left-1/2 -translate-x-1/2 hidden group-hover:block rounded bg-popover px-2 py-1 text-[11px] text-popover-foreground shadow">
-                Survey is locked
+                {isLocked ? "Survey is locked" : "No edit permission"}
               </div>
             )}
           </div>
