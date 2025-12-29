@@ -12,8 +12,8 @@ export type UIPermission =
   | "facilities.manage"
   | "residents.view"
   | "residents.manage"
-  | "ftags.view"           // ✅ ADD THIS
-  | "ftags.manage"  
+  | "ftags.view" // ✅ ADD THIS
+  | "ftags.manage"
   | "surveys.view"
   | "surveys.manage"
   | "surveys.lockUnlock"
@@ -26,14 +26,24 @@ export type UIPermission =
 
 const rolePerms: Record<AppRole, Set<UIPermission>> = {
   admin: new Set([
-    "users.view", "users.manage",
-    "templates.view", "templates.manage",
-    "facilities.view", "facilities.manage",
-    "residents.view", "residents.manage",
-    "ftags.view", "ftags.manage",
-    "surveys.view", "surveys.manage", "surveys.lockUnlock", "surveys.generatePoc",
-    "poc.view", "poc.edit",
-    "compliance.view", "compliance.manage",
+    "users.view",
+    "users.manage",
+    "templates.view",
+    "templates.manage",
+    "facilities.view",
+    "facilities.manage",
+    "residents.view",
+    "residents.manage",
+    "ftags.view",
+    "ftags.manage",
+    "surveys.view",
+    "surveys.manage",
+    "surveys.lockUnlock",
+    "surveys.generatePoc",
+    "poc.view",
+    "poc.edit",
+    "compliance.view",
+    "compliance.manage",
     "analytics.view",
   ]),
   viewer: new Set([
@@ -43,22 +53,29 @@ const rolePerms: Record<AppRole, Set<UIPermission>> = {
     "residents.view",
     "surveys.view",
     "poc.view",
-     "ftags.view",
+    "ftags.view",
     "compliance.view",
     "analytics.view",
   ]),
   lead_surveyor: new Set([
     "users.view",
-    "facilities.view", "facilities.manage",
-    "residents.view", "residents.manage",
-    "ftags.view", "ftags.manage",
-    "surveys.view", "surveys.manage", "surveys.lockUnlock", "surveys.generatePoc",
-    "poc.view", "poc.edit", 
+    "facilities.view",
+    "templates.view",
+    "residents.view",
+    "residents.manage",
+    "ftags.view",
+    "surveys.view",
+    "surveys.manage",
+    "surveys.lockUnlock",
+    "surveys.generatePoc",
+    "poc.view",
+    "poc.edit",
     "analytics.view",
   ]),
   surveyor: new Set([
     "ftags.view",
-    "surveys.view", "surveys.manage", // “complete assigned templates” (UI-wise)
+    "surveys.view",
+    "surveys.manage",
     "poc.view",
     "compliance.view",
     "analytics.view",
@@ -67,13 +84,15 @@ const rolePerms: Record<AppRole, Set<UIPermission>> = {
     "ftags.view",
     "templates.view",
     "surveys.view",
-    "poc.view", "poc.edit",
-    "compliance.view", "compliance.manage",
+    "poc.view",
+    "poc.edit",
+    "compliance.view",
+    "compliance.manage",
     "analytics.view",
   ]),
   facility_viewer: new Set([
     "templates.view",
-    "ftags.view", 
+    "ftags.view",
     "surveys.view",
     "poc.view",
     "compliance.view",

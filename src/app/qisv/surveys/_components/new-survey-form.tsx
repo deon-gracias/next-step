@@ -132,16 +132,19 @@ function UserComboBox({
   const currentOrgId = user.data?.session.activeOrganizationId;
 
   // Fetch users with search
-  const users = api.user.listInOrg.useQuery({
-    organizationId: currentOrgId || "",
-    page: 1,
-    pageSize: 100,
-    search: debouncedSearch,
-  }, {
-    enabled: !!currentOrgId,
-  });
+  const users = api.user.listInOrg.useQuery(
+    {
+      organizationId: currentOrgId || "",
+      page: 1,
+      pageSize: 100,
+      search: debouncedSearch,
+    },
+    {
+      enabled: !!currentOrgId,
+    },
+  );
 
-  const selectedUser = users.data?.find(user => user.id === selectedItem);
+  const selectedUser = users.data?.find((user) => user.id === selectedItem);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -157,7 +160,9 @@ function UserComboBox({
               <div className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-100">
                 <UserIcon className="h-3 w-3 text-blue-600" />
               </div>
-              <span className="truncate">{selectedUser.name || selectedUser.email}</span>
+              <span className="truncate">
+                {selectedUser.name || selectedUser.email}
+              </span>
               {selectedUser.role && (
                 <Badge variant="secondary" className="text-xs">
                   {selectedUser.role}
@@ -173,9 +178,9 @@ function UserComboBox({
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-full p-0">
-        <div className="p-3 border-b">
+        <div className="border-b p-3">
           <div className="relative">
-            <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <SearchIcon className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 transform" />
             <Input
               placeholder="Search users..."
               value={search}
@@ -186,7 +191,7 @@ function UserComboBox({
         </div>
         <div className="max-h-64 overflow-y-auto">
           {users.isLoading ? (
-            <div className="p-4 space-y-2">
+            <div className="space-y-2 p-4">
               {Array.from({ length: 5 }).map((_, i) => (
                 <div key={i} className="flex items-center gap-2 p-2">
                   <Skeleton className="h-6 w-6 rounded-full" />
@@ -198,8 +203,10 @@ function UserComboBox({
               ))}
             </div>
           ) : users.data?.length === 0 ? (
-            <div className="p-4 text-center text-muted-foreground">
-              {debouncedSearch ? "No users found matching your search." : "No users available."}
+            <div className="text-muted-foreground p-4 text-center">
+              {debouncedSearch
+                ? "No users found matching your search."
+                : "No users available."}
             </div>
           ) : (
             <div className="p-2">
@@ -207,8 +214,8 @@ function UserComboBox({
                 <div
                   key={user.id}
                   className={cn(
-                    "flex items-center gap-2 p-2 cursor-pointer hover:bg-gray-100 rounded-md",
-                    selectedItem === user.id && "bg-blue-50"
+                    "flex cursor-pointer items-center gap-2 rounded-md p-2 hover:bg-gray-100",
+                    selectedItem === user.id && "bg-blue-50",
                   )}
                   onClick={() => {
                     onSelect(user.id === selectedItem ? "" : user.id);
@@ -218,15 +225,21 @@ function UserComboBox({
                   <CheckIcon
                     className={cn(
                       "h-4 w-4",
-                      selectedItem === user.id ? "opacity-100 text-blue-600" : "opacity-0"
+                      selectedItem === user.id
+                        ? "text-blue-600 opacity-100"
+                        : "opacity-0",
                     )}
                   />
                   <div className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-100">
                     <UserIcon className="h-3 w-3 text-blue-600" />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium truncate">{user.name || "Unknown"}</div>
-                    <div className="text-xs text-muted-foreground truncate">{user.email}</div>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-medium">
+                      {user.name || "Unknown"}
+                    </div>
+                    <div className="text-muted-foreground truncate text-xs">
+                      {user.email}
+                    </div>
                   </div>
                   {user.role && (
                     <Badge variant="secondary" className="text-xs">
@@ -268,7 +281,7 @@ function FacilityComboBox({
   // Fetch selected facility details if we have a selection
   const selectedFacility = api.facility.byId.useQuery(
     { id: selectedItem! },
-    { enabled: !!selectedItem && selectedItem > -1 }
+    { enabled: !!selectedItem && selectedItem > -1 },
   );
 
   const totalPages = facilities.data?.totalPages || 1;
@@ -287,10 +300,12 @@ function FacilityComboBox({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className="w-full justify-between bg-white/90 backdrop-blur-sm border-gray-300 hover:bg-white h-11 rounded-full text-gray-600"
+          className="h-11 w-full justify-between rounded-full border-gray-300 bg-white/90 text-gray-600 backdrop-blur-sm hover:bg-white"
         >
           {selectedFacility.data ? (
-            <span className="truncate text-gray-800">{selectedFacility.data.name}</span>
+            <span className="truncate text-gray-800">
+              {selectedFacility.data.name}
+            </span>
           ) : selectedItem !== undefined && selectedItem > -1 ? (
             <div className="flex items-center gap-2">
               <Skeleton className="h-4 w-32" />
@@ -301,22 +316,22 @@ function FacilityComboBox({
           <ChevronDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-full p-0 rounded-xl" align="start">
-        <div className="p-3 border-b">
+      <PopoverContent className="w-full rounded-xl p-0" align="start">
+        <div className="border-b p-3">
           <div className="relative">
-            <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <SearchIcon className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 transform" />
             <Input
               placeholder="Search facilities..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 rounded-lg"
+              className="rounded-lg pl-9"
             />
           </div>
         </div>
 
         <div className="max-h-64 overflow-y-auto">
           {facilities.isLoading ? (
-            <div className="p-4 space-y-2">
+            <div className="space-y-2 p-4">
               {Array.from({ length: 5 }).map((_, i) => (
                 <div key={i} className="flex items-center gap-2 p-2">
                   <Skeleton className="h-6 w-6 rounded-full" />
@@ -325,8 +340,10 @@ function FacilityComboBox({
               ))}
             </div>
           ) : facilities.data?.data.length === 0 ? (
-            <div className="p-4 text-center text-muted-foreground">
-              {debouncedSearch ? "No facilities found matching your search." : "No facilities available."}
+            <div className="text-muted-foreground p-4 text-center">
+              {debouncedSearch
+                ? "No facilities found matching your search."
+                : "No facilities available."}
             </div>
           ) : (
             <div className="p-2">
@@ -334,8 +351,8 @@ function FacilityComboBox({
                 <div
                   key={facility.id}
                   className={cn(
-                    "flex items-center gap-2 p-2 cursor-pointer hover:bg-gray-100 rounded-md transition-colors",
-                    selectedItem === facility.id && "bg-green-50"
+                    "flex cursor-pointer items-center gap-2 rounded-md p-2 transition-colors hover:bg-gray-100",
+                    selectedItem === facility.id && "bg-green-50",
                   )}
                   onClick={() => {
                     onSelect(facility.id === selectedItem ? -1 : facility.id);
@@ -345,21 +362,26 @@ function FacilityComboBox({
                   <CheckIcon
                     className={cn(
                       "h-4 w-4 flex-shrink-0",
-                      selectedItem === facility.id ? "opacity-100 text-green-600" : "opacity-0"
+                      selectedItem === facility.id
+                        ? "text-green-600 opacity-100"
+                        : "opacity-0",
                     )}
                   />
-                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-green-100 flex-shrink-0">
+                  <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-green-100">
                     <BuildingIcon className="h-3 w-3 text-green-600" />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium truncate">{facility.name}</div>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-medium">{facility.name}</div>
                     {facility.address && (
-                      <div className="text-xs text-muted-foreground truncate">
+                      <div className="text-muted-foreground truncate text-xs">
                         {facility.address}
                       </div>
                     )}
                   </div>
-                  <Badge variant="secondary" className="text-xs bg-gray-100 text-gray-600 flex-shrink-0">
+                  <Badge
+                    variant="secondary"
+                    className="flex-shrink-0 bg-gray-100 text-xs text-gray-600"
+                  >
                     ID: {facility.id}
                   </Badge>
                 </div>
@@ -379,7 +401,9 @@ function FacilityComboBox({
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  onClick={() =>
+                    setCurrentPage((prev) => Math.max(1, prev - 1))
+                  }
                   disabled={!hasPreviousPage || facilities.isLoading}
                 >
                   <ChevronLeftIcon className="h-4 w-4" />
@@ -387,7 +411,9 @@ function FacilityComboBox({
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  onClick={() =>
+                    setCurrentPage((prev) => Math.min(totalPages, prev + 1))
+                  }
                   disabled={!hasNextPage || facilities.isLoading}
                 >
                   <ChevronRightIcon className="h-4 w-4" />
@@ -395,8 +421,9 @@ function FacilityComboBox({
               </div>
             </div>
             {facilities.data && (
-              <div className="text-xs text-muted-foreground mt-1">
-                Showing {facilities.data.data.length} of {facilities.data.total} facilities
+              <div className="text-muted-foreground mt-1 text-xs">
+                Showing {facilities.data.data.length} of {facilities.data.total}{" "}
+                facilities
               </div>
             )}
           </div>
@@ -405,8 +432,6 @@ function FacilityComboBox({
     </Popover>
   );
 }
-
-
 
 // Template Combobox Component with exclusion logic
 function TemplateComboBox({
@@ -435,9 +460,10 @@ function TemplateComboBox({
   });
 
   // Filter out excluded templates and sort alphabetically
-  const availableTemplates = templates.data?.data
-    .filter(template => !excludeTemplateIds.includes(template.id))
-    .sort((a, b) => a.name.localeCompare(b.name)) || [];
+  const availableTemplates =
+    templates.data?.data
+      .filter((template) => !excludeTemplateIds.includes(template.id))
+      .sort((a, b) => a.name.localeCompare(b.name)) || [];
 
   const totalPages = templates.data?.totalPages || 1;
   const hasNextPage = currentPage < totalPages;
@@ -451,12 +477,12 @@ function TemplateComboBox({
   // Get type badge color
   const getTypeBadgeColor = (type: string) => {
     switch (type) {
-      case 'case':
-        return 'bg-orange-100 text-orange-700';
-      case 'resident':
-        return 'bg-blue-100 text-blue-700';
+      case "case":
+        return "bg-orange-100 text-orange-700";
+      case "resident":
+        return "bg-blue-100 text-blue-700";
       default:
-        return 'bg-gray-100 text-gray-700';
+        return "bg-gray-100 text-gray-700";
     }
   };
 
@@ -467,11 +493,13 @@ function TemplateComboBox({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className="w-full justify-between bg-white/90 backdrop-blur-sm border-gray-300 hover:bg-white h-11 rounded-full text-gray-600"
+          className="h-11 w-full justify-between rounded-full border-gray-300 bg-white/90 text-gray-600 backdrop-blur-sm hover:bg-white"
         >
           {selectedItem ? (
             <div className="flex items-center gap-2">
-              <span className="truncate text-gray-800">{selectedItem.name}</span>
+              <span className="truncate text-gray-800">
+                {selectedItem.name}
+              </span>
               <Badge
                 variant="secondary"
                 className={`text-xs ${getTypeBadgeColor(selectedItem.type)} flex-shrink-0`}
@@ -485,22 +513,22 @@ function TemplateComboBox({
           <ChevronDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-full p-0 rounded-xl" align="start">
-        <div className="p-3 border-b">
+      <PopoverContent className="w-full rounded-xl p-0" align="start">
+        <div className="border-b p-3">
           <div className="relative">
-            <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <SearchIcon className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 transform" />
             <Input
               placeholder="Search templates..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 rounded-lg"
+              className="rounded-lg pl-9"
             />
           </div>
         </div>
 
         <div className="max-h-80 overflow-y-auto">
           {templates.isLoading ? (
-            <div className="p-4 space-y-2">
+            <div className="space-y-2 p-4">
               {Array.from({ length: 8 }).map((_, i) => (
                 <div key={i} className="flex items-center gap-2 p-2">
                   <Skeleton className="h-6 w-6 rounded-full" />
@@ -512,9 +540,12 @@ function TemplateComboBox({
               ))}
             </div>
           ) : availableTemplates.length === 0 ? (
-            <div className="p-4 text-center text-muted-foreground">
-              {debouncedSearch ? "No templates found matching your search." :
-                excludeTemplateIds.length > 0 ? "No more templates available. All others are already selected." : "No templates available."}
+            <div className="text-muted-foreground p-4 text-center">
+              {debouncedSearch
+                ? "No templates found matching your search."
+                : excludeTemplateIds.length > 0
+                  ? "No more templates available. All others are already selected."
+                  : "No templates available."}
             </div>
           ) : (
             <div className="p-2">
@@ -522,13 +553,17 @@ function TemplateComboBox({
                 <div
                   key={template.id}
                   className={cn(
-                    "flex items-center gap-2 p-2 cursor-pointer hover:bg-gray-100 rounded-md transition-colors",
-                    selectedItem?.id === template.id && "bg-blue-50"
+                    "flex cursor-pointer items-center gap-2 rounded-md p-2 transition-colors hover:bg-gray-100",
+                    selectedItem?.id === template.id && "bg-blue-50",
                   )}
                   onClick={() => {
                     const newValue = withValue
-                      ? (template.id === selectedItem?.id ? undefined : template)
-                      : (template.id === selectedItem?.id ? undefined : template.id);
+                      ? template.id === selectedItem?.id
+                        ? undefined
+                        : template
+                      : template.id === selectedItem?.id
+                        ? undefined
+                        : template.id;
                     onSelect(newValue);
                     setOpen(false);
                   }}
@@ -536,23 +571,27 @@ function TemplateComboBox({
                   <CheckIcon
                     className={cn(
                       "h-4 w-4",
-                      selectedItem?.id === template.id ? "opacity-100 text-blue-600" : "opacity-0"
+                      selectedItem?.id === template.id
+                        ? "text-blue-600 opacity-100"
+                        : "opacity-0",
                     )}
                   />
-                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 flex-shrink-0">
+                  <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-blue-100">
                     <FileTextIcon className="h-3 w-3 text-blue-600" />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium truncate">{template.name}</div>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-medium">{template.name}</div>
                   </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
+                  <div className="flex flex-shrink-0 items-center gap-2">
                     <Badge
                       variant="secondary"
                       className={`text-xs ${getTypeBadgeColor(template.type)}`}
                     >
                       {template.type}
                     </Badge>
-                    <span className="text-xs text-muted-foreground">ID: {template.id}</span>
+                    <span className="text-muted-foreground text-xs">
+                      ID: {template.id}
+                    </span>
                   </div>
                 </div>
               ))}
@@ -571,7 +610,9 @@ function TemplateComboBox({
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  onClick={() =>
+                    setCurrentPage((prev) => Math.max(1, prev - 1))
+                  }
                   disabled={!hasPreviousPage || templates.isLoading}
                 >
                   <ChevronLeftIcon className="h-4 w-4" />
@@ -579,7 +620,9 @@ function TemplateComboBox({
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  onClick={() =>
+                    setCurrentPage((prev) => Math.min(totalPages, prev + 1))
+                  }
                   disabled={!hasNextPage || templates.isLoading}
                 >
                   <ChevronRightIcon className="h-4 w-4" />
@@ -587,8 +630,9 @@ function TemplateComboBox({
               </div>
             </div>
             {templates.data && (
-              <div className="text-xs text-muted-foreground mt-1">
-                Showing {availableTemplates.length} of {templates.data.total} templates
+              <div className="text-muted-foreground mt-1 text-xs">
+                Showing {availableTemplates.length} of {templates.data.total}{" "}
+                templates
               </div>
             )}
           </div>
@@ -598,9 +642,6 @@ function TemplateComboBox({
   );
 }
 
-
-
-
 export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
   const user = authClient.useSession();
 
@@ -608,15 +649,18 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
   const currentOrgId = user.data?.session.activeOrganizationId;
 
   // Fetch users for initial load
-  const users = api.user.listInOrg.useQuery({
-    organizationId: currentOrgId || "",
-    page: 1,
-    pageSize: 100,
-  }, {
-    enabled: !!currentOrgId,
-    retry: 3,
-    retryDelay: 1000,
-  });
+  const users = api.user.listInOrg.useQuery(
+    {
+      organizationId: currentOrgId || "",
+      page: 1,
+      pageSize: 100,
+    },
+    {
+      enabled: !!currentOrgId,
+      retry: 3,
+      retryDelay: 1000,
+    },
+  );
 
   const createSurvey = api.survey.create.useMutation();
 
@@ -630,13 +674,11 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
   });
 
   // Initialize localStorage persistence
-  const { clearStorage, loadFromStorage, saveToStorage } = useLocalStorageForm<NewMultiSurveyCreateInputType>(
-    SURVEY_FORM_STORAGE_KEY
-  );
+  const { clearStorage, loadFromStorage, saveToStorage } =
+    useLocalStorageForm<NewMultiSurveyCreateInputType>(SURVEY_FORM_STORAGE_KEY);
 
   // State for showing save indicator
   const [showSavedIndicator, setShowSavedIndicator] = useState(false);
-
 
   // ✅ NEW: Add state for confirmation dialog
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
@@ -663,7 +705,7 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
   // Save data when form changes
   useEffect(() => {
     const subscription = form.watch((data) => {
-      if (data && data.surveyDate && typeof data.facilityId === 'number') {
+      if (data && data.surveyDate && typeof data.facilityId === "number") {
         saveToStorage(data as NewMultiSurveyCreateInputType);
         setShowSavedIndicator(true);
         const timer = setTimeout(() => setShowSavedIndicator(false), 2000);
@@ -681,10 +723,11 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
 
     // Try to find admin user first
     if (users.data && users.data.length > 0) {
-      const adminUser = users.data.find(u =>
-        u.role === "admin" ||
-        u.email?.toLowerCase().includes("admin") ||
-        u.name?.toLowerCase().includes("admin")
+      const adminUser = users.data.find(
+        (u) =>
+          u.role === "admin" ||
+          u.email?.toLowerCase().includes("admin") ||
+          u.name?.toLowerCase().includes("admin"),
       );
 
       if (adminUser) {
@@ -758,13 +801,12 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
     setShowConfirmDialog(true);
   };
 
-
   return (
     <div className="space-y-4">
       {/* Draft Status Indicator */}
       <div className="sticky top-4 z-10">
         {showSavedIndicator && (
-          <Alert className="bg-green-50 border-green-200 animate-in slide-in-from-top-2">
+          <Alert className="animate-in slide-in-from-top-2 border-green-200 bg-green-50">
             <SaveIcon className="h-4 w-4 text-green-600" />
             <AlertDescription className="text-green-800">
               Draft saved automatically
@@ -774,13 +816,14 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
       </div>
 
       {/* Offline Protection Info + Clear Data Button */}
-      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-3">
-            <AlertCircleIcon className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <AlertCircleIcon className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600" />
             <div className="text-amber-800">
-              <strong>Offline Protection:</strong> Your form data is automatically saved locally.
-              Even if you refresh the page or lose internet connection, your progress won't be lost.
+              <strong>Offline Protection:</strong> Your form data is
+              automatically saved locally. Even if you refresh the page or lose
+              internet connection, your progress won't be lost.
             </div>
           </div>
           <Button
@@ -804,9 +847,9 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
               // Show success message
               toast.success("All data cleared! Form has been reset.");
             }}
-            className="border-red-200 text-red-700 hover:bg-red-50 hover:border-red-300 whitespace-nowrap"
+            className="border-red-200 whitespace-nowrap text-red-700 hover:border-red-300 hover:bg-red-50"
           >
-            <TrashIcon className="h-4 w-4 mr-2" />
+            <TrashIcon className="mr-2 h-4 w-4" />
             Clear All Data
           </Button>
         </div>
@@ -814,21 +857,23 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
 
       {/* Survey Details - Matching the dark blue header from screenshot */}
       {/* Survey Details - Header and fields on same line matching screenshot */}
-      <Card className="border-none shadow-lg bg-[#0C2152] rounded-xl overflow-hidden">
+      <Card className="overflow-hidden rounded-xl border-none bg-[#0C2152] shadow-lg">
         <CardContent className="p-5">
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)}>
               <div className="flex items-center gap-4">
                 {/* Left side - Survey Details Header */}
-                <div className="flex items-center gap-3 min-w-fit">
-                  <div className="bg-white/10 rounded-lg p-2">
+                <div className="flex min-w-fit items-center gap-3">
+                  <div className="rounded-lg bg-white/10 p-2">
                     <ClipboardListIcon className="h-6 w-6 text-white" />
                   </div>
-                  <h2 className="text-xl font-bold text-white whitespace-nowrap">Survey Details</h2>
+                  <h2 className="text-xl font-bold whitespace-nowrap text-white">
+                    Survey Details
+                  </h2>
                 </div>
 
                 {/* Right side - Date and Facility fields */}
-                <div className="flex-1 grid grid-cols-2 gap-4">
+                <div className="grid flex-1 grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
                     name="surveyDate"
@@ -841,20 +886,25 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
                                 <Button
                                   variant={"outline"}
                                   className={cn(
-                                    "w-full pl-3 text-left font-normal bg-white/90 backdrop-blur-sm border-blue-200 hover:bg-white h-11 rounded-full",
+                                    "h-11 w-full rounded-full border-blue-200 bg-white/90 pl-3 text-left font-normal backdrop-blur-sm hover:bg-white",
                                     !field.value && "text-muted-foreground",
                                   )}
                                 >
                                   {field.value ? (
                                     format(field.value, "PPP")
                                   ) : (
-                                    <span className="text-gray-400">Survey Date</span>
+                                    <span className="text-gray-400">
+                                      Survey Date
+                                    </span>
                                   )}
                                   <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                                 </Button>
                               </FormControl>
                             </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0" align="start">
+                            <PopoverContent
+                              className="w-auto p-0"
+                              align="start"
+                            >
                               <Calendar
                                 mode="single"
                                 selected={field.value}
@@ -891,7 +941,6 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
         </CardContent>
       </Card>
 
-
       {/* Surveyors Section */}
       <div className="space-y-4">
         {surveyorsField.fields.map((surveyor, sIndex) => {
@@ -912,9 +961,12 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
             onClick={() => {
               const defaultSurveyorId = users.data?.[0]?.id || "";
               toast.success("Added new surveyor");
-              surveyorsField.append({ surveyorId: defaultSurveyorId, templates: [] });
+              surveyorsField.append({
+                surveyorId: defaultSurveyorId,
+                templates: [],
+              });
             }}
-            className="w-full bg-[#0C2152] hover:bg-[#0C2152] text-white font-medium rounded-lg py-3 transition-all flex items-center justify-center gap-2 shadow-md"
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#0C2152] py-3 font-medium text-white shadow-md transition-all hover:bg-[#0C2152]"
           >
             <PlusIcon className="h-4 w-4" />
             Add Surveyor
@@ -924,7 +976,6 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
 
       {/* Submit Button */}
 
-
       {/* Submit Button */}
       {/* Submit Button with Alert Dialog */}
       {/* Submit Button with Alert Dialog */}
@@ -932,12 +983,12 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
       {/* Submit Button with Alert Dialog - UNCONTROLLED VERSION */}
       <AlertDialog>
         <Form {...form}>
-          <div className="flex justify-center mt-16 mb-16">
+          <div className="mt-16 mb-16 flex justify-center">
             <AlertDialogTrigger asChild>
               <Button
                 type="button"
                 disabled={form.watch("facilityId") < 0}
-                className="w-full max-w-md bg-[#ec553a] hover:bg-[#d64931] text-white font-medium py-3 rounded-lg shadow-md transition-all"
+                className="w-full max-w-md rounded-lg bg-[#ec553a] py-3 font-medium text-white shadow-md transition-all hover:bg-[#d64931]"
               >
                 Create Survey
               </Button>
@@ -949,17 +1000,14 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
           <AlertDialogHeader>
             <AlertDialogTitle>Confirm Survey Creation</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to create this survey? This action will process all selected templates and surveyors.
+              Are you sure you want to create this survey? This action will
+              process all selected templates and surveyors.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>
-              No
-            </AlertDialogCancel>
+            <AlertDialogCancel>No</AlertDialogCancel>
 
-            <AlertDialogCancel
-              className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 h-10 px-4 py-2 bg-green-600 hover:bg-green-700 text-white border-2 border-green-600"
-            >
+            <AlertDialogCancel className="ring-offset-background focus-visible:ring-ring inline-flex h-10 items-center justify-center rounded-md border-2 border-green-600 bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50">
               <button
                 type="button"
                 onClick={() => {
@@ -985,12 +1033,16 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
                       return;
                     }
 
-                    async function createSurveys(survey: SurveyCreateInputType) {
+                    async function createSurveys(
+                      survey: SurveyCreateInputType,
+                    ) {
                       return await createSurvey.mutateAsync(survey);
                     }
 
                     toast.promise(
-                      Promise.all(createSurveyRequest.map((e) => createSurveys(e))),
+                      Promise.all(
+                        createSurveyRequest.map((e) => createSurveys(e)),
+                      ),
                       {
                         loading: "Creating surveys",
                         success: () => {
@@ -1014,18 +1066,8 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
               </button>
             </AlertDialogCancel>
           </AlertDialogFooter>
-
-
-
         </AlertDialogContent>
       </AlertDialog>
-
-
-
-
-
-
-
     </div>
   );
 }
@@ -1051,26 +1093,42 @@ function SurveyorField({
 
   // Get all selected template IDs for this surveyor to exclude from dropdown
   const getExcludedTemplateIds = (currentTemplateIndex: number) => {
-    const surveyorTemplates = form.watch(`surveyors.${sIndex}.templates`);
-    return surveyorTemplates
-      .map((template, index) => index !== currentTemplateIndex ? template.template?.id : null)
-      .filter(Boolean) as number[];
+    // 1. Watch the entire surveyors array to get real-time updates
+    const allSurveyors = form.watch("surveyors");
+
+    // 2. Collect IDs from ALL surveyors
+    const allSelectedIds = allSurveyors
+      .flatMap((srv, srvIdx) =>
+        srv.templates?.map((t, tIdx) => {
+          // If we are looking at the specific row we are currently editing,
+          // we allow that ID (return null) so it shows up as the selected value.
+          // Otherwise, return the ID to add it to the exclusion list.
+          const isCurrentRow =
+            srvIdx === sIndex && tIdx === currentTemplateIndex;
+
+          if (isCurrentRow) return null;
+          return t.template?.id;
+        }),
+      )
+      .filter((id): id is number => id != null && id !== undefined);
+
+    return allSelectedIds;
   };
 
   return (
     <Card
       key={surveyor.id}
-      className="border-none shadow-sm bg-[#CCDEEA] rounded-lg overflow-hidden"
+      className="overflow-hidden rounded-lg border-none bg-[#CCDEEA] shadow-sm"
     >
-      <CardContent className="p-4 space-y-4">
+      <CardContent className="space-y-4 p-4">
         {/* Header and User field on same line - ALWAYS VISIBLE */}
         <div className="flex items-center gap-4">
           {/* Left side - Surveyor Header */}
-          <div className="flex items-center gap-2 min-w-fit">
-            <div className="bg-[#347aaa] rounded-full p-2">
+          <div className="flex min-w-fit items-center gap-2">
+            <div className="rounded-full bg-[#347aaa] p-2">
               <UserIcon className="h-5 w-5 text-white" />
             </div>
-            <h3 className="font-semibold text-gray-800 text-lg whitespace-nowrap">
+            <h3 className="text-lg font-semibold whitespace-nowrap text-gray-800">
               Surveyor {sIndex + 1}
             </h3>
           </div>
@@ -1105,7 +1163,12 @@ function SurveyorField({
               className="h-8 w-8 text-gray-600 hover:text-gray-800"
               onClick={() => setIsCollapsed(!isCollapsed)}
             >
-              <ChevronUpIcon className={cn("h-5 w-5 transition-transform", isCollapsed && "rotate-180")} />
+              <ChevronUpIcon
+                className={cn(
+                  "h-5 w-5 transition-transform",
+                  isCollapsed && "rotate-180",
+                )}
+              />
             </Button>
             {surveyorsField.fields.length > 1 && (
               <Button
@@ -1144,12 +1207,11 @@ function SurveyorField({
                   residentIds: [],
                 })
               }
-              className="w-full border-2 border-dashed border-[#347aaa] bg-white rounded-lg py-3 flex items-center justify-center text-[#347aaa] font-medium text-sm gap-2"
+              className="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-[#347aaa] bg-white py-3 text-sm font-medium text-[#347aaa]"
             >
               <PlusIcon className="h-4 w-4" />
               Add Template
             </button>
-
           </div>
         )}
       </CardContent>
@@ -1172,18 +1234,20 @@ function TemplateCard({
   getExcludedTemplateIds: (index: number) => number[];
 }) {
   const caseInputRef = useRef<HTMLInputElement>(null);
-  const selectedTemplate = form.watch(`surveyors.${sIndex}.templates.${tIndex}.template`);
+  const selectedTemplate = form.watch(
+    `surveyors.${sIndex}.templates.${tIndex}.template`,
+  );
 
   return (
-    <Card className="border-none shadow-md bg-[#347aaa] rounded-lg overflow-hidden">
+    <Card className="overflow-hidden rounded-lg border-none bg-[#347aaa] shadow-md">
       {/* Template Header with selector - Template text bigger, selector more to right */}
-      <div className="px-4 py-3 flex items-center gap-4">
+      <div className="flex items-center gap-4 px-4 py-3">
         {/* Left - Template Icon and Title (BIGGER TEXT) */}
-        <div className="flex items-center gap-2 text-white min-w-[140px]">
-          <div className="bg-white/20 rounded-full p-1.5">
+        <div className="flex min-w-[140px] items-center gap-2 text-white">
+          <div className="rounded-full bg-white/20 p-1.5">
             <FileTextIcon className="h-4 w-4" />
           </div>
-          <h4 className="font-semibold text-base">Template {tIndex + 1}</h4>
+          <h4 className="text-base font-semibold">Template {tIndex + 1}</h4>
         </div>
 
         {/* Right - Template Selector (MORE SPACE) */}
@@ -1214,7 +1278,7 @@ function TemplateCard({
           type="button"
           variant="ghost"
           size="icon"
-          className="h-6 w-6 text-white/80 hover:text-white hover:bg-white/10 flex-shrink-0"
+          className="h-6 w-6 flex-shrink-0 text-white/80 hover:bg-white/10 hover:text-white"
           onClick={() => templatesField.remove(tIndex)}
         >
           <XIcon className="h-4 w-4" />
@@ -1222,25 +1286,29 @@ function TemplateCard({
       </div>
 
       {/* Template Content */}
-      <div className="px-4 pb-4 space-y-3">
+      <div className="space-y-3 px-4 pb-4">
         {selectedTemplate && (
           <>
             {/* RESIDENT TYPE */}
             {selectedTemplate.type === "resident" && (
               <div className="grid grid-cols-[280px_1fr] gap-3">
                 {/* LEFT COLUMN - Selected Residents Box (WIDER + BIGGER TEXT) */}
-                <div className="bg-white/90 rounded-lg p-3 min-h-[140px] self-start">
-                  <div className="text-sm font-semibold text-gray-600 mb-2 pb-1 border-b border-gray-300">
+                <div className="min-h-[140px] self-start rounded-lg bg-white/90 p-3">
+                  <div className="mb-2 border-b border-gray-300 pb-1 text-sm font-semibold text-gray-600">
                     Selected Residents
                   </div>
-                  {form.watch(`surveyors.${sIndex}.templates.${tIndex}.residentIds`).length < 1 ? (
-                    <div className="text-sm text-gray-400 text-center py-6">
+                  {form.watch(
+                    `surveyors.${sIndex}.templates.${tIndex}.residentIds`,
+                  ).length < 1 ? (
+                    <div className="py-6 text-center text-sm text-gray-400">
                       No residents selected
                     </div>
                   ) : (
-                    <ul className="space-y-1.5 list-disc list-inside text-sm text-gray-700">
+                    <ul className="list-inside list-disc space-y-1.5 text-sm text-gray-700">
                       {form
-                        .watch(`surveyors.${sIndex}.templates.${tIndex}.residentIds`)
+                        .watch(
+                          `surveyors.${sIndex}.templates.${tIndex}.residentIds`,
+                        )
                         .sort((curr, next) => (curr > next ? 1 : 0))
                         .map((id) => (
                           <ResidentRowById
@@ -1250,7 +1318,9 @@ function TemplateCard({
                               form.setValue(
                                 `surveyors.${sIndex}.templates.${tIndex}.residentIds`,
                                 form
-                                  .getValues(`surveyors.${sIndex}.templates.${tIndex}.residentIds`)
+                                  .getValues(
+                                    `surveyors.${sIndex}.templates.${tIndex}.residentIds`,
+                                  )
                                   .filter((i) => i !== id),
                               );
                             }}
@@ -1264,7 +1334,9 @@ function TemplateCard({
                 {/* RIGHT COLUMN - Add Resident with Search */}
                 <AddResidentInput
                   facilityId={form.getValues("facilityId")}
-                  value={form.getValues(`surveyors.${sIndex}.templates.${tIndex}.residentIds`)}
+                  value={form.getValues(
+                    `surveyors.${sIndex}.templates.${tIndex}.residentIds`,
+                  )}
                   onChange={(value) =>
                     form.setValue(
                       `surveyors.${sIndex}.templates.${tIndex}.residentIds`,
@@ -1285,22 +1357,29 @@ function TemplateCard({
                     return (
                       <div className="grid grid-cols-[280px_1fr] gap-3">
                         {/* LEFT COLUMN - Cases Box (WIDER + BIGGER TEXT) */}
-                        <div className="bg-white/90 rounded-lg p-3 min-h-[140px] self-start">
-                          <div className="text-sm font-semibold text-gray-600 mb-2 pb-1 border-b border-gray-300">
+                        <div className="min-h-[140px] self-start rounded-lg bg-white/90 p-3">
+                          <div className="mb-2 border-b border-gray-300 pb-1 text-sm font-semibold text-gray-600">
                             Cases
                           </div>
                           {field.value && field.value.length > 0 ? (
-                            <ul className="space-y-1.5 list-disc list-inside text-sm text-gray-700">
+                            <ul className="list-inside list-disc space-y-1.5 text-sm text-gray-700">
                               {field.value.map((code, idx) => (
-                                <li key={idx} className="flex items-center justify-between">
+                                <li
+                                  key={idx}
+                                  className="flex items-center justify-between"
+                                >
                                   <span>{code}</span>
                                   <button
                                     type="button"
                                     onClick={() => {
-                                      field.onChange(field.value.filter((_, i) => i !== idx));
-                                      toast.success("Case removed successfully!");
+                                      field.onChange(
+                                        field.value.filter((_, i) => i !== idx),
+                                      );
+                                      toast.success(
+                                        "Case removed successfully!",
+                                      );
                                     }}
-                                    className="text-gray-400 hover:text-gray-600 transition-colors ml-2"
+                                    className="ml-2 text-gray-400 transition-colors hover:text-gray-600"
                                   >
                                     <XIcon className="h-3.5 w-3.5" />
                                   </button>
@@ -1308,7 +1387,7 @@ function TemplateCard({
                               ))}
                             </ul>
                           ) : (
-                            <div className="text-sm text-gray-400 text-center py-6">
+                            <div className="py-6 text-center text-sm text-gray-400">
                               No cases added
                             </div>
                           )}
@@ -1319,11 +1398,14 @@ function TemplateCard({
                           <Input
                             ref={caseInputRef}
                             placeholder="Enter Case Number"
-                            className="w-full bg-white/90 border-gray-300 h-10 rounded-lg text-sm"
+                            className="h-10 w-full rounded-lg border-gray-300 bg-white/90 text-sm"
                             onKeyDown={(e) => {
                               if (e.key === "Enter") {
                                 e.preventDefault();
-                                if (caseInputRef.current?.value && caseInputRef.current.value.trim()) {
+                                if (
+                                  caseInputRef.current?.value &&
+                                  caseInputRef.current.value.trim()
+                                ) {
                                   field.onChange([
                                     ...field.value,
                                     caseInputRef.current.value.trim(),
@@ -1338,9 +1420,12 @@ function TemplateCard({
                           {/* Add Case Button - SAME COLOR AS RESIDENT BUTTON */}
                           <Button
                             type="button"
-                            className="w-full bg-gray-500 hover:bg-gray-600 text-white h-10 rounded-lg text-sm font-medium shadow-sm"
+                            className="h-10 w-full rounded-lg bg-gray-500 text-sm font-medium text-white shadow-sm hover:bg-gray-600"
                             onClick={() => {
-                              if (caseInputRef.current?.value && caseInputRef.current.value.trim()) {
+                              if (
+                                caseInputRef.current?.value &&
+                                caseInputRef.current.value.trim()
+                              ) {
                                 field.onChange([
                                   ...field.value,
                                   caseInputRef.current.value.trim(),
@@ -1368,11 +1453,6 @@ function TemplateCard({
   );
 }
 
-
-
-
-
-
 // ResidentRowById component - only cross icon for removal
 // ResidentRowById component - showing name, room, and PCC ID
 function ResidentRowById({
@@ -1389,25 +1469,27 @@ function ResidentRowById({
   // Helper function to get initials from name
   const getInitials = (name: string) => {
     return name
-      .split(' ')
-      .map(word => word.charAt(0).toUpperCase())
-      .join('');
+      .split(" ")
+      .map((word) => word.charAt(0).toUpperCase())
+      .join("");
   };
 
   if (compact) {
     // Compact view for selected residents - includes PCC ID with initials
     return (
-      <div className="flex items-center gap-2 p-2 bg-blue-50 rounded-md">
+      <div className="flex items-center gap-2 rounded-md bg-blue-50 p-2">
         <div className="flex h-4 w-4 items-center justify-center rounded-full bg-blue-100">
           <UserIcon className="h-2 w-2 text-blue-600" />
         </div>
-        <div className="flex-1 min-w-0">
+        <div className="min-w-0 flex-1">
           {!resident.data ? (
             <Skeleton className="h-4 w-32" />
           ) : (
             <div className="text-xs">
               <span className="font-medium">
-                PCC ID: {resident.data.pcciId || getInitials(resident.data.name || "")} - Room {resident.data.roomId || "N/A"}
+                PCC ID:{" "}
+                {resident.data.pcciId || getInitials(resident.data.name || "")}{" "}
+                - Room {resident.data.roomId || "N/A"}
               </span>
             </div>
           )}
@@ -1428,9 +1510,6 @@ function ResidentRowById({
   // Original table row view (not used in this context)
   return null;
 }
-
-
-
 
 // AddResidentInput component with PCC ID, Name, Room ID on same line
 function AddResidentInput({
@@ -1471,7 +1550,9 @@ function AddResidentInput({
         facilityId: facilityId,
       });
 
-      const foundResident = response.data?.find((e) => e.pcciId === pcciId.trim());
+      const foundResident = response.data?.find(
+        (e) => e.pcciId === pcciId.trim(),
+      );
 
       if (foundResident) {
         // Check if resident belongs to the selected facility
@@ -1496,7 +1577,9 @@ function AddResidentInput({
         form.setValue("roomId", "");
         form.setValue("facilityId", facilityId);
         setSearchedResident(null);
-        toast.info("No resident found with this PCC ID. You can create a new one.");
+        toast.info(
+          "No resident found with this PCC ID. You can create a new one.",
+        );
       }
     } catch (error) {
       console.error("Error searching for resident:", error);
@@ -1549,7 +1632,7 @@ function AddResidentInput({
 
   return (
     <Card className="border border-indigo-200 bg-gradient-to-r from-indigo-50/50 to-blue-50/50">
-      <CardHeader className="pb-3 border-b border-indigo-100">
+      <CardHeader className="border-b border-indigo-100 pb-3">
         <div className="flex items-center gap-2">
           <div className="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-100">
             <PlusIcon className="h-3 w-3 text-indigo-600" />
@@ -1572,15 +1655,17 @@ function AddResidentInput({
                         <Input
                           {...field}
                           onChange={(e) => handlePcciIdChange(e.target.value)}
-                          className="bg-white h-8"
+                          className="h-8 bg-white"
                           placeholder="Enter PCC ID"
                         />
                         <Button
                           type="button"
                           variant="outline"
                           onClick={handleSearchResident}
-                          disabled={!field.value || field.value.trim().length === 0}
-                          className="h-8 px-2 bg-blue-50 hover:bg-blue-100 border-blue-200"
+                          disabled={
+                            !field.value || field.value.trim().length === 0
+                          }
+                          className="h-8 border-blue-200 bg-blue-50 px-2 hover:bg-blue-100"
                         >
                           <SearchIcon className="h-3 w-3" />
                         </Button>
@@ -1600,7 +1685,7 @@ function AddResidentInput({
                       <Input
                         {...field}
                         disabled={!!searchedResident}
-                        className="bg-white disabled:bg-gray-50 h-8"
+                        className="h-8 bg-white disabled:bg-gray-50"
                         placeholder="Resident Initials"
                       />
                     </FormControl>
@@ -1618,7 +1703,7 @@ function AddResidentInput({
                       <Input
                         {...field}
                         disabled={!!searchedResident}
-                        className="bg-white disabled:bg-gray-50 h-8"
+                        className="h-8 bg-white disabled:bg-gray-50"
                         placeholder="Room number"
                       />
                     </FormControl>
@@ -1630,7 +1715,8 @@ function AddResidentInput({
 
             {searchedResident && (
               <p className="text-xs text-green-600">
-                ✓ Resident found: {searchedResident.name} (Room: {searchedResident.roomId})
+                ✓ Resident found: {searchedResident.name} (Room:{" "}
+                {searchedResident.roomId})
               </p>
             )}
 
@@ -1638,23 +1724,20 @@ function AddResidentInput({
 
             <Button
               type="submit"
-              className="w-full bg-gray-500 hover:bg-gray-600 text-white h-10 rounded-lg text-sm font-medium shadow-sm"
+              className="h-10 w-full rounded-lg bg-gray-500 text-sm font-medium text-white shadow-sm hover:bg-gray-600"
               disabled={
                 residentMutation.isPending ||
                 !(form.watch("pcciId")?.trim?.().length > 0) ||
                 !(String(form.watch("roomId") ?? "").trim().length > 0)
               }
             >
-              {searchedResident ? "Add Existing Resident" : "Create & Add Resident"}
+              {searchedResident
+                ? "Add Existing Resident"
+                : "Create & Add Resident"}
             </Button>
-
           </form>
         </Form>
       </CardContent>
     </Card>
   );
 }
-
-
-
-

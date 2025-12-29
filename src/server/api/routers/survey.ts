@@ -16,7 +16,18 @@ import {
   resident,
 } from "@/server/db/schema";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
-import { eq, and, inArray, sql, getTableColumns, asc, desc, isNull } from "drizzle-orm";
+import { getAllowedFacilities } from "./user";
+import {
+  eq,
+  and,
+  inArray,
+  sql,
+  getTableColumns,
+  asc,
+  desc,
+  isNull,
+  or,
+} from "drizzle-orm";
 import {
   paginationInputSchema,
   surveyCreateInputSchema,
@@ -52,7 +63,10 @@ export const surveyRouter = createTRPCRouter({
     .input(surveyCreateInputSchema)
     .mutation(async ({ input, ctx }) => {
       const { residentIds: residents, caseCodes: cases, ...surveyData } = input;
-      const [newSurvey] = await ctx.db.insert(survey).values(surveyData).returning();
+      const [newSurvey] = await ctx.db
+        .insert(survey)
+        .values(surveyData)
+        .returning();
       if (!newSurvey) throw Error("Failed to create survey");
 
       if (residents.length > 0) {
@@ -97,24 +111,18 @@ export const surveyRouter = createTRPCRouter({
         .where(eq(surveyCases.surveyId, input.id));
 
       // 4. Delete survey POCs
-      await ctx.db
-        .delete(surveyPOC)
-        .where(eq(surveyPOC.surveyId, input.id));
+      await ctx.db.delete(surveyPOC).where(eq(surveyPOC.surveyId, input.id));
 
       // 5. Delete survey DOCs
-      await ctx.db
-        .delete(surveyDOC)
-        .where(eq(surveyDOC.surveyId, input.id));
+      await ctx.db.delete(surveyDOC).where(eq(surveyDOC.surveyId, input.id));
 
       // 6. Finally delete the survey itself
-      await ctx.db
-        .delete(survey)
-        .where(eq(survey.id, input.id));
+      await ctx.db.delete(survey).where(eq(survey.id, input.id));
 
       return { success: true, deletedSurveyId: input.id };
     }),
 
-  // ✅ Simplified: Just upsert without complex where clauses 
+  // ✅ Simplified: Just upsert without complex where clauses
   createGeneralResponse: protectedProcedure
     .input(saveGeneralResponsesInput)
     .mutation(async ({ ctx, input }) => {
@@ -144,7 +152,7 @@ export const surveyRouter = createTRPCRouter({
           });
       }
 
-      return { success: true, responseType: 'general' };
+      return { success: true, responseType: "general" };
     }),
 
   byId: protectedProcedure
@@ -171,15 +179,29 @@ export const surveyRouter = createTRPCRouter({
       }),
     )
     .query(async ({ ctx, input }) => {
+      const facilities = await getAllowedFacilities(ctx);
+
       const offset = (input.page - 1) * input.pageSize;
 
       const conditions = [];
       if (input.id !== undefined) conditions.push(eq(survey.id, input.id));
-      if (input.surveyorId !== undefined) conditions.push(eq(survey.surveyorId, input.surveyorId));
-      if (input.facilityId !== undefined) conditions.push(eq(survey.facilityId, input.facilityId));
-      if (input.templateId !== undefined) conditions.push(eq(survey.templateId, input.templateId));
+      if (input.surveyorId !== undefined)
+        conditions.push(eq(survey.surveyorId, input.surveyorId));
+      if (input.facilityId !== undefined)
+        conditions.push(eq(survey.facilityId, input.facilityId));
+      if (input.templateId !== undefined)
+        conditions.push(eq(survey.templateId, input.templateId));
 
-      const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+      const facilityConditions = [];
+      for (const f of facilities) {
+        console.log("Facility Conditions", f.id);
+        facilityConditions.push(eq(survey.facilityId, f.id));
+      }
+
+      const whereClause =
+        facilityConditions.length > 1
+          ? or(and(...conditions), ...facilityConditions)
+          : and(...conditions);
 
       return await ctx.db
         .select({
@@ -219,7 +241,6 @@ export const surveyRouter = createTRPCRouter({
         .where(eq(surveyResident.surveyId, input.surveyId));
     }),
 
-
   listCases: protectedProcedure
     .input(z.object({ surveyId: z.number() }))
     .query(async ({ ctx, input }) => {
@@ -241,9 +262,12 @@ export const surveyRouter = createTRPCRouter({
       const offset = (page - 1) * pageSize;
 
       const whereConditions = [];
-      if (surveyorId !== undefined) whereConditions.push(eq(survey.surveyorId, surveyorId));
-      if (templateId !== undefined) whereConditions.push(eq(survey.templateId, templateId));
-      if (facilityId !== undefined) whereConditions.push(eq(survey.facilityId, facilityId));
+      if (surveyorId !== undefined)
+        whereConditions.push(eq(survey.surveyorId, surveyorId));
+      if (templateId !== undefined)
+        whereConditions.push(eq(survey.templateId, templateId));
+      if (facilityId !== undefined)
+        whereConditions.push(eq(survey.facilityId, facilityId));
 
       const rows = await ctx.db
         .select({
@@ -288,7 +312,6 @@ export const surveyRouter = createTRPCRouter({
       return row[0] ?? null;
     }),
 
-
   checkCompletion: protectedProcedure
     .input(z.object({ surveyId: z.number() }))
     .query(async ({ ctx, input }) => {
@@ -296,7 +319,7 @@ export const surveyRouter = createTRPCRouter({
       const surveyData = await ctx.db
         .select({
           id: survey.id,
-          templateId: survey.templateId
+          templateId: survey.templateId,
         })
         .from(survey)
         .where(eq(survey.id, input.surveyId))
@@ -329,11 +352,16 @@ export const surveyRouter = createTRPCRouter({
         .where(
           and(
             eq(surveyResponse.surveyId, input.surveyId),
-            inArray(surveyResponse.requirementsMetOrUnmet, ["met", "unmet", "not_applicable"])
-          )
+            inArray(surveyResponse.requirementsMetOrUnmet, [
+              "met",
+              "unmet",
+              "not_applicable",
+            ]),
+          ),
         );
 
-      const totalRequired = (residents.length + cases.length) * questions.length;
+      const totalRequired =
+        (residents.length + cases.length) * questions.length;
       const totalAnswered = responses.length;
       const isComplete = totalAnswered === totalRequired && totalRequired > 0;
 
@@ -344,11 +372,14 @@ export const surveyRouter = createTRPCRouter({
         residents: residents.length,
         cases: cases.length,
         questions: questions.length,
-        completionPercentage: totalRequired > 0 ? Math.round((totalAnswered / totalRequired) * 100) : 0
+        completionPercentage:
+          totalRequired > 0
+            ? Math.round((totalAnswered / totalRequired) * 100)
+            : 0,
       };
     }),
 
-  // ✅ SUPER SIMPLIFIED: Let the database constraints handle uniqueness 
+  // ✅ SUPER SIMPLIFIED: Let the database constraints handle uniqueness
   createResponse: protectedProcedure
     .input(saveResponsesInput)
     .mutation(async ({ ctx, input }) => {
@@ -437,7 +468,7 @@ export const surveyRouter = createTRPCRouter({
               },
             });
         } else if (surveyCaseId) {
-          // Case constraint  
+          // Case constraint
           await ctx.db
             .insert(surveyResponse)
             .values([value])
@@ -464,8 +495,8 @@ export const surveyRouter = createTRPCRouter({
                 eq(surveyResponse.surveyId, surveyId),
                 eq(surveyResponse.questionId, value.questionId),
                 isNull(surveyResponse.residentId),
-                isNull(surveyResponse.surveyCaseId)
-              )
+                isNull(surveyResponse.surveyCaseId),
+              ),
             )
             .limit(1);
 
@@ -482,14 +513,12 @@ export const surveyRouter = createTRPCRouter({
                   eq(surveyResponse.surveyId, surveyId),
                   eq(surveyResponse.questionId, value.questionId),
                   isNull(surveyResponse.residentId),
-                  isNull(surveyResponse.surveyCaseId)
-                )
+                  isNull(surveyResponse.surveyCaseId),
+                ),
               );
           } else {
             // Insert new general response
-            await ctx.db
-              .insert(surveyResponse)
-              .values([value]);
+            await ctx.db.insert(surveyResponse).values([value]);
           }
         }
       }
@@ -520,10 +549,13 @@ export const surveyRouter = createTRPCRouter({
       return {
         success: true,
         deletedPOCsForQuestions: transitionedToMet,
-        responseType: residentId ? 'resident' : surveyCaseId ? 'case' : 'general'
+        responseType: residentId
+          ? "resident"
+          : surveyCaseId
+            ? "case"
+            : "general",
       };
     }),
-
 
   listResponses: protectedProcedure
     .input(
@@ -555,7 +587,9 @@ export const surveyRouter = createTRPCRouter({
         if (input.surveyCaseId === null) {
           whereConditions.push(isNull(surveyResponse.surveyCaseId));
         } else {
-          whereConditions.push(eq(surveyResponse.surveyCaseId, input.surveyCaseId));
+          whereConditions.push(
+            eq(surveyResponse.surveyCaseId, input.surveyCaseId),
+          );
         }
       }
 
@@ -594,10 +628,12 @@ export const surveyRouter = createTRPCRouter({
     }),
   // Add to survey router
   updateSurveyor: protectedProcedure
-    .input(z.object({
-      surveyId: z.number().int().positive(),
-      surveyorId: z.string()
-    }))
+    .input(
+      z.object({
+        surveyId: z.number().int().positive(),
+        surveyorId: z.string(),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
       const [updated] = await ctx.db
         .update(survey)
@@ -609,56 +645,59 @@ export const surveyRouter = createTRPCRouter({
     }),
 
   addResident: protectedProcedure
-  .input(z.object({
-    surveyId: z.number().int().positive(),
-    residentId: z.number().int().positive(),
-  }))
-  .mutation(async ({ ctx, input }) => {
-    // Check if already exists
-    const existing = await ctx.db
-      .select()
-      .from(surveyResident)
-      .where(
-        and(
-          eq(surveyResident.surveyId, input.surveyId),
-          eq(surveyResident.residentId, input.residentId)
+    .input(
+      z.object({
+        surveyId: z.number().int().positive(),
+        residentId: z.number().int().positive(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      // Check if already exists
+      const existing = await ctx.db
+        .select()
+        .from(surveyResident)
+        .where(
+          and(
+            eq(surveyResident.surveyId, input.surveyId),
+            eq(surveyResident.residentId, input.residentId),
+          ),
         )
-      )
-      .limit(1);
+        .limit(1);
 
-    if (existing.length > 0) {
-      throw new Error("Resident already added to this survey");
-    }
+      if (existing.length > 0) {
+        throw new Error("Resident already added to this survey");
+      }
 
-    // ✅ Delete ALL POCs for this survey
-    await ctx.db
-      .delete(surveyPOC)
-      .where(eq(surveyPOC.surveyId, input.surveyId));
+      // ✅ Delete ALL POCs for this survey
+      await ctx.db
+        .delete(surveyPOC)
+        .where(eq(surveyPOC.surveyId, input.surveyId));
 
-    // ✅ Set pocGenerated to false
-    await ctx.db
-      .update(survey)
-      .set({ pocGenerated: false })
-      .where(eq(survey.id, input.surveyId));
+      // ✅ Set pocGenerated to false
+      await ctx.db
+        .update(survey)
+        .set({ pocGenerated: false })
+        .where(eq(survey.id, input.surveyId));
 
-    // Add the resident
-    const [added] = await ctx.db
-      .insert(surveyResident)
-      .values({
-        surveyId: input.surveyId,
-        residentId: input.residentId,
-      })
-      .returning();
+      // Add the resident
+      const [added] = await ctx.db
+        .insert(surveyResident)
+        .values({
+          surveyId: input.surveyId,
+          residentId: input.residentId,
+        })
+        .returning();
 
-    return added;
-  }),
-
+      return added;
+    }),
 
   removeResident: protectedProcedure
-    .input(z.object({
-      surveyId: z.number().int().positive(),
-      residentId: z.number().int().positive(),
-    }))
+    .input(
+      z.object({
+        surveyId: z.number().int().positive(),
+        residentId: z.number().int().positive(),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
       // Delete all responses for this resident first
       await ctx.db
@@ -666,8 +705,8 @@ export const surveyRouter = createTRPCRouter({
         .where(
           and(
             eq(surveyResponse.surveyId, input.surveyId),
-            eq(surveyResponse.residentId, input.residentId)
-          )
+            eq(surveyResponse.residentId, input.residentId),
+          ),
         );
 
       // Delete POCs
@@ -676,8 +715,8 @@ export const surveyRouter = createTRPCRouter({
         .where(
           and(
             eq(surveyPOC.surveyId, input.surveyId),
-            eq(surveyPOC.residentId, input.residentId)
-          )
+            eq(surveyPOC.residentId, input.residentId),
+          ),
         );
 
       // Delete DOCs
@@ -686,8 +725,8 @@ export const surveyRouter = createTRPCRouter({
         .where(
           and(
             eq(surveyDOC.surveyId, input.surveyId),
-            eq(surveyDOC.residentId, input.residentId)
-          )
+            eq(surveyDOC.residentId, input.residentId),
+          ),
         );
 
       // Finally delete the survey resident link
@@ -696,102 +735,101 @@ export const surveyRouter = createTRPCRouter({
         .where(
           and(
             eq(surveyResident.surveyId, input.surveyId),
-            eq(surveyResident.residentId, input.residentId)
-          )
+            eq(surveyResident.residentId, input.residentId),
+          ),
         );
 
       return { success: true };
     }),
 
-addCase: protectedProcedure
-  .input(z.object({
-    surveyId: z.number().int().positive(),
-    caseCode: z.string().min(1),
-  }))
-  .mutation(async ({ ctx, input }) => {
-    // Check if already exists
-    const existing = await ctx.db
-      .select()
-      .from(surveyCases)
-      .where(
-        and(
-          eq(surveyCases.surveyId, input.surveyId),
-          eq(surveyCases.caseCode, input.caseCode)
+  addCase: protectedProcedure
+    .input(
+      z.object({
+        surveyId: z.number().int().positive(),
+        caseCode: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      // Check if already exists
+      const existing = await ctx.db
+        .select()
+        .from(surveyCases)
+        .where(
+          and(
+            eq(surveyCases.surveyId, input.surveyId),
+            eq(surveyCases.caseCode, input.caseCode),
+          ),
         )
-      )
-      .limit(1);
+        .limit(1);
 
-    if (existing.length > 0) {
-      throw new Error("Case already added to this survey");
-    }
+      if (existing.length > 0) {
+        throw new Error("Case already added to this survey");
+      }
 
-    // ✅ Delete ALL POCs for this survey
-    await ctx.db
-      .delete(surveyPOC)
-      .where(eq(surveyPOC.surveyId, input.surveyId));
+      // ✅ Delete ALL POCs for this survey
+      await ctx.db
+        .delete(surveyPOC)
+        .where(eq(surveyPOC.surveyId, input.surveyId));
 
-    // ✅ Set pocGenerated to false
-    await ctx.db
-      .update(survey)
-      .set({ pocGenerated: false })
-      .where(eq(survey.id, input.surveyId));
+      // ✅ Set pocGenerated to false
+      await ctx.db
+        .update(survey)
+        .set({ pocGenerated: false })
+        .where(eq(survey.id, input.surveyId));
 
-    // Add the case
-    const [added] = await ctx.db
-      .insert(surveyCases)
-      .values({
-        surveyId: input.surveyId,
-        caseCode: input.caseCode,
-      })
-      .returning();
+      // Add the case
+      const [added] = await ctx.db
+        .insert(surveyCases)
+        .values({
+          surveyId: input.surveyId,
+          caseCode: input.caseCode,
+        })
+        .returning();
 
-    return added;
-  }),
+      return added;
+    }),
 
+  removeCase: protectedProcedure
+    .input(
+      z.object({
+        surveyId: z.number().int().positive(),
+        caseId: z.number().int().positive(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      // Delete all responses for this case first
+      await ctx.db
+        .delete(surveyResponse)
+        .where(
+          and(
+            eq(surveyResponse.surveyId, input.surveyId),
+            eq(surveyResponse.surveyCaseId, input.caseId),
+          ),
+        );
 
-removeCase: protectedProcedure
-  .input(z.object({
-    surveyId: z.number().int().positive(),
-    caseId: z.number().int().positive(),
-  }))
-  .mutation(async ({ ctx, input }) => {
-    // Delete all responses for this case first
-    await ctx.db
-      .delete(surveyResponse)
-      .where(
-        and(
-          eq(surveyResponse.surveyId, input.surveyId),
-          eq(surveyResponse.surveyCaseId, input.caseId)
-        )
-      );
+      // Delete POCs
+      await ctx.db
+        .delete(surveyPOC)
+        .where(
+          and(
+            eq(surveyPOC.surveyId, input.surveyId),
+            eq(surveyPOC.surveyCaseId, input.caseId),
+          ),
+        );
 
-    // Delete POCs
-    await ctx.db
-      .delete(surveyPOC)
-      .where(
-        and(
-          eq(surveyPOC.surveyId, input.surveyId),
-          eq(surveyPOC.surveyCaseId, input.caseId)
-        )
-      );
+      // Delete DOCs
+      await ctx.db
+        .delete(surveyDOC)
+        .where(
+          and(
+            eq(surveyDOC.surveyId, input.surveyId),
+            eq(surveyDOC.surveyCaseId, input.caseId),
+          ),
+        );
 
-    // Delete DOCs
-    await ctx.db
-      .delete(surveyDOC)
-      .where(
-        and(
-          eq(surveyDOC.surveyId, input.surveyId),
-          eq(surveyDOC.surveyCaseId, input.caseId)
-        )
-      );
+      // Finally delete the survey case link
+      await ctx.db.delete(surveyCases).where(eq(surveyCases.id, input.caseId));
 
-    // Finally delete the survey case link
-    await ctx.db
-      .delete(surveyCases)
-      .where(eq(surveyCases.id, input.caseId));
-
-    return { success: true };
-  }),
-
-
+      return { success: true };
+    }),
 });

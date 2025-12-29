@@ -28,28 +28,28 @@ import { getAllowedFacilities } from "./user";
 
 export const residentRouter = createTRPCRouter({
   create: protectedProcedure
-  .input(residentInsertSchema)
-  .mutation(async ({ ctx, input }) => {
-    return await ctx.db.insert(resident).values(input).returning();
-  }),
+    .input(residentInsertSchema)
+    .mutation(async ({ ctx, input }) => {
+      return await ctx.db.insert(resident).values(input).returning();
+    }),
 
   bulkCreate: protectedProcedure
-  .input(
-    z.object({
-      residents: z.array(
-        z.object({
-          name: z.string().min(1),
-          facilityId: z.number().int().positive(),
-          roomId: z.string().min(1),
-          pcciId: z.string().min(1), // This maps to ppci_id in your schema
-        })
-      ),
-    })
-  )
-  .mutation(async ({ ctx, input }) => {
-    await ctx.db.insert(resident).values(input.residents);
-    return { count: input.residents.length };
-  }),
+    .input(
+      z.object({
+        residents: z.array(
+          z.object({
+            name: z.string().min(1),
+            facilityId: z.number().int().positive(),
+            roomId: z.string().min(1),
+            pcciId: z.string().min(1), // This maps to ppci_id in your schema
+          }),
+        ),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      await ctx.db.insert(resident).values(input.residents);
+      return { count: input.residents.length };
+    }),
 
   delete: protectedProcedure
     .input(
@@ -62,18 +62,19 @@ export const residentRouter = createTRPCRouter({
     }),
 
   bulkDelete: protectedProcedure
-  .input(
-    z.object({
-      ids: z.array(z.number().int().positive()).min(1, "At least one ID is required"),
-    }),
-  )
-  .mutation(async ({ ctx, input }) => {
-    // Perform the bulk delete without permission checks
-    await ctx.db.delete(resident).where(inArray(resident.id, input.ids));
-    
-    return { count: input.ids.length };
-  }),
+    .input(
+      z.object({
+        ids: z
+          .array(z.number().int().positive())
+          .min(1, "At least one ID is required"),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      // Perform the bulk delete without permission checks
+      await ctx.db.delete(resident).where(inArray(resident.id, input.ids));
 
+      return { count: input.ids.length };
+    }),
 
   byId: protectedProcedure
     .input(z.object({ id: residentSelectSchema.shape.id }))
@@ -122,7 +123,6 @@ export const residentRouter = createTRPCRouter({
 
       const facilityConditions = [];
       for (const f of facilities) {
-        console.log("Facility", f.id);
         facilityConditions.push(eq(resident.facilityId, f.id));
       }
 

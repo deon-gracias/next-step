@@ -26,7 +26,9 @@ import { AlertTriangleIcon } from "lucide-react";
 
 // ✅ Add normalizeRole helper
 function normalizeRole(role: unknown): AppRole | null {
-  const r = String(role ?? "").toLowerCase().trim();
+  const r = String(role ?? "")
+    .toLowerCase()
+    .trim();
   if (r === "owner") return "admin";
   if (r === "admin") return "admin";
   if (r === "member") return "viewer";
@@ -94,7 +96,10 @@ export default function ResidentSurveyPage() {
   });
 
   // Queries
-  const survey = api.survey.byId.useQuery({ id: surveyId }, { enabled: canViewSurveys });
+  const survey = api.survey.byId.useQuery(
+    { id: surveyId },
+    { enabled: canViewSurveys },
+  );
   const questions = api.question.list.useQuery(
     { templateId: survey.data?.templateId ?? -1 },
     { enabled: !!survey.data && canViewSurveys },
@@ -104,7 +109,9 @@ export default function ResidentSurveyPage() {
     {
       enabled: canViewSurveys,
       select: (rows) =>
-        rows.filter((r) => r.surveyId === surveyId && r.residentId === residentId),
+        rows.filter(
+          (r) => r.surveyId === surveyId && r.residentId === residentId,
+        ),
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,
       refetchInterval: false,
@@ -113,38 +120,40 @@ export default function ResidentSurveyPage() {
 
   const resident = api.resident.byId.useQuery(
     { id: residentId },
-    { enabled: Number.isFinite(residentId) && canViewSurveys }
+    { enabled: Number.isFinite(residentId) && canViewSurveys },
   );
 
-  const residentLabel =
-    resident.data?.pcciId
-      ? `Resident ${resident.data.pcciId}`
-      : `Resident ${residentId}`;
+  const residentLabel = resident.data?.pcciId
+    ? `Resident ${resident.data.pcciId}`
+    : `Resident ${residentId}`;
 
   // ✅ Check if current user is the assigned surveyor
   const currentUser = authClient.useSession();
-  const isAssignedSurveyor = survey.data?.surveyorId === currentUser.data?.user.id;
+  const isAssignedSurveyor =
+    survey.data?.surveyorId === currentUser.data?.user.id;
 
   // ✅ Permission check: can user edit this survey?
-  const canEditSurvey = canManageSurveys || 
-    (appRole === "surveyor" && isAssignedSurveyor);
+  const canEditSurvey = appRole === "surveyor" && isAssignedSurveyor;
 
   // Collect question IDs once questions are loaded
   const questionIds = React.useMemo(
     () => (questions.data ?? []).map((q) => q.id),
-    [questions.data]
+    [questions.data],
   );
 
   // Batch-fetch F-Tags for all questions
   const ftagsBatch = api.question.getFtagsByQuestionIds.useQuery(
     { questionIds },
-    { enabled: questionIds.length > 0 && canViewSurveys }
+    { enabled: questionIds.length > 0 && canViewSurveys },
   );
 
   // Build a lookup map: questionId -> [{ id, code, description }]
   const ftagsMap = React.useMemo(() => {
-    const m = new Map<number, { id: number; code: string; description: string }[]>();
-    for (const row of (ftagsBatch.data ?? [])) {
+    const m = new Map<
+      number,
+      { id: number; code: string; description: string }[]
+    >();
+    for (const row of ftagsBatch.data ?? []) {
       m.set(row.questionId, row.ftags);
     }
     return m;
@@ -159,10 +168,13 @@ export default function ResidentSurveyPage() {
   useEffect(() => {
     if (questions.data) {
       const prefilled = questions.data.map((q) => {
-        const existing = responsesQuery.data?.find((r) => r.questionId === q.id);
-        const status = typeof existing?.requirementsMetOrUnmet === "string"
-          ? existing.requirementsMetOrUnmet
-          : undefined;
+        const existing = responsesQuery.data?.find(
+          (r) => r.questionId === q.id,
+        );
+        const status =
+          typeof existing?.requirementsMetOrUnmet === "string"
+            ? existing.requirementsMetOrUnmet
+            : undefined;
         return {
           questionId: q.id,
           requirementsMetOrUnmet: status,
@@ -174,7 +186,7 @@ export default function ResidentSurveyPage() {
   }, [questions.data, responsesQuery.data, form]);
 
   const router = useRouter();
-  
+
   // Submit
   const onSubmit = async (vals: FormValues) => {
     if (!questions.data || !survey.data) return;
@@ -200,7 +212,9 @@ export default function ResidentSurveyPage() {
 
       // ✅ NEW: Validate that all "unmet" responses have findings
       const unmetWithoutFindings = filtered.filter(
-        (r) => r.requirementsMetOrUnmet === "unmet" && (!r.findings || r.findings.trim().length === 0)
+        (r) =>
+          r.requirementsMetOrUnmet === "unmet" &&
+          (!r.findings || r.findings.trim().length === 0),
       );
 
       if (unmetWithoutFindings.length > 0) {
@@ -210,7 +224,10 @@ export default function ResidentSurveyPage() {
 
       const payload = filtered.map((r) => ({
         questionId: r.questionId,
-        requirementsMetOrUnmet: r.requirementsMetOrUnmet as "met" | "unmet" | "not_applicable",
+        requirementsMetOrUnmet: r.requirementsMetOrUnmet as
+          | "met"
+          | "unmet"
+          | "not_applicable",
         findings: r.findings,
       }));
 
@@ -222,7 +239,10 @@ export default function ResidentSurveyPage() {
 
       await utils.survey.listResponses.invalidate({ surveyId, residentId });
 
-      const latestResponses = await utils.survey.listResponses.fetch({ surveyId, residentId });
+      const latestResponses = await utils.survey.listResponses.fetch({
+        surveyId,
+        residentId,
+      });
 
       const prefilled = questions.data.map((q) => {
         const existing = latestResponses.find((r) => r.questionId === q.id);
@@ -255,8 +275,10 @@ export default function ResidentSurveyPage() {
         <main className="p-4">
           <div className="flex items-center justify-center py-12">
             <div className="text-center">
-              <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-              <p className="mt-4 text-sm text-muted-foreground">Loading permissions...</p>
+              <div className="border-primary mx-auto h-8 w-8 animate-spin rounded-full border-4 border-t-transparent" />
+              <p className="text-muted-foreground mt-4 text-sm">
+                Loading permissions...
+              </p>
             </div>
           </div>
         </main>
@@ -272,8 +294,10 @@ export default function ResidentSurveyPage() {
         <main className="p-4">
           <div className="flex items-center justify-center py-12">
             <div className="text-center">
-              <h2 className="text-lg font-semibold text-destructive">Access Denied</h2>
-              <p className="mt-2 text-sm text-muted-foreground">
+              <h2 className="text-destructive text-lg font-semibold">
+                Access Denied
+              </h2>
+              <p className="text-muted-foreground mt-2 text-sm">
                 You don't have permission to view surveys.
               </p>
             </div>
@@ -293,7 +317,7 @@ export default function ResidentSurveyPage() {
         ]}
       />
 
-      <main className="p-4 space-y-4">
+      <main className="space-y-4 p-4">
         {/* ✅ Permission warning if user can't edit */}
         {!canEditSurvey && (
           <div className="rounded-md border border-amber-200 bg-amber-50 p-4">
@@ -303,7 +327,8 @@ export default function ResidentSurveyPage() {
                 <span>Only users with permission can edit this survey.</span>
               ) : (
                 <span>
-                  Only the assigned surveyor ({survey.data?.surveyorId}) or users with permission can edit this survey.
+                  Only the assigned surveyor ({survey.data?.surveyorId}) or
+                  users with permission can edit this survey.
                 </span>
               )}
             </div>
@@ -313,19 +338,19 @@ export default function ResidentSurveyPage() {
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
           {responsesFieldArray.fields.map((field, idx) => {
             const qid = field.questionId;
-            const status = form.watch(`responses.${idx}.requirementsMetOrUnmet`);
+            const status = form.watch(
+              `responses.${idx}.requirementsMetOrUnmet`,
+            );
             const isUnmet = status === "unmet";
 
             const q = questions.data?.find((qq) => qq.id === qid);
             const qPoints = (q as any)?.points ?? 0;
 
             return (
-              <div key={field.id} className="rounded border p-3 space-y-3">
+              <div key={field.id} className="space-y-3 rounded border p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1">
-                    <p className="">
-                      {q?.text ?? `Question ID: ${qid}`}
-                    </p>
+                    <p className="">{q?.text ?? `Question ID: ${qid}`}</p>
 
                     {/* F-Tags chips */}
                     <div className="mt-1 flex flex-wrap items-center gap-1">
@@ -340,12 +365,14 @@ export default function ResidentSurveyPage() {
                         </span>
                       ))}
                       {(ftagsMap.get(qid) ?? []).length === 0 && (
-                        <span className="text-[11px] text-muted-foreground">No F-Tags</span>
+                        <span className="text-muted-foreground text-[11px]">
+                          No F-Tags
+                        </span>
                       )}
                     </div>
                   </div>
 
-                  <div className="text-xs text-muted-foreground whitespace-nowrap">
+                  <div className="text-muted-foreground text-xs whitespace-nowrap">
                     Points: {qPoints}
                   </div>
                 </div>
@@ -392,7 +419,7 @@ export default function ResidentSurveyPage() {
                           value={field.value ?? ""}
                           disabled={isLocked || !canEditSurvey}
                           minRows={2}
-                          className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
+                          className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex w-full resize-none rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                         />
                       )}
                     />
@@ -403,17 +430,21 @@ export default function ResidentSurveyPage() {
           })}
 
           {/* Save button disabled when survey locked, with hover hint */}
-          <div className="relative group inline-block">
-            <Button 
-              type="submit" 
+          <div className="group relative inline-block">
+            <Button
+              type="submit"
               disabled={isLocked || upsertResponses.isPending || !canEditSurvey}
             >
-              {upsertResponses.isPending ? "Saving..." : 
-               isLocked ? "Locked" : 
-               !canEditSurvey ? "Read Only" : "Save"}
+              {upsertResponses.isPending
+                ? "Saving..."
+                : isLocked
+                  ? "Locked"
+                  : !canEditSurvey
+                    ? "Read Only"
+                    : "Save"}
             </Button>
             {(isLocked || !canEditSurvey) && (
-              <div className="pointer-events-none absolute -top-7 left-1/2 -translate-x-1/2 hidden group-hover:block rounded bg-popover px-2 py-1 text-[11px] text-popover-foreground shadow">
+              <div className="bg-popover text-popover-foreground pointer-events-none absolute -top-7 left-1/2 hidden -translate-x-1/2 rounded px-2 py-1 text-[11px] shadow group-hover:block">
                 {isLocked ? "Survey is locked" : "No edit permission"}
               </div>
             )}

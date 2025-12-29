@@ -128,32 +128,39 @@ export default function SurveysPage() {
 
   // ✅ Compute permissions
   const canViewSurveys = canUI(appRole, "surveys.view");
-  const canCreateSurveys = canUI(appRole, "surveys.manage");
+  const canCreateSurveys =
+    canUI(appRole, "surveys.manage") && appRole != "surveyor";
 
   const assignedFacility = api.user.getForOrg.useQuery({});
 
-const currentUser = authClient.useSession(); // ✅ ADD LINE 1
-const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : undefined; // ✅ ADD LINE 2
+  const currentUser = authClient.useSession(); // ✅ ADD LINE 1
+  const surveyorIdFilter =
+    appRole === "surveyor" ? currentUser.data?.user.id : undefined; // ✅ ADD LINE 2
 
   const page = Number(searchParams.get("page") ?? 1);
   const pageSize = Number(searchParams.get("pageSize") ?? 100);
 
-  const [closedTemplateFilter, setClosedTemplateFilter] = React.useState<string>("all");
-  const [pendingTemplateFilter, setPendingTemplateFilter] = React.useState<string>("all");
-  const [closedStatusFilter, setClosedStatusFilter] = React.useState<string>("all");
-  const [pendingStatusFilter, setPendingStatusFilter] = React.useState<string>("all");
+  const [closedTemplateFilter, setClosedTemplateFilter] =
+    React.useState<string>("all");
+  const [pendingTemplateFilter, setPendingTemplateFilter] =
+    React.useState<string>("all");
+  const [closedStatusFilter, setClosedStatusFilter] =
+    React.useState<string>("all");
+  const [pendingStatusFilter, setPendingStatusFilter] =
+    React.useState<string>("all");
 
   // Get all surveys
   const surveys = api.survey.list.useQuery(
-  {
-    facilityId: Array.isArray(assignedFacility.data) ? undefined : assignedFacility.data?.id,
-    surveyorId: surveyorIdFilter, // ✅ ADD THIS LINE
-    page,
-    pageSize,
-  },
-  { enabled: !!assignedFacility.data && canViewSurveys }
-);
-
+    {
+      facilityId: Array.isArray(assignedFacility.data)
+        ? undefined
+        : assignedFacility.data?.id,
+      surveyorId: surveyorIdFilter, // ✅ ADD THIS LINE
+      page,
+      pageSize,
+    },
+    { enabled: !!assignedFacility.data && canViewSurveys },
+  );
 
   // Access utils for API calls
   const utils = api.useUtils();
@@ -171,7 +178,9 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
   const handleGeneratePocForDate = async (surveys: Array<{ id: number }>) => {
     try {
       await Promise.all(
-        surveys.map((survey) => markPocGenerated.mutateAsync({ surveyId: survey.id }))
+        surveys.map((survey) =>
+          markPocGenerated.mutateAsync({ surveyId: survey.id }),
+        ),
       );
       toast.success("POC generated successfully for all templates");
     } catch (error) {
@@ -180,23 +189,29 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
   };
 
   // Date filtering states
-  const [selectedDate, setSelectedDate] = React.useState<Date | undefined>(undefined);
+  const [selectedDate, setSelectedDate] = React.useState<Date | undefined>(
+    undefined,
+  );
   const [dateSortOrder, setDateSortOrder] = React.useState<DateSortOrder>(null);
   const [datePopoverOpen, setDatePopoverOpen] = React.useState(false);
 
   // Filters
-  const [closedFacilityFilter, setClosedFacilityFilter] = React.useState<string>("all");
-  const [pendingFacilityFilter, setPendingFacilityFilter] = React.useState<string>("all");
+  const [closedFacilityFilter, setClosedFacilityFilter] =
+    React.useState<string>("all");
+  const [pendingFacilityFilter, setPendingFacilityFilter] =
+    React.useState<string>("all");
 
   // Expanded states for facility, date, and template groups
-  const [expandedClosedFacilities, setExpandedClosedFacilities] = React.useState<Set<number>>(
-    new Set()
-  );
-  const [expandedPendingFacilities, setExpandedPendingFacilities] = React.useState<Set<number>>(
-    new Set()
-  );
-  const [expandedClosedDates, setExpandedClosedDates] = React.useState<Set<string>>(new Set());
-  const [expandedPendingDates, setExpandedPendingDates] = React.useState<Set<string>>(new Set());
+  const [expandedClosedFacilities, setExpandedClosedFacilities] =
+    React.useState<Set<number>>(new Set());
+  const [expandedPendingFacilities, setExpandedPendingFacilities] =
+    React.useState<Set<number>>(new Set());
+  const [expandedClosedDates, setExpandedClosedDates] = React.useState<
+    Set<string>
+  >(new Set());
+  const [expandedPendingDates, setExpandedPendingDates] = React.useState<
+    Set<string>
+  >(new Set());
 
   // State to store survey scores
   const [surveyScores, setSurveyScores] = React.useState<
@@ -204,13 +219,18 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
   >(new Map());
 
   // State to store POC existence for each survey from survey_poc table (for display only)
-  const [surveyPocExists, setSurveyPocExists] = React.useState<Map<number, boolean>>(new Map());
+  const [surveyPocExists, setSurveyPocExists] = React.useState<
+    Map<number, boolean>
+  >(new Map());
 
   // DELETE FUNCTIONALITY
-  const [surveyToDelete, setSurveyToDelete] = useState<{ id: number; name: string } | null>(null);
+  const [surveyToDelete, setSurveyToDelete] = useState<{
+    id: number;
+    name: string;
+  } | null>(null);
 
   // ... [REST OF YOUR USEEFFECTS - KEEP THEM EXACTLY AS THEY WERE]
-  
+
   // [I'll include them all below, keeping your exact logic]
 
   React.useEffect(() => {
@@ -219,14 +239,23 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
       if (!surveys.data || surveys.data.length === 0) return;
 
       try {
-        const scoresMap = new Map<number, { score: number; totalPossible: number }>();
+        const scoresMap = new Map<
+          number,
+          { score: number; totalPossible: number }
+        >();
 
         await Promise.all(
           surveys.data.map(async (survey) => {
             try {
-              const residents = await utils.survey.listResidents.fetch({ surveyId: survey.id });
-              const cases = await utils.survey.listCases.fetch({ surveyId: survey.id });
-              const questions = await utils.question.list.fetch({ templateId: survey.templateId });
+              const residents = await utils.survey.listResidents.fetch({
+                surveyId: survey.id,
+              });
+              const cases = await utils.survey.listCases.fetch({
+                surveyId: survey.id,
+              });
+              const questions = await utils.question.list.fetch({
+                templateId: survey.templateId,
+              });
 
               if (!questions || questions.length === 0) {
                 scoresMap.set(survey.id, { score: 0, totalPossible: 0 });
@@ -257,7 +286,7 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
                         findings: rr.findings ?? null,
                       });
                     }
-                  })
+                  }),
                 );
               }
 
@@ -277,11 +306,14 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
                         findings: rr.findings ?? null,
                       });
                     }
-                  })
+                  }),
                 );
               }
 
-              if ((!residents || residents.length === 0) && (!cases || cases.length === 0)) {
+              if (
+                (!residents || residents.length === 0) &&
+                (!cases || cases.length === 0)
+              ) {
                 const rows = await utils.survey.listResponses.fetch({
                   surveyId: survey.id,
                   residentId: null,
@@ -309,7 +341,10 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
                     ? `case-${r.surveyCaseId}`
                     : "general";
                 const inner = byEntity.get(entityKey) ?? new Map();
-                inner.set(r.questionId, { status: r.status, findings: r.findings });
+                inner.set(r.questionId, {
+                  status: r.status,
+                  findings: r.findings,
+                });
                 byEntity.set(entityKey, inner);
               }
 
@@ -319,7 +354,10 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
                 let anyMet = false;
                 let allNA = true;
 
-                if ((!residents || residents.length === 0) && (!cases || cases.length === 0)) {
+                if (
+                  (!residents || residents.length === 0) &&
+                  (!cases || cases.length === 0)
+                ) {
                   const cell = byEntity.get("general")?.get(q.id);
                   if (!cell?.status) {
                     anyUnmetOrUnanswered = true;
@@ -334,7 +372,9 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
                 } else {
                   if (residents && residents.length > 0) {
                     for (const r of residents) {
-                      const cell = byEntity.get(`resident-${r.residentId}`)?.get(q.id);
+                      const cell = byEntity
+                        .get(`resident-${r.residentId}`)
+                        ?.get(q.id);
                       if (!cell?.status) {
                         anyUnmetOrUnanswered = true;
                         allNA = false;
@@ -385,17 +425,26 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
                 totalPossible: max,
               });
             } catch (error) {
-              console.error(`Failed to calculate score for survey ${survey.id}:`, error);
+              console.error(
+                `Failed to calculate score for survey ${survey.id}:`,
+                error,
+              );
               scoresMap.set(survey.id, { score: 0, totalPossible: 0 });
             }
-          })
+          }),
         );
 
         if (!cancelled && surveys.data) {
           surveys.data.forEach(async (survey) => {
-            const residents = await utils.survey.listResidents.fetch({ surveyId: survey.id });
-            const cases = await utils.survey.listCases.fetch({ surveyId: survey.id });
-            const questions = await utils.question.list.fetch({ templateId: survey.templateId });
+            const residents = await utils.survey.listResidents.fetch({
+              surveyId: survey.id,
+            });
+            const cases = await utils.survey.listCases.fetch({
+              surveyId: survey.id,
+            });
+            const questions = await utils.question.list.fetch({
+              templateId: survey.templateId,
+            });
 
             if (!questions || questions.length === 0) {
               (survey as any)._isComplete = false;
@@ -443,7 +492,10 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
               }
             }
 
-            if ((!residents || residents.length === 0) && (!cases || cases.length === 0)) {
+            if (
+              (!residents || residents.length === 0) &&
+              (!cases || cases.length === 0)
+            ) {
               const rows = await utils.survey.listResponses.fetch({
                 surveyId: survey.id,
                 residentId: null,
@@ -459,7 +511,10 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
               }
             }
 
-            const byEntity = new Map<string, Map<number, { status: string | null }>>();
+            const byEntity = new Map<
+              string,
+              Map<number, { status: string | null }>
+            >();
             for (const r of allResponses) {
               const entityKey = r.residentId
                 ? `resident-${r.residentId}`
@@ -472,14 +527,19 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
             }
 
             const isSurveyComplete = questions.every((q: any) => {
-              if ((!residents || residents.length === 0) && (!cases || cases.length === 0)) {
+              if (
+                (!residents || residents.length === 0) &&
+                (!cases || cases.length === 0)
+              ) {
                 const cell = byEntity.get("general")?.get(q.id);
                 return cell?.status && isFinalStatus(cell.status);
               }
 
               if (residents && residents.length > 0) {
                 return residents.every((r: any) => {
-                  const cell = byEntity.get(`resident-${r.residentId}`)?.get(q.id);
+                  const cell = byEntity
+                    .get(`resident-${r.residentId}`)
+                    ?.get(q.id);
                   return cell?.status && isFinalStatus(cell.status);
                 });
               }
@@ -522,13 +582,22 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
         await Promise.all(
           surveys.data.map(async (survey) => {
             try {
-              const residents = await utils.survey.listResidents.fetch({ surveyId: survey.id });
-              const cases = await utils.survey.listCases.fetch({ surveyId: survey.id });
+              const residents = await utils.survey.listResidents.fetch({
+                surveyId: survey.id,
+              });
+              const cases = await utils.survey.listCases.fetch({
+                surveyId: survey.id,
+              });
 
               let hasPOC = false;
 
-              if ((!residents || residents.length === 0) && (!cases || cases.length === 0)) {
-                const pocRows = await utils.poc.list.fetch({ surveyId: survey.id });
+              if (
+                (!residents || residents.length === 0) &&
+                (!cases || cases.length === 0)
+              ) {
+                const pocRows = await utils.poc.list.fetch({
+                  surveyId: survey.id,
+                });
                 for (const pocRow of pocRows ?? []) {
                   if (
                     pocRow.pocText &&
@@ -543,8 +612,11 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
                 if (residents && residents.length > 0) {
                   const pocResults = await Promise.all(
                     residents.map((r) =>
-                      utils.poc.list.fetch({ surveyId: survey.id, residentId: r.residentId })
-                    )
+                      utils.poc.list.fetch({
+                        surveyId: survey.id,
+                        residentId: r.residentId,
+                      }),
+                    ),
                   );
 
                   outer: for (const pocRows of pocResults) {
@@ -564,8 +636,11 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
                 if (!hasPOC && cases && cases.length > 0) {
                   const pocResults = await Promise.all(
                     cases.map((c) =>
-                      utils.poc.list.fetch({ surveyId: survey.id, surveyCaseId: c.id })
-                    )
+                      utils.poc.list.fetch({
+                        surveyId: survey.id,
+                        surveyCaseId: c.id,
+                      }),
+                    ),
                   );
 
                   outer: for (const pocRows of pocResults) {
@@ -585,10 +660,13 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
 
               pocExistsMap.set(survey.id, hasPOC);
             } catch (error) {
-              console.error(`Failed to check POC for survey ${survey.id}:`, error);
+              console.error(
+                `Failed to check POC for survey ${survey.id}:`,
+                error,
+              );
               pocExistsMap.set(survey.id, false);
             }
-          })
+          }),
         );
 
         if (!cancelled) {
@@ -618,7 +696,7 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
 
   const doesDateMatch = (
     surveyDate: string | Date | null | undefined,
-    selectedDate: Date
+    selectedDate: Date,
   ): boolean => {
     if (!surveyDate || !selectedDate) return false;
 
@@ -673,7 +751,7 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
 
       return filtered;
     },
-    [selectedDate, dateSortOrder]
+    [selectedDate, dateSortOrder],
   );
 
   const getSurveyCategory = (survey: any) => {
@@ -704,7 +782,9 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
       surveyList.forEach((survey) => {
         const facilityId = survey.facilityId;
         const facilityName = survey.facility?.name || `Facility ${facilityId}`;
-        const surveyDate = survey.surveyDate ? new Date(survey.surveyDate) : null;
+        const surveyDate = survey.surveyDate
+          ? new Date(survey.surveyDate)
+          : null;
         const dateKey =
           surveyDate && !isNaN(surveyDate.getTime())
             ? format(surveyDate, "yyyy-MM-dd")
@@ -759,7 +839,10 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
     };
   }, [surveys.data, filterAndSortSurveys, surveyScores, surveyPocExists]);
 
-  const toggleFacilityExpanded = (facilityId: number, type: "closed" | "pending") => {
+  const toggleFacilityExpanded = (
+    facilityId: number,
+    type: "closed" | "pending",
+  ) => {
     if (type === "closed") {
       const newExpanded = new Set(expandedClosedFacilities);
       if (newExpanded.has(facilityId)) {
@@ -782,7 +865,7 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
   const toggleDateExpanded = (
     facilityId: number,
     dateKey: string,
-    type: "closed" | "pending"
+    type: "closed" | "pending",
   ) => {
     const expandKey = `${facilityId}-${dateKey}`;
     if (type === "closed") {
@@ -836,7 +919,9 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
                 const scoreData = surveyScores.get(survey.id);
                 const scorePercentage =
                   scoreData && scoreData.totalPossible > 0
-                    ? Math.round((scoreData.score / scoreData.totalPossible) * 100)
+                    ? Math.round(
+                      (scoreData.score / scoreData.totalPossible) * 100,
+                    )
                     : 0;
                 const isPocCompleted = pocExists || scorePercentage >= 85;
 
@@ -852,7 +937,7 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
             })
             .filter(
               (
-                entry
+                entry,
               ): entry is [
                 string,
                 {
@@ -862,8 +947,11 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
                   completedSurveys: number;
                   pocCount: number;
                 },
-              ] => entry[1] && Array.isArray(entry[1].surveys) && entry[1].surveys.length > 0
-            )
+              ] =>
+                entry[1] &&
+                Array.isArray(entry[1].surveys) &&
+                entry[1].surveys.length > 0,
+            ),
         ),
       }))
       .filter((group) => group.dates.size > 0);
@@ -912,7 +1000,7 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
             })
             .filter(
               (
-                entry
+                entry,
               ): entry is [
                 string,
                 {
@@ -924,9 +1012,11 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
                 },
               ] => {
                 const [_, dateGroup] = entry;
-                return typeof dateGroup !== "string" && dateGroup.surveys.length > 0;
-              }
-            )
+                return (
+                  typeof dateGroup !== "string" && dateGroup.surveys.length > 0
+                );
+              },
+            ),
         ),
       }))
       .filter((group) => group.dates.size > 0);
@@ -991,7 +1081,7 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
   const getPocStatus = (
     survey: any,
     scoreData: { score: number; totalPossible: number } | undefined,
-    sectionType: "completed" | "pending" = "completed"
+    sectionType: "completed" | "pending" = "completed",
   ) => {
     if (sectionType === "pending") {
       if (survey.isLocked) {
@@ -1022,7 +1112,9 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
       return {
         status: isCompleted ? "In Progress" : "POC Not Started (Unlocked)",
         variant: "secondary" as const,
-        className: isCompleted ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-800",
+        className: isCompleted
+          ? "bg-blue-100 text-blue-800"
+          : "bg-gray-100 text-gray-800",
       };
     }
 
@@ -1071,8 +1163,8 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
         className="bg-muted/50 hover:bg-muted/70 cursor-pointer font-medium"
         onClick={onToggle}
       >
-        <TableCell className="text-center font-mono pl-0">
-          <Button variant="ghost" size="sm" className="p-0 h-auto">
+        <TableCell className="pl-0 text-center font-mono">
+          <Button variant="ghost" size="sm" className="h-auto p-0">
             {isExpanded ? (
               <ChevronDownIcon className="h-4 w-4" />
             ) : (
@@ -1082,9 +1174,11 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
         </TableCell>
         <TableCell colSpan={3}>
           <div className="flex items-center gap-2">
-            🏢 {group.facility && <FacilityHoverCard facility={group.facility} />}
+            🏢{" "}
+            {group.facility && <FacilityHoverCard facility={group.facility} />}
             <Badge variant="outline" className="ml-2">
-              {group.totalTemplates} template{group.totalTemplates !== 1 ? "s" : ""}
+              {group.totalTemplates} template
+              {group.totalTemplates !== 1 ? "s" : ""}
             </Badge>
           </div>
         </TableCell>
@@ -1104,10 +1198,12 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
             <React.Fragment key={dateKey}>
               <TableRow
                 className="bg-muted/30 hover:bg-muted/50 cursor-pointer"
-                onClick={() => toggleDateExpanded(group.facilityId, dateKey, type)}
+                onClick={() =>
+                  toggleDateExpanded(group.facilityId, dateKey, type)
+                }
               >
-                <TableCell className="text-center font-mono pl-0">
-                  <Button variant="ghost" size="sm" className="p-0 h-auto">
+                <TableCell className="pl-0 text-center font-mono">
+                  <Button variant="ghost" size="sm" className="h-auto p-0">
                     {isDateExpanded ? (
                       <ChevronDownIcon className="h-4 w-4" />
                     ) : (
@@ -1121,12 +1217,14 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
                   </div>
                 </TableCell>
                 <TableCell>
-                  {type === "pending" ? (
-                    (() => {
+                  {type === "pending"
+                    ? (() => {
                       const completedCount = dateGroup.surveys.filter(
-                        (s) => s._isComplete === true
+                        (s) => s._isComplete === true,
                       ).length;
-                      const lockedCount = dateGroup.surveys.filter((s) => s.isLocked).length;
+                      const lockedCount = dateGroup.surveys.filter(
+                        (s) => s.isLocked,
+                      ).length;
                       const totalCount = dateGroup.surveys.length;
                       const allCompleted = completedCount === totalCount;
 
@@ -1134,8 +1232,8 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
                         <Badge
                           className={cn(
                             allCompleted
-                              ? "bg-green-100 text-green-800 border-green-300"
-                              : "bg-yellow-100 text-yellow-800 border-yellow-300"
+                              ? "border-green-300 bg-green-100 text-green-800"
+                              : "border-yellow-300 bg-yellow-100 text-yellow-800",
                           )}
                         >
                           {!allCompleted
@@ -1144,13 +1242,15 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
                         </Badge>
                       );
                     })()
-                  ) : (
-                    (() => {
+                    : (() => {
                       const requiresPoc = dateGroup.surveys.filter((s) => {
                         const scoreData = surveyScores.get(s.id);
                         const pct =
                           scoreData && scoreData.totalPossible > 0
-                            ? Math.round((scoreData.score / scoreData.totalPossible) * 100)
+                            ? Math.round(
+                              (scoreData.score / scoreData.totalPossible) *
+                              100,
+                            )
                             : 0;
                         return pct < 85;
                       });
@@ -1159,7 +1259,7 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
 
                       if (totalRequiring === 0) {
                         return (
-                          <Badge className="bg-slate-100 text-slate-800 border-slate-300">
+                          <Badge className="border-slate-300 bg-slate-100 text-slate-800">
                             No POC Required
                           </Badge>
                         );
@@ -1176,15 +1276,14 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
                         <Badge
                           className={cn(
                             allDone
-                              ? "bg-green-100 text-green-800 border-green-300"
-                              : "bg-blue-100 text-blue-800 border-blue-300"
+                              ? "border-green-300 bg-green-100 text-green-800"
+                              : "border-blue-300 bg-blue-100 text-blue-800",
                           )}
                         >
                           {completedCount}/{totalRequiring} POC completed
                         </Badge>
                       );
-                    })()
-                  )}
+                    })()}
                 </TableCell>
 
                 <TableCell>-</TableCell>
@@ -1196,14 +1295,16 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
                         <Button
                           variant="destructive"
                           size="sm"
-                          className="h-7 bg-red-600 hover:bg-red-700 text-white"
+                          className="h-7 bg-red-600 text-white hover:bg-red-700"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleGeneratePocForDate(dateGroup.surveys);
                           }}
                           disabled={markPocGenerated.isPending}
                         >
-                          {markPocGenerated.isPending ? "Generating..." : "Generate POC"}
+                          {markPocGenerated.isPending
+                            ? "Generating..."
+                            : "Generate POC"}
                         </Button>
                       )}
                   </div>
@@ -1212,13 +1313,13 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
 
               {isDateExpanded && (
                 <TableRow>
-                  <TableCell colSpan={7} className="p-4 bg-muted/20">
+                  <TableCell colSpan={7} className="bg-muted/20 p-4">
                     <div
                       className={cn(
-                        "rounded-lg border-2 overflow-hidden",
+                        "overflow-hidden rounded-lg border-2",
                         type === "closed"
                           ? "border-green-300 bg-white"
-                          : "border-amber-300 bg-white"
+                          : "border-amber-300 bg-white",
                       )}
                     >
                       <Table>
@@ -1227,14 +1328,16 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
                             className={cn(
                               "border-b-2",
                               type === "closed"
-                                ? "bg-green-50 hover:bg-green-50 border-green-200"
-                                : "bg-amber-50 hover:bg-amber-50 border-amber-200"
+                                ? "border-green-200 bg-green-50 hover:bg-green-50"
+                                : "border-amber-200 bg-amber-50 hover:bg-amber-50",
                             )}
                           >
                             <TableHead
                               className={cn(
                                 "w-[80px] text-right font-semibold",
-                                type === "closed" ? "text-green-800" : "text-amber-800"
+                                type === "closed"
+                                  ? "text-green-800"
+                                  : "text-amber-800",
                               )}
                             >
                               System ID
@@ -1242,7 +1345,9 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
                             <TableHead
                               className={cn(
                                 "font-semibold",
-                                type === "closed" ? "text-green-800" : "text-amber-800"
+                                type === "closed"
+                                  ? "text-green-800"
+                                  : "text-amber-800",
                               )}
                             >
                               Date
@@ -1250,7 +1355,9 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
                             <TableHead
                               className={cn(
                                 "font-semibold",
-                                type === "closed" ? "text-green-800" : "text-amber-800"
+                                type === "closed"
+                                  ? "text-green-800"
+                                  : "text-amber-800",
                               )}
                             >
                               Surveyor
@@ -1258,7 +1365,9 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
                             <TableHead
                               className={cn(
                                 "font-semibold",
-                                type === "closed" ? "text-green-800" : "text-amber-800"
+                                type === "closed"
+                                  ? "text-green-800"
+                                  : "text-amber-800",
                               )}
                             >
                               Template
@@ -1266,15 +1375,19 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
                             <TableHead
                               className={cn(
                                 "font-semibold",
-                                type === "closed" ? "text-green-800" : "text-amber-800"
+                                type === "closed"
+                                  ? "text-green-800"
+                                  : "text-amber-800",
                               )}
                             >
                               Status
                             </TableHead>
                             <TableHead
                               className={cn(
-                                "font-semibold text-center",
-                                type === "closed" ? "text-green-800" : "text-amber-800"
+                                "text-center font-semibold",
+                                type === "closed"
+                                  ? "text-green-800"
+                                  : "text-amber-800",
                               )}
                             >
                               Score
@@ -1282,7 +1395,9 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
                             <TableHead
                               className={cn(
                                 "text-right font-semibold",
-                                type === "closed" ? "text-green-800" : "text-amber-800"
+                                type === "closed"
+                                  ? "text-green-800"
+                                  : "text-amber-800",
                               )}
                             >
                               Action
@@ -1294,12 +1409,16 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
                             const scoreData = surveyScores.get(survey.id);
                             const scorePercentage =
                               scoreData && scoreData.totalPossible > 0
-                                ? Math.round((scoreData.score / scoreData.totalPossible) * 100)
+                                ? Math.round(
+                                  (scoreData.score /
+                                    scoreData.totalPossible) *
+                                  100,
+                                )
                                 : 0;
                             const pocStatus = getPocStatus(
                               survey,
                               scoreData,
-                              type === "pending" ? "pending" : "completed"
+                              type === "pending" ? "pending" : "completed",
                             );
 
                             return (
@@ -1318,7 +1437,10 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
                                     {survey.surveyor ? (
                                       <>
                                         <span>{survey.surveyor.name}</span>
-                                        <Badge variant="outline" className="text-xs">
+                                        <Badge
+                                          variant="outline"
+                                          className="text-xs"
+                                        >
                                           {survey.surveyor.email}
                                         </Badge>
                                       </>
@@ -1328,10 +1450,17 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
                                   </div>
                                 </TableCell>
                                 <TableCell>
-                                  {survey.template && <TemplateHoverCard template={survey.template} />}
+                                  {survey.template && (
+                                    <TemplateHoverCard
+                                      template={survey.template}
+                                    />
+                                  )}
                                 </TableCell>
                                 <TableCell>
-                                  <Badge variant={pocStatus.variant} className={pocStatus.className}>
+                                  <Badge
+                                    variant={pocStatus.variant}
+                                    className={pocStatus.className}
+                                  >
                                     {pocStatus.status}
                                   </Badge>
                                 </TableCell>
@@ -1344,13 +1473,14 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
                                           className={cn(
                                             "font-mono",
                                             scorePercentage >= 80
-                                              ? "bg-green-100 text-green-800 border-green-300"
+                                              ? "border-green-300 bg-green-100 text-green-800"
                                               : scorePercentage >= 60
-                                                ? "bg-yellow-100 text-yellow-800 border-yellow-300"
-                                                : "bg-red-100 text-red-800 border-red-300"
+                                                ? "border-yellow-300 bg-yellow-100 text-yellow-800"
+                                                : "border-red-300 bg-red-100 text-red-800",
                                           )}
                                         >
-                                          {scoreData.score}/{scoreData.totalPossible}
+                                          {scoreData.score}/
+                                          {scoreData.totalPossible}
                                         </Badge>
                                       </div>
                                     ) : (
@@ -1362,8 +1492,11 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
                                   <Link
                                     href={`/qisv/surveys/${survey.id}`}
                                     className={cn(
-                                      buttonVariants({ variant: "outline", size: "icon" }),
-                                      "size-6"
+                                      buttonVariants({
+                                        variant: "outline",
+                                        size: "icon",
+                                      }),
+                                      "size-6",
                                     )}
                                   >
                                     <ExternalLinkIcon className="h-3 w-3" />
@@ -1374,49 +1507,63 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
                                       <Button
                                         variant="ghost"
                                         size="icon"
-                                        className="ml-2 h-6 w-6 text-destructive hover:text-destructive"
+                                        className="text-destructive hover:text-destructive ml-2 h-6 w-6"
                                         onClick={(e) => {
                                           e.stopPropagation();
                                           setSurveyToDelete({
                                             id: survey.id,
-                                            name: survey.template?.name ?? `Survey ${survey.id}`,
+                                            name:
+                                              survey.template?.name ??
+                                              `Survey ${survey.id}`,
                                           });
                                         }}
                                         disabled={deleteSurvey.isPending}
                                       >
                                         <TrashIcon className="h-4 w-4" />
-                                        <span className="sr-only">Delete survey</span>
+                                        <span className="sr-only">
+                                          Delete survey
+                                        </span>
                                       </Button>
                                     </AlertDialogTrigger>
 
                                     <AlertDialogContent>
                                       <AlertDialogHeader>
-                                        <AlertDialogTitle>Delete Template</AlertDialogTitle>
+                                        <AlertDialogTitle>
+                                          Delete Template
+                                        </AlertDialogTitle>
                                         <AlertDialogDescription>
-                                          Are you sure you want to delete the template "
+                                          Are you sure you want to delete the
+                                          template "
                                           {surveyToDelete?.id === survey.id
                                             ? surveyToDelete?.id
-                                            : survey.template?.name ?? `Survey ${survey.id}`}
-                                          "? This action cannot be undone and will delete all
-                                          associated data.
+                                            : (survey.template?.name ??
+                                              `Survey ${survey.id}`)}
+                                          "? This action cannot be undone and
+                                          will delete all associated data.
                                         </AlertDialogDescription>
                                       </AlertDialogHeader>
                                       <AlertDialogFooter>
                                         <AlertDialogCancel
-                                          onClick={() => setSurveyToDelete(null)}
+                                          onClick={() =>
+                                            setSurveyToDelete(null)
+                                          }
                                           disabled={deleteSurvey.isPending}
                                         >
                                           Cancel
                                         </AlertDialogCancel>
                                         <AlertDialogAction
-                                          className="px-4 py-2 rounded-lg bg-destructive text-white hover:bg-red-700 active:bg-red-800 focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors duration-150"
+                                          className="bg-destructive rounded-lg px-4 py-2 text-white transition-colors duration-150 hover:bg-red-700 focus:ring-2 focus:ring-red-500 focus:outline-none active:bg-red-800"
                                           onClick={() => {
                                             setSurveyToDelete(null);
-                                            deleteSurvey.mutate({ id: survey.id });
+                                            deleteSurvey.mutate({
+                                              id: survey.id,
+                                            });
                                           }}
                                           disabled={deleteSurvey.isPending}
                                         >
-                                          {deleteSurvey.isPending ? "Deleting..." : "Delete"}
+                                          {deleteSurvey.isPending
+                                            ? "Deleting..."
+                                            : "Delete"}
                                         </AlertDialogAction>
                                       </AlertDialogFooter>
                                     </AlertDialogContent>
@@ -1445,14 +1592,16 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
         {roleLoading ? (
           <div className="flex items-center justify-center py-12">
             <div className="text-center">
-              <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto mb-4"></div>
+              <div className="border-primary mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-t-transparent"></div>
               <p className="text-muted-foreground">Loading permissions...</p>
             </div>
           </div>
         ) : !canViewSurveys ? (
           <div className="flex items-center justify-center py-12">
             <div className="text-center">
-              <p className="text-lg font-semibold text-destructive mb-2">Access Denied</p>
+              <p className="text-destructive mb-2 text-lg font-semibold">
+                Access Denied
+              </p>
               <p className="text-muted-foreground">
                 You don't have permission to view surveys.
               </p>
@@ -1463,19 +1612,24 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
             <div className="mb-6 flex items-center justify-between">
               <div>
                 <h1 className="text-2xl font-bold tracking-tight">Surveys</h1>
-                <p className="text-muted-foreground">Manage surveys by facility</p>
+                <p className="text-muted-foreground">
+                  Manage surveys by facility
+                </p>
               </div>
 
               {canCreateSurveys && (
-                <Link href={`/qisv/surveys/new`} className={cn(buttonVariants())}>
+                <Link
+                  href={`/qisv/surveys/new`}
+                  className={cn(buttonVariants())}
+                >
                   <PlusIcon className="mr-2 h-4 w-4" /> Create Survey
                 </Link>
               )}
             </div>
 
             {/* Global Filters */}
-            <div className="mb-6 rounded-lg border bg-muted/30 p-4">
-              <div className="flex items-center justify-between mb-3">
+            <div className="bg-muted/30 mb-6 rounded-lg border p-4">
+              <div className="mb-3 flex items-center justify-between">
                 <h3 className="text-sm font-semibold">Filters</h3>
                 {hasActiveFilters && (
                   <Button
@@ -1492,19 +1646,26 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
 
               <div className="flex flex-wrap items-center gap-3">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-medium text-muted-foreground">Date:</span>
-                  <Popover open={datePopoverOpen} onOpenChange={setDatePopoverOpen}>
+                  <span className="text-muted-foreground text-xs font-medium">
+                    Date:
+                  </span>
+                  <Popover
+                    open={datePopoverOpen}
+                    onOpenChange={setDatePopoverOpen}
+                  >
                     <PopoverTrigger asChild>
                       <Button
                         variant="outline"
                         className={cn(
                           "h-8 justify-start text-left font-normal",
                           !selectedDate && "text-muted-foreground",
-                          selectedDate && "bg-primary/10 border-primary/20"
+                          selectedDate && "bg-primary/10 border-primary/20",
                         )}
                       >
                         <CalendarIcon className="mr-2 h-3 w-3" />
-                        {selectedDate ? format(selectedDate, "MMM dd, yyyy") : "Select date"}
+                        {selectedDate
+                          ? format(selectedDate, "MMM dd, yyyy")
+                          : "Select date"}
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
@@ -1532,12 +1693,16 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-medium text-muted-foreground">Sort:</span>
+                  <span className="text-muted-foreground text-xs font-medium">
+                    Sort:
+                  </span>
                   <div className="flex rounded-md border">
                     <Button
                       variant={dateSortOrder === "asc" ? "default" : "ghost"}
                       size="sm"
-                      onClick={() => setDateSortOrder(dateSortOrder === "asc" ? null : "asc")}
+                      onClick={() =>
+                        setDateSortOrder(dateSortOrder === "asc" ? null : "asc")
+                      }
                       className="h-8 rounded-r-none border-r"
                     >
                       <ArrowUpIcon className="h-3 w-3" />
@@ -1546,7 +1711,11 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
                     <Button
                       variant={dateSortOrder === "desc" ? "default" : "ghost"}
                       size="sm"
-                      onClick={() => setDateSortOrder(dateSortOrder === "desc" ? null : "desc")}
+                      onClick={() =>
+                        setDateSortOrder(
+                          dateSortOrder === "desc" ? null : "desc",
+                        )
+                      }
                       className="h-8 rounded-l-none"
                     >
                       <ArrowDownIcon className="h-3 w-3" />
@@ -1556,31 +1725,46 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
                 </div>
 
                 {selectedDate && (
-                  <Badge variant="secondary" className="bg-primary/10 text-primary">
+                  <Badge
+                    variant="secondary"
+                    className="bg-primary/10 text-primary"
+                  >
                     Date: {format(selectedDate, "MMM dd, yyyy")}
                   </Badge>
                 )}
                 {dateSortOrder && (
-                  <Badge variant="secondary" className="bg-primary/10 text-primary">
-                    Sort: {dateSortOrder === "asc" ? "Oldest First" : "Newest First"}
+                  <Badge
+                    variant="secondary"
+                    className="bg-primary/10 text-primary"
+                  >
+                    Sort:{" "}
+                    {dateSortOrder === "asc" ? "Oldest First" : "Newest First"}
                   </Badge>
                 )}
               </div>
             </div>
 
             {/* Completed Surveys */}
-            <div className="mb-8 rounded-lg border border-[#0c2152] bg-[#0c2152]">
-              <div className="flex items-center justify-between p-4 border-b border-[#0c2152] bg-[#0c2152]-100/50">
+            <div className="mb-8 overflow-hidden rounded-lg border border-[#0c2152] bg-[#0c2152]">
+              <div className="bg-[#0c2152]-100/50 flex items-center justify-between border-b border-[#0c2152] p-4">
                 <div className="flex items-center gap-2">
                   <div className="h-3 w-3 rounded-full bg-green-500"></div>
-                  <span className="font-semibold text-white">Completed Surveys</span>
-                  <Badge variant="secondary" className="bg-green-200 text-green-800">
+                  <span className="font-semibold text-white">
+                    Completed Surveys
+                  </span>
+                  <Badge
+                    variant="secondary"
+                    className="bg-green-200 text-green-800"
+                  >
                     {filteredClosedGroups.length} facilit
                     {filteredClosedGroups.length !== 1 ? "ies" : "y"}
                   </Badge>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Select value={closedFacilityFilter} onValueChange={setClosedFacilityFilter}>
+                  <Select
+                    value={closedFacilityFilter}
+                    onValueChange={setClosedFacilityFilter}
+                  >
                     <SelectTrigger className="h-8 w-36 bg-white">
                       <SelectValue placeholder="All Facilities" />
                     </SelectTrigger>
@@ -1602,14 +1786,21 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
                     className="w-40"
                   />
 
-                  <Select value={closedStatusFilter} onValueChange={setClosedStatusFilter}>
+                  <Select
+                    value={closedStatusFilter}
+                    onValueChange={setClosedStatusFilter}
+                  >
                     <SelectTrigger className="h-8 w-40 bg-white">
                       <SelectValue placeholder="POC Status" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Status</SelectItem>
-                      <SelectItem value="poc-completed">POC Completed</SelectItem>
-                      <SelectItem value="poc-pending">POC In Progress</SelectItem>
+                      <SelectItem value="poc-completed">
+                        POC Completed
+                      </SelectItem>
+                      <SelectItem value="poc-pending">
+                        POC In Progress
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1632,7 +1823,10 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
                     ))
                   ) : filteredClosedGroups.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-muted-foreground py-8 text-center">
+                      <TableCell
+                        colSpan={7}
+                        className="text-muted-foreground py-8 text-center"
+                      >
                         {hasActiveFilters
                           ? "No completed surveys found with current filters."
                           : "No completed surveys found."}
@@ -1644,8 +1838,12 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
                         key={`closed-group-${group.facilityId}`}
                         group={group}
                         type="closed"
-                        isExpanded={expandedClosedFacilities.has(group.facilityId)}
-                        onToggle={() => toggleFacilityExpanded(group.facilityId, "closed")}
+                        isExpanded={expandedClosedFacilities.has(
+                          group.facilityId,
+                        )}
+                        onToggle={() =>
+                          toggleFacilityExpanded(group.facilityId, "closed")
+                        }
                       />
                     ))
                   )}
@@ -1655,17 +1853,25 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
 
             {/* Pending Surveys */}
             <div className="mb-8 rounded-lg border border-[#0c2152] bg-[#0C2152]">
-              <div className="flex items-center justify-between p-4 border-b border-[#0c2152] ">
+              <div className="flex items-center justify-between border-b border-[#0c2152] p-4">
                 <div className="flex items-center gap-2">
                   <div className="h-3 w-3 rounded-full bg-amber-500"></div>
-                  <span className="font-semibold text-white">Pending Surveys</span>
-                  <Badge variant="secondary" className="bg-amber-200 text-amber-800">
+                  <span className="font-semibold text-white">
+                    Pending Surveys
+                  </span>
+                  <Badge
+                    variant="secondary"
+                    className="bg-amber-200 text-amber-800"
+                  >
                     {filteredPendingGroups.length} facilit
                     {filteredPendingGroups.length !== 1 ? "ies" : "y"}
                   </Badge>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Select value={pendingFacilityFilter} onValueChange={setPendingFacilityFilter}>
+                  <Select
+                    value={pendingFacilityFilter}
+                    onValueChange={setPendingFacilityFilter}
+                  >
                     <SelectTrigger className="h-8 w-36 bg-white">
                       <SelectValue placeholder="All Facilities" />
                     </SelectTrigger>
@@ -1687,7 +1893,10 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
                     className="w-40"
                   />
 
-                  <Select value={pendingStatusFilter} onValueChange={setPendingStatusFilter}>
+                  <Select
+                    value={pendingStatusFilter}
+                    onValueChange={setPendingStatusFilter}
+                  >
                     <SelectTrigger className="h-8 w-40 bg-white">
                       <SelectValue placeholder="All Status" />
                     </SelectTrigger>
@@ -1701,7 +1910,7 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
               </div>
 
               <Table>
-                <TableBody className="bg-white rounded-lg border-white">
+                <TableBody className="rounded-lg border-white bg-white">
                   {surveys.isPending ? (
                     Array.from({ length: 3 }).map((_, i) => (
                       <TableRow key={`pending-skel-${i}`}>
@@ -1717,7 +1926,10 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
                     ))
                   ) : filteredPendingGroups.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-muted-foreground py-8 text-center">
+                      <TableCell
+                        colSpan={7}
+                        className="text-muted-foreground py-8 text-center"
+                      >
                         {hasActiveFilters
                           ? "No pending surveys found with current filters."
                           : "No pending surveys found."}
@@ -1729,8 +1941,12 @@ const surveyorIdFilter = appRole === "surveyor" ? currentUser.data?.user.id : un
                         key={`pending-group-${group.facilityId}`}
                         group={group}
                         type="pending"
-                        isExpanded={expandedPendingFacilities.has(group.facilityId)}
-                        onToggle={() => toggleFacilityExpanded(group.facilityId, "pending")}
+                        isExpanded={expandedPendingFacilities.has(
+                          group.facilityId,
+                        )}
+                        onToggle={() =>
+                          toggleFacilityExpanded(group.facilityId, "pending")
+                        }
                       />
                     ))
                   )}
