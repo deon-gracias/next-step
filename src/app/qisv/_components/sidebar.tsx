@@ -41,7 +41,9 @@ type AppRole =
  * Common Better Auth org roles are: owner | admin | member. [web:314]
  */
 function normalizeRole(role: unknown): AppRole | null {
-  const r = String(role ?? "").toLowerCase().trim();
+  const r = String(role ?? "")
+    .toLowerCase()
+    .trim();
 
   // Better Auth defaults -> your app
   if (r === "owner") return "admin";
@@ -98,6 +100,7 @@ const NAV_ALLOWED: Record<AppRole, Set<NavItemName>> = {
     "Dashboard",
     "Surveys",
     "Residents",
+    "Templates",
     "Facilities",
     "Users",
     "F-Tags",
