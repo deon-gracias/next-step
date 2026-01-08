@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -643,6 +644,7 @@ function TemplateComboBox({
 }
 
 export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
+  const router = useRouter()
   const user = authClient.useSession();
 
   // Get current organization ID from session
@@ -1054,6 +1056,7 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
                           };
                           form.reset(freshFormData);
                           surveyorsField.replace([]);
+                          router.replace('/qisv/surveys')
                           return "Survey created successfully! Form has been cleared.";
                         },
                         error: () => "Failed to create survey.",
