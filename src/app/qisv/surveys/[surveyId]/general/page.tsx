@@ -126,7 +126,7 @@ export default function GeneralSurveyPage() {
     survey.data?.surveyorId === currentUser.data?.user.id;
 
   // ✅ Permission check: can user edit this survey?
-  const canEditSurvey = appRole === "surveyor" && isAssignedSurveyor;
+  const canEditSurvey = isAssignedSurveyor;
   //const canEditSurvey = canManageSurveys || (appRole === "surveyor" && isAssignedSurveyor);
 
   // Collect question IDs once questions are loaded

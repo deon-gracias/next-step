@@ -133,7 +133,7 @@ export default function ResidentSurveyPage() {
     survey.data?.surveyorId === currentUser.data?.user.id;
 
   // ✅ Permission check: can user edit this survey?
-  const canEditSurvey = appRole === "surveyor" && isAssignedSurveyor;
+  const canEditSurvey = isAssignedSurveyor;
 
   // Collect question IDs once questions are loaded
   const questionIds = React.useMemo(

@@ -131,7 +131,7 @@ export default function CaseSurveyPage() {
   );
 
   // ✅ Permission check: can user edit this survey?
-  const canEditSurvey = appRole === "surveyor" && isAssignedSurveyor;
+  const canEditSurvey = isAssignedSurveyor;
 
   // Collect question IDs
   const questionIds = React.useMemo(
