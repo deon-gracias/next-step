@@ -93,7 +93,7 @@ export function SignInForm({
   const onForgotPasswordSubmit = async (data: ForgotPasswordFormData) => {
     try {
       // Use Better Auth's built-in forgot password method
-      const response = await authClient.forgetPassword({
+      const response = await authClient.requestPasswordReset({
         email: data.email,
         redirectTo: `${window.location.origin}/reset-password`,
       });
@@ -101,7 +101,7 @@ export function SignInForm({
       if (response.error) {
         throw new Error(response.error.message);
       }
-      
+
       toast.success("Password reset email sent! Check your inbox.");
       setForgotPasswordOpen(false);
       forgotPasswordForm.reset();
@@ -199,7 +199,7 @@ export function SignInForm({
               Enter your email address and we&apos;ll send you a secure link to reset your password.
             </DialogDescription>
           </DialogHeader>
-          
+
           <Form {...forgotPasswordForm}>
             <form onSubmit={forgotPasswordForm.handleSubmit(onForgotPasswordSubmit)}>
               <div className="grid gap-4 py-4">
@@ -210,10 +210,10 @@ export function SignInForm({
                     <FormItem>
                       <FormLabel>Email Address</FormLabel>
                       <FormControl>
-                        <Input 
-                          type="email" 
-                          placeholder="Enter your email address" 
-                          {...field} 
+                        <Input
+                          type="email"
+                          placeholder="Enter your email address"
+                          {...field}
                         />
                       </FormControl>
                       <FormMessage />
@@ -221,7 +221,7 @@ export function SignInForm({
                   )}
                 />
               </div>
-              
+
               <DialogFooter className="flex-col sm:flex-row gap-2">
                 <Button
                   type="button"
