@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation"
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -644,7 +644,7 @@ function TemplateComboBox({
 }
 
 export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
-  const router = useRouter()
+  const router = useRouter();
   const user = authClient.useSession();
 
   // Get current organization ID from session
@@ -806,16 +806,16 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
   return (
     <div className="space-y-4">
       {/* Draft Status Indicator */}
-      <div className="sticky top-4 z-10">
-        {showSavedIndicator && (
-          <Alert className="animate-in slide-in-from-top-2 border-green-200 bg-green-50">
-            <SaveIcon className="h-4 w-4 text-green-600" />
-            <AlertDescription className="text-green-800">
-              Draft saved automatically
-            </AlertDescription>
-          </Alert>
-        )}
-      </div>
+      {/* <div className="fixed top-4 z-10"> */}
+      {/*   {showSavedIndicator && ( */}
+      {/*     <Alert className="animate-in slide-in-from-top-2 border-green-200 bg-green-50"> */}
+      {/*       <SaveIcon className="h-4 w-4 text-green-600" /> */}
+      {/*       <AlertDescription className="text-green-800"> */}
+      {/*         Draft saved automatically */}
+      {/*       </AlertDescription> */}
+      {/*     </Alert> */}
+      {/*   )} */}
+      {/* </div> */}
 
       {/* Offline Protection Info + Clear Data Button */}
       <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
@@ -1056,7 +1056,7 @@ export function NewSurveyForm({ ...props }: React.ComponentProps<"form">) {
                           };
                           form.reset(freshFormData);
                           surveyorsField.replace([]);
-                          router.replace('/qisv/surveys')
+                          router.replace("/qisv/surveys");
                           return "Survey created successfully! Form has been cleared.";
                         },
                         error: () => "Failed to create survey.",
