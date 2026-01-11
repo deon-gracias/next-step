@@ -2406,6 +2406,19 @@ export default function SurveyDetailPage() {
     const label = hasAnyPOC ? "View POC" : "Fill POC";
     const totalUnmetQuestions = sheetBlocks.length;
     const templateType = survey.data?.template?.type;
+    const totalUnmetEntities = Array.from(
+      new Set(
+        sheetBlocks.flatMap((block) =>
+          block.items.map((item) =>
+            templateType === "resident"
+              ? item.residentPcciId
+              : templateType === "case"
+                ? item.caseNumber
+                : "general",
+          ),
+        ),
+      ),
+    ).length;
 
     return (
       <Sheet
