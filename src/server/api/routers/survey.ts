@@ -215,6 +215,7 @@ export const surveyRouter = createTRPCRouter({
         .leftJoin(user, eq(survey.surveyorId, user.id))
         .leftJoin(facility, eq(survey.facilityId, facility.id))
         .leftJoin(template, eq(survey.templateId, template.id))
+        .orderBy(desc(survey.createdAt))
         .limit(input.pageSize)
         .offset(offset);
     }),
