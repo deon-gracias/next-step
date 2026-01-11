@@ -139,7 +139,10 @@ function normalizeRole(role: unknown): AppRole | null {
 
 // Helper component to display facility information
 const FacilityInfo = ({ facilityId }: { facilityId: number }) => {
-  const facility = api.facility.byId.useQuery({ id: facilityId }, { enabled: facilityId > 0 });
+  const facility = api.facility.byId.useQuery(
+    { id: facilityId },
+    { enabled: facilityId > 0 },
+  );
 
   if (facility.isPending) {
     return (
@@ -160,7 +163,10 @@ const FacilityInfo = ({ facilityId }: { facilityId: number }) => {
 
 // Helper component to display surveyor information
 const SurveyorInfo = ({ surveyorId }: { surveyorId: string }) => {
-  const surveyor = api.user.byId.useQuery({ id: surveyorId }, { enabled: Boolean(surveyorId) });
+  const surveyor = api.user.byId.useQuery(
+    { id: surveyorId },
+    { enabled: Boolean(surveyorId) },
+  );
 
   if (surveyor.isPending) {
     return (
@@ -174,7 +180,11 @@ const SurveyorInfo = ({ surveyorId }: { surveyorId: string }) => {
   return (
     <div className="flex items-center gap-2">
       <User className="h-4 w-4 text-blue-600" />
-      <span>{surveyor.data?.name || surveyor.data?.email || `User ID: ${surveyorId}`}</span>
+      <span>
+        {surveyor.data?.name ||
+          surveyor.data?.email ||
+          `User ID: ${surveyorId}`}
+      </span>
     </div>
   );
 };
@@ -197,17 +207,23 @@ const CommentsSection = ({
   handleAddComment: () => void;
   addComment: any;
 }) => (
-  <div className="border-t bg-slate-50/50 mt-6 pt-6">
-    <div className="flex items-center justify-between mb-4">
+  <div className="mt-6 border-t bg-slate-50/50 pt-6">
+    <div className="mb-4 flex items-center justify-between">
       <div className="flex items-center gap-3">
-        <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">
+        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100">
           <MessageCircle className="h-4 w-4 text-blue-600" />
         </div>
         <div>
-          <span className="text-sm font-semibold text-gray-900">Discussion</span>
+          <span className="text-sm font-semibold text-gray-900">
+            Discussion
+          </span>
           {comments.data && comments.data.length > 0 && (
-            <Badge variant="secondary" className="ml-2 text-xs bg-blue-100 text-blue-800">
-              {comments.data.length} comment{comments.data.length !== 1 ? "s" : ""}
+            <Badge
+              variant="secondary"
+              className="ml-2 bg-blue-100 text-xs text-blue-800"
+            >
+              {comments.data.length} comment
+              {comments.data.length !== 1 ? "s" : ""}
             </Badge>
           )}
         </div>
@@ -224,33 +240,41 @@ const CommentsSection = ({
 
     {showComments && (
       <div className="space-y-4">
-        <div className="max-h-60 overflow-y-auto space-y-3 bg-white rounded-lg border p-4">
+        <div className="max-h-60 space-y-3 overflow-y-auto rounded-lg border bg-white p-4">
           {comments.data && comments.data.length > 0 ? (
             comments.data.map((comment: any) => (
-              <div key={comment.id} className="flex gap-3 p-3 rounded-lg bg-gray-50 border">
+              <div
+                key={comment.id}
+                className="flex gap-3 rounded-lg border bg-gray-50 p-3"
+              >
                 <div className="flex-shrink-0">
-                  <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-purple-600">
                     <User className="h-4 w-4 text-white" />
                   </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
+                <div className="min-w-0 flex-1">
+                  <div className="mb-1 flex items-center gap-2">
                     <span className="text-sm font-medium text-gray-900">
                       {comment.author ? comment.author.name : "Unknown User"}
                     </span>
                     <div className="flex items-center gap-1 text-xs text-gray-500">
                       <Clock className="h-3 w-3" />
                       {comment.createdAt &&
-                        format(new Date(comment.createdAt), "MMM dd, yyyy 'at' h:mm a")}
+                        format(
+                          new Date(comment.createdAt),
+                          "MMM dd, yyyy 'at' h:mm a",
+                        )}
                     </div>
                   </div>
-                  <p className="text-sm text-gray-700 leading-relaxed">{comment.commentText}</p>
+                  <p className="text-sm leading-relaxed text-gray-700">
+                    {comment.commentText}
+                  </p>
                 </div>
               </div>
             ))
           ) : (
-            <div className="text-center text-gray-500 py-8">
-              <MessageCircle className="h-8 w-8 mx-auto mb-2 opacity-30" />
+            <div className="py-8 text-center text-gray-500">
+              <MessageCircle className="mx-auto mb-2 h-8 w-8 opacity-30" />
               <p className="text-sm">No comments yet. Start the discussion!</p>
             </div>
           )}
@@ -296,12 +320,12 @@ export default function SurveyDetailPage() {
   // Fetch facility and surveyor data separately
   const facility = api.facility.byId.useQuery(
     { id: survey.data?.facilityId ?? -1 },
-    { enabled: Boolean(survey.data?.facilityId) }
+    { enabled: Boolean(survey.data?.facilityId) },
   );
 
   const surveyor = api.user.byId.useQuery(
     { id: survey.data?.surveyorId ?? "" },
-    { enabled: Boolean(survey.data?.surveyorId) }
+    { enabled: Boolean(survey.data?.surveyorId) },
   );
 
   const surveyCompletion = api.survey.checkCompletion.useQuery(
@@ -309,24 +333,27 @@ export default function SurveyDetailPage() {
     {
       enabled: Boolean(surveyId),
       refetchInterval: 3000,
-    }
+    },
   );
 
   // Get ALL questions without pagination
   const questions = api.question.list.useQuery(
     { templateId: survey.data?.templateId ?? -1 },
-    { enabled: Boolean(survey.data?.templateId) }
+    { enabled: Boolean(survey.data?.templateId) },
   );
 
   const questionIds = (questions.data ?? []).map((q) => q.id);
 
   const ftagsBatch = api.question.getFtagsByQuestionIds.useQuery(
     { questionIds },
-    { enabled: questionIds.length > 0 }
+    { enabled: questionIds.length > 0 },
   );
 
   const ftagsMap = React.useMemo(() => {
-    const m = new Map<number, { id: number; code: string; description: string }[]>();
+    const m = new Map<
+      number,
+      { id: number; code: string; description: string }[]
+    >();
     if (ftagsBatch.data) {
       for (const row of ftagsBatch.data) {
         m.set(row.questionId, row.ftags);
@@ -341,7 +368,7 @@ export default function SurveyDetailPage() {
       surveyId: surveyId,
       templateId: survey.data?.templateId ?? -1,
     },
-    { enabled: Boolean(survey.data?.templateId) }
+    { enabled: Boolean(survey.data?.templateId) },
   );
 
   // Mutations
@@ -351,14 +378,20 @@ export default function SurveyDetailPage() {
       await utils.survey.byId.invalidate({ id: surveyId });
       toast.success("Survey locked");
     },
-    onError: (e) => toast.error((e as { message?: string })?.message ?? "Failed to lock survey"),
+    onError: (e) =>
+      toast.error(
+        (e as { message?: string })?.message ?? "Failed to lock survey",
+      ),
   });
   const unlockSurvey = api.survey.unlock.useMutation({
     onSuccess: async () => {
       await utils.survey.byId.invalidate({ id: surveyId });
       toast.success("Survey unlocked");
     },
-    onError: (e) => toast.error((e as { message?: string })?.message ?? "Failed to unlock survey"),
+    onError: (e) =>
+      toast.error(
+        (e as { message?: string })?.message ?? "Failed to unlock survey",
+      ),
   });
 
   const markPocGenerated = api.survey.markPocGenerated.useMutation({
@@ -367,14 +400,20 @@ export default function SurveyDetailPage() {
       toast.success("POC generation enabled successfully");
     },
     onError: (e) =>
-      toast.error((e as { message?: string })?.message ?? "Failed to enable POC generation"),
+      toast.error(
+        (e as { message?: string })?.message ??
+        "Failed to enable POC generation",
+      ),
   });
 
   const pocUpsert = api.poc.upsert.useMutation();
   const docUpsert = api.doc.upsert.useMutation();
   const addComment = api.pocComment.create.useMutation({
     onSuccess: async () => {
-      await utils.pocComment.list.invalidate({ surveyId, templateId: survey.data?.templateId ?? -1 });
+      await utils.pocComment.list.invalidate({
+        surveyId,
+        templateId: survey.data?.templateId ?? -1,
+      });
       setNewComment("");
       toast.success("Comment added successfully");
     },
@@ -413,7 +452,9 @@ export default function SurveyDetailPage() {
 
   const [manageSurveyDialogOpen, setManageSurveyDialogOpen] = useState(false);
   const [selectedSurveyorId, setSelectedSurveyorId] = useState<string>("");
-  const [selectedResidentId, setSelectedResidentId] = useState<number | null>(null);
+  const [selectedResidentId, setSelectedResidentId] = useState<number | null>(
+    null,
+  );
   const [activeTab, setActiveTab] = useState<string>("surveyor");
 
   const pdfContentRef = useRef<HTMLDivElement>(null);
@@ -441,15 +482,20 @@ export default function SurveyDetailPage() {
     onMutate: async (deletedResident) => {
       mutationCountRef.current += 1;
       await utils.survey.listResidents.cancel({ surveyId });
-      const previousResidents = utils.survey.listResidents.getData({ surveyId });
+      const previousResidents = utils.survey.listResidents.getData({
+        surveyId,
+      });
       utils.survey.listResidents.setData({ surveyId }, (old) =>
-        old?.filter((r) => r.residentId !== deletedResident.residentId)
+        old?.filter((r) => r.residentId !== deletedResident.residentId),
       );
       return { previousResidents };
     },
     onError: (err, deletedResident, context) => {
       mutationCountRef.current -= 1;
-      utils.survey.listResidents.setData({ surveyId }, context?.previousResidents);
+      utils.survey.listResidents.setData(
+        { surveyId },
+        context?.previousResidents,
+      );
       setTimeout(() => {
         toast.error(err.message ?? "Failed to remove resident");
       }, 100);
@@ -484,7 +530,7 @@ export default function SurveyDetailPage() {
       await utils.survey.listCases.cancel({ surveyId });
       const previousCases = utils.survey.listCases.getData({ surveyId });
       utils.survey.listCases.setData({ surveyId }, (old) =>
-        old?.filter((c) => c.id !== deletedCase.caseId)
+        old?.filter((c) => c.id !== deletedCase.caseId),
       );
       return { previousCases };
     },
@@ -538,7 +584,8 @@ export default function SurveyDetailPage() {
   const canManage = canUI(appRole, "surveys.manage");
   const canLockUnlock = canUI(appRole, "surveys.lockUnlock");
   const canGeneratePoc = canUI(appRole, "surveys.generatePoc");
-  const canEditPoc = canUI(appRole, "poc.edit") || canUI(appRole, "compliance.manage");
+  const canEditPoc =
+    canUI(appRole, "poc.edit") || canUI(appRole, "compliance.manage");
 
   const currentOrgId = activeOrg.data?.id;
 
@@ -552,7 +599,7 @@ export default function SurveyDetailPage() {
     },
     {
       enabled: !!currentOrgId,
-    }
+    },
   );
 
   // Fetch available residents (from same facility)
@@ -593,7 +640,7 @@ export default function SurveyDetailPage() {
                   findings: rr.findings ?? null,
                 });
               }
-            })
+            }),
           );
         }
 
@@ -613,13 +660,16 @@ export default function SurveyDetailPage() {
                   findings: rr.findings ?? null,
                 });
               }
-            })
+            }),
           );
         }
 
         if (survey.data.template?.type === "general") {
-          const generalRows = await utils.survey.listResponses.fetch({ surveyId });
-          const generalResponses = generalRows?.filter((r) => !r.residentId && !r.surveyCaseId) ?? [];
+          const generalRows = await utils.survey.listResponses.fetch({
+            surveyId,
+          });
+          const generalResponses =
+            generalRows?.filter((r) => !r.residentId && !r.surveyCaseId) ?? [];
 
           for (const rr of generalResponses) {
             arr.push({
@@ -642,7 +692,13 @@ export default function SurveyDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [survey.data, residents.data, cases.data, surveyId, utils.survey.listResponses]);
+  }, [
+    survey.data,
+    residents.data,
+    cases.data,
+    surveyId,
+    utils.survey.listResponses,
+  ]);
 
   // Fetch existing POCs for all survey types
   useEffect(() => {
@@ -664,10 +720,16 @@ export default function SurveyDetailPage() {
         let foundAnyPOC = false;
         let firstPocText = "";
 
-        if (templateType === "resident" && residents.data && residents.data.length > 0) {
+        if (
+          templateType === "resident" &&
+          residents.data &&
+          residents.data.length > 0
+        ) {
           const residentIds = residents.data.map((r) => r.residentId);
           const pocResults = await Promise.all(
-            residentIds.map((rid) => utils.poc.list.fetch({ surveyId, residentId: rid }))
+            residentIds.map((rid) =>
+              utils.poc.list.fetch({ surveyId, residentId: rid }),
+            ),
           );
 
           for (let i = 0; i < residentIds.length; i++) {
@@ -685,10 +747,16 @@ export default function SurveyDetailPage() {
               }
             }
           }
-        } else if (templateType === "case" && cases.data && cases.data.length > 0) {
+        } else if (
+          templateType === "case" &&
+          cases.data &&
+          cases.data.length > 0
+        ) {
           const caseIds = cases.data.map((c) => c.id);
           const pocResults = await Promise.all(
-            caseIds.map((cid) => utils.poc.list.fetch({ surveyId, surveyCaseId: cid }))
+            caseIds.map((cid) =>
+              utils.poc.list.fetch({ surveyId, surveyCaseId: cid }),
+            ),
           );
 
           for (let i = 0; i < caseIds.length; i++) {
@@ -760,10 +828,16 @@ export default function SurveyDetailPage() {
         let foundAnyDOC = false;
         let firstDocDate: Date | null = null;
 
-        if (templateType === "resident" && residents.data && residents.data.length > 0) {
+        if (
+          templateType === "resident" &&
+          residents.data &&
+          residents.data.length > 0
+        ) {
           const residentIds = residents.data.map((r) => r.residentId);
           const docResults = await Promise.all(
-            residentIds.map((rid) => utils.doc.list.fetch({ surveyId, residentId: rid }))
+            residentIds.map((rid) =>
+              utils.doc.list.fetch({ surveyId, residentId: rid }),
+            ),
           );
 
           for (let i = 0; i < residentIds.length; i++) {
@@ -782,10 +856,16 @@ export default function SurveyDetailPage() {
               }
             }
           }
-        } else if (templateType === "case" && cases.data && cases.data.length > 0) {
+        } else if (
+          templateType === "case" &&
+          cases.data &&
+          cases.data.length > 0
+        ) {
           const caseIds = cases.data.map((c) => c.id);
           const docResults = await Promise.all(
-            caseIds.map((cid) => utils.doc.list.fetch({ surveyId, surveyCaseId: cid }))
+            caseIds.map((cid) =>
+              utils.doc.list.fetch({ surveyId, surveyCaseId: cid }),
+            ),
           );
 
           for (let i = 0; i < caseIds.length; i++) {
@@ -855,7 +935,9 @@ export default function SurveyDetailPage() {
   const byEntity = useMemo(() => {
     const m = new Map<string, Map<number, ResponseCell>>();
     for (const r of allResponses) {
-      const entityKey = r.residentId ? `resident-${r.residentId}` : `case-${r.surveyCaseId}`;
+      const entityKey = r.residentId
+        ? `resident-${r.residentId}`
+        : `case-${r.surveyCaseId}`;
       const inner = m.get(entityKey) ?? new Map<number, ResponseCell>();
       inner.set(r.questionId, { status: r.status, findings: r.findings });
       m.set(entityKey, inner);
@@ -934,12 +1016,26 @@ export default function SurveyDetailPage() {
     }
 
     return out;
-  }, [questions.data, byEntity, residents.data, cases.data, survey.data?.template?.type, ftagsMap]);
+  }, [
+    questions.data,
+    byEntity,
+    residents.data,
+    cases.data,
+    survey.data?.template?.type,
+    ftagsMap,
+  ]);
 
   const generalStrengths = React.useMemo(() => {
-    if (survey.data?.template?.type !== "general" || !questions.data || !allResponses) return [];
+    if (
+      survey.data?.template?.type !== "general" ||
+      !questions.data ||
+      !allResponses
+    )
+      return [];
 
-    const generalResponses = allResponses.filter((r) => !r.residentId && !r.surveyCaseId);
+    const generalResponses = allResponses.filter(
+      (r) => !r.residentId && !r.surveyCaseId,
+    );
 
     return (questions.data ?? []).map((q) => {
       const resp = generalResponses.find((r) => r.questionId === q.id);
@@ -985,14 +1081,17 @@ export default function SurveyDetailPage() {
     if (!residents.data || allQuestionIds.length === 0) return map;
 
     for (const r of residents.data) {
-      const ansMap = byResident.get(r.residentId) ?? new Map<number, ResponseCell>();
+      const ansMap =
+        byResident.get(r.residentId) ?? new Map<number, ResponseCell>();
       let answered = 0;
 
       for (const qid of allQuestionIds) {
         const item = ansMap.get(qid);
         if (
           item?.status &&
-          (item.status === "met" || item.status === "unmet" || item.status === "not_applicable")
+          (item.status === "met" ||
+            item.status === "unmet" ||
+            item.status === "not_applicable")
         ) {
           answered += 1;
         }
@@ -1016,7 +1115,9 @@ export default function SurveyDetailPage() {
         const item = ansMap.get(qid);
         if (
           item?.status &&
-          (item.status === "met" || item.status === "unmet" || item.status === "not_applicable")
+          (item.status === "met" ||
+            item.status === "unmet" ||
+            item.status === "not_applicable")
         ) {
           answered += 1;
         }
@@ -1082,7 +1183,7 @@ export default function SurveyDetailPage() {
         }
       } else if (survey.data?.template?.type === "general") {
         const generalResponses = allResponses.filter(
-          (r: any) => !r.residentId && !r.surveyCaseId
+          (r: any) => !r.residentId && !r.surveyCaseId,
         );
         const cell = generalResponses.find((r: any) => r.questionId === q.id);
 
@@ -1112,8 +1213,19 @@ export default function SurveyDetailPage() {
     const max = qs.reduce((s, q) => s + (q.points ?? 0), 0);
     const pct = max > 0 ? Math.round((awarded / max) * 100) : 0;
 
-    return { overallScore: awarded, maxTemplatePoints: max, overallPercent: pct };
-  }, [questions.data, byEntity, residents.data, cases.data, allResponses, survey.data?.template?.type]);
+    return {
+      overallScore: awarded,
+      maxTemplatePoints: max,
+      overallPercent: pct,
+    };
+  }, [
+    questions.data,
+    byEntity,
+    residents.data,
+    cases.data,
+    allResponses,
+    survey.data?.template?.type,
+  ]);
 
   const isSurveyComplete = useMemo(() => {
     if (!questions.data || questions.data.length === 0) return false;
@@ -1139,7 +1251,9 @@ export default function SurveyDetailPage() {
         });
       });
     } else if (templateType === "general") {
-      const generalResponses = allResponses.filter((r) => !r.residentId && !r.surveyCaseId);
+      const generalResponses = allResponses.filter(
+        (r) => !r.residentId && !r.surveyCaseId,
+      );
 
       const result = questions.data.every((q) => {
         const response = generalResponses.find((r) => r.questionId === q.id);
@@ -1156,7 +1270,14 @@ export default function SurveyDetailPage() {
     }
 
     return false;
-  }, [questions.data, residents.data, cases.data, allResponses, byEntity, survey.data?.template?.type]);
+  }, [
+    questions.data,
+    residents.data,
+    cases.data,
+    allResponses,
+    byEntity,
+    survey.data?.template?.type,
+  ]);
 
   const isLocked = Boolean(survey.data?.isLocked);
   const pocGenerated = Boolean(survey.data?.pocGenerated);
@@ -1171,7 +1292,11 @@ export default function SurveyDetailPage() {
         text: string;
         ftags: string[];
         strengthPct: number;
-        items: Array<{ residentPcciId?: string; caseNumber?: string; findings: string | null }>;
+        items: Array<{
+          residentPcciId?: string;
+          caseNumber?: string;
+          findings: string | null;
+        }>;
       }>;
     }
 
@@ -1181,28 +1306,44 @@ export default function SurveyDetailPage() {
       text: string;
       ftags: string[];
       strengthPct: number;
-      items: Array<{ residentPcciId?: string; caseNumber?: string; findings: string | null }>;
+      items: Array<{
+        residentPcciId?: string;
+        caseNumber?: string;
+        findings: string | null;
+      }>;
     }> = [];
 
     for (const q of qrows) {
-      const items: Array<{ residentPcciId?: string; caseNumber?: string; findings: string | null }> = [];
+      const items: Array<{
+        residentPcciId?: string;
+        caseNumber?: string;
+        findings: string | null;
+      }> = [];
 
       if (templateType === "resident") {
         for (const r of residents.data ?? []) {
           const cell = byResident.get(r.residentId)?.get(q.id);
           if (cell?.status === "unmet") {
-            items.push({ residentPcciId: r.pcciId, findings: cell.findings ?? null });
+            items.push({
+              residentPcciId: r.pcciId,
+              findings: cell.findings ?? null,
+            });
           }
         }
       } else if (templateType === "case") {
         for (const c of cases.data ?? []) {
           const cell = byEntity.get(`case-${c.id}`)?.get(q.id);
           if (cell?.status === "unmet") {
-            items.push({ caseNumber: c.caseCode, findings: cell.findings ?? null });
+            items.push({
+              caseNumber: c.caseCode,
+              findings: cell.findings ?? null,
+            });
           }
         }
       } else if (templateType === "general") {
-        const generalResponses = allResponses.filter((r) => !r.residentId && !r.surveyCaseId);
+        const generalResponses = allResponses.filter(
+          (r) => !r.residentId && !r.surveyCaseId,
+        );
         const cell = generalResponses.find((r) => r.questionId === q.id);
         if (cell?.status === "unmet") {
           items.push({ findings: cell.findings ?? null });
@@ -1211,7 +1352,9 @@ export default function SurveyDetailPage() {
 
       if (items.length > 0) {
         const ftags = (ftagsMap.get(q.id) ?? []).map((f) => f.code);
-        const s = questionStrengths.find((x) => x.questionId === q.id)?.strengthPct ?? 0;
+        const s =
+          questionStrengths.find((x) => x.questionId === q.id)?.strengthPct ??
+          0;
         blocks.push({ qid: q.id, text: q.text, ftags, strengthPct: s, items });
       }
     }
@@ -1261,20 +1404,28 @@ export default function SurveyDetailPage() {
       doc.text(`Survey Number: #${surveyId}`, 20, yPos);
       yPos += 8;
 
-      const facilityName = facility.data?.name || `Facility ID: ${survey.data.facilityId}`;
+      const facilityName =
+        facility.data?.name || `Facility ID: ${survey.data.facilityId}`;
       doc.text(`Facility: ${facilityName}`, 20, yPos);
       yPos += 8;
 
       const surveyorName =
-        surveyor.data?.name || surveyor.data?.email || `User ID: ${survey.data.surveyorId}`;
+        surveyor.data?.name ||
+        surveyor.data?.email ||
+        `User ID: ${survey.data.surveyorId}`;
       doc.text(`Surveyor: ${surveyorName}`, 20, yPos);
       yPos += 8;
 
-      const templateName = survey.data.template?.name || `Template #${survey.data.templateId}`;
+      const templateName =
+        survey.data.template?.name || `Template #${survey.data.templateId}`;
       doc.text(`Template: ${templateName}`, 20, yPos);
       yPos += 8;
 
-      doc.text(`Generated: ${format(new Date(), "MMM dd, yyyy 'at' h:mm a")}`, 20, yPos);
+      doc.text(
+        `Generated: ${format(new Date(), "MMM dd, yyyy 'at' h:mm a")}`,
+        20,
+        yPos,
+      );
       yPos += 15;
 
       doc.setFontSize(16);
@@ -1308,7 +1459,11 @@ export default function SurveyDetailPage() {
 
         doc.setFontSize(11);
         doc.setFont("helvetica", "normal");
-        doc.text(`Compliance Date: ${format(combinedDOC, "MMM dd, yyyy")}`, 20, yPos);
+        doc.text(
+          `Compliance Date: ${format(combinedDOC, "MMM dd, yyyy")}`,
+          20,
+          yPos,
+        );
         yPos += 15;
       }
 
@@ -1392,7 +1547,10 @@ export default function SurveyDetailPage() {
                 doc.text(`• PCCI: ${item.residentPcciId}`, 25, yPos);
                 if (item.findings) {
                   yPos += 4;
-                  const findingsLines = doc.splitTextToSize(`  Findings: ${item.findings}`, 160);
+                  const findingsLines = doc.splitTextToSize(
+                    `  Findings: ${item.findings}`,
+                    160,
+                  );
                   doc.text(findingsLines, 25, yPos);
                   yPos += findingsLines.length * 4;
                 }
@@ -1410,7 +1568,10 @@ export default function SurveyDetailPage() {
                 doc.text(`• Case: ${item.caseNumber}`, 25, yPos);
                 if (item.findings) {
                   yPos += 4;
-                  const findingsLines = doc.splitTextToSize(`  Findings: ${item.findings}`, 160);
+                  const findingsLines = doc.splitTextToSize(
+                    `  Findings: ${item.findings}`,
+                    160,
+                  );
                   doc.text(findingsLines, 25, yPos);
                   yPos += findingsLines.length * 4;
                 }
@@ -1425,7 +1586,10 @@ export default function SurveyDetailPage() {
             doc.setFont("helvetica", "normal");
             for (const item of block.items) {
               if (item.findings) {
-                const findingsLines = doc.splitTextToSize(`• ${item.findings}`, 160);
+                const findingsLines = doc.splitTextToSize(
+                  `• ${item.findings}`,
+                  160,
+                );
                 doc.text(findingsLines, 25, yPos);
                 yPos += findingsLines.length * 4 + 3;
               } else {
@@ -1438,7 +1602,9 @@ export default function SurveyDetailPage() {
         }
       }
 
-      doc.save(`POC_Report_Survey_${surveyId}_${format(new Date(), "yyyy-MM-dd")}.pdf`);
+      doc.save(
+        `POC_Report_Survey_${surveyId}_${format(new Date(), "yyyy-MM-dd")}.pdf`,
+      );
       toast.success("PDF downloaded successfully");
     } catch (error) {
       console.error("Failed to generate PDF:", error);
@@ -1478,7 +1644,8 @@ export default function SurveyDetailPage() {
 
       if (templateType === "resident") {
         for (const r of residents.data ?? []) {
-          const ansMap = byResident.get(r.residentId) ?? new Map<number, ResponseCell>();
+          const ansMap =
+            byResident.get(r.residentId) ?? new Map<number, ResponseCell>();
           for (const q of questions.data ?? []) {
             const cell = ansMap.get(q.id);
             if (cell?.status === "unmet") {
@@ -1488,7 +1655,8 @@ export default function SurveyDetailPage() {
         }
       } else if (templateType === "case") {
         for (const c of cases.data ?? []) {
-          const ansMap = byEntity.get(`case-${c.id}`) ?? new Map<number, ResponseCell>();
+          const ansMap =
+            byEntity.get(`case-${c.id}`) ?? new Map<number, ResponseCell>();
           for (const q of questions.data ?? []) {
             const cell = ansMap.get(q.id);
             if (cell?.status === "unmet") {
@@ -1497,7 +1665,9 @@ export default function SurveyDetailPage() {
           }
         }
       } else if (templateType === "general") {
-        const generalResponses = allResponses.filter((r) => !r.residentId && !r.surveyCaseId);
+        const generalResponses = allResponses.filter(
+          (r) => !r.residentId && !r.surveyCaseId,
+        );
         for (const q of questions.data ?? []) {
           const cell = generalResponses.find((r) => r.questionId === q.id);
           if (cell?.status === "unmet") {
@@ -1527,7 +1697,7 @@ export default function SurveyDetailPage() {
           }
 
           return pocUpsert.mutateAsync(pocData);
-        })
+        }),
       );
 
       const newPocMap = new Map(pocMap);
@@ -1544,17 +1714,21 @@ export default function SurveyDetailPage() {
 
       if (templateType === "resident") {
         const affectedResidents = Array.from(
-          new Set(updates.map((u) => u.residentId).filter(Boolean))
+          new Set(updates.map((u) => u.residentId).filter(Boolean)),
         );
         await Promise.all(
-          affectedResidents.map((rid) => utils.poc.list.invalidate({ surveyId, residentId: rid }))
+          affectedResidents.map((rid) =>
+            utils.poc.list.invalidate({ surveyId, residentId: rid }),
+          ),
         );
       } else if (templateType === "case") {
         const affectedCases = Array.from(
-          new Set(updates.map((u) => u.surveyCaseId).filter(Boolean))
+          new Set(updates.map((u) => u.surveyCaseId).filter(Boolean)),
         );
         await Promise.all(
-          affectedCases.map((cid) => utils.poc.list.invalidate({ surveyId, surveyCaseId: cid }))
+          affectedCases.map((cid) =>
+            utils.poc.list.invalidate({ surveyId, surveyCaseId: cid }),
+          ),
         );
       } else if (templateType === "general") {
         await utils.poc.list.invalidate({ surveyId });
@@ -1596,7 +1770,8 @@ export default function SurveyDetailPage() {
 
       if (templateType === "resident") {
         for (const r of residents.data ?? []) {
-          const ansMap = byResident.get(r.residentId) ?? new Map<number, ResponseCell>();
+          const ansMap =
+            byResident.get(r.residentId) ?? new Map<number, ResponseCell>();
           for (const q of questions.data ?? []) {
             const cell = ansMap.get(q.id);
             if (cell?.status === "unmet") {
@@ -1606,7 +1781,8 @@ export default function SurveyDetailPage() {
         }
       } else if (templateType === "case") {
         for (const c of cases.data ?? []) {
-          const ansMap = byEntity.get(`case-${c.id}`) ?? new Map<number, ResponseCell>();
+          const ansMap =
+            byEntity.get(`case-${c.id}`) ?? new Map<number, ResponseCell>();
           for (const q of questions.data ?? []) {
             const cell = ansMap.get(q.id);
             if (cell?.status === "unmet") {
@@ -1615,7 +1791,9 @@ export default function SurveyDetailPage() {
           }
         }
       } else if (templateType === "general") {
-        const generalResponses = allResponses.filter((r) => !r.residentId && !r.surveyCaseId);
+        const generalResponses = allResponses.filter(
+          (r) => !r.residentId && !r.surveyCaseId,
+        );
         for (const q of questions.data ?? []) {
           const cell = generalResponses.find((r) => r.questionId === q.id);
           if (cell?.status === "unmet") {
@@ -1649,7 +1827,7 @@ export default function SurveyDetailPage() {
           }
 
           return docUpsert.mutateAsync(docData);
-        })
+        }),
       );
 
       const newDocMap = new Map(docMap);
@@ -1666,23 +1844,29 @@ export default function SurveyDetailPage() {
 
       if (templateType === "resident") {
         const affectedResidents = Array.from(
-          new Set(updates.map((u) => u.residentId).filter(Boolean))
+          new Set(updates.map((u) => u.residentId).filter(Boolean)),
         );
         await Promise.all(
-          affectedResidents.map((rid) => utils.doc.list.invalidate({ surveyId, residentId: rid }))
+          affectedResidents.map((rid) =>
+            utils.doc.list.invalidate({ surveyId, residentId: rid }),
+          ),
         );
       } else if (templateType === "case") {
         const affectedCases = Array.from(
-          new Set(updates.map((u) => u.surveyCaseId).filter(Boolean))
+          new Set(updates.map((u) => u.surveyCaseId).filter(Boolean)),
         );
         await Promise.all(
-          affectedCases.map((cid) => utils.doc.list.invalidate({ surveyId, surveyCaseId: cid }))
+          affectedCases.map((cid) =>
+            utils.doc.list.invalidate({ surveyId, surveyCaseId: cid }),
+          ),
         );
       } else if (templateType === "general") {
         await utils.doc.list.invalidate({ surveyId });
       }
 
-      toast.success("Date of Compliance updated for unmet questions successfully");
+      toast.success(
+        "Date of Compliance updated for unmet questions successfully",
+      );
     } catch (e) {
       console.error("Save combined DOC failed", e);
       toast.error("Failed to save Date of Compliance");
@@ -1720,11 +1904,16 @@ export default function SurveyDetailPage() {
   if (roleLoading) {
     return (
       <>
-        <QISVHeader crumbs={[{ label: "Surveys", href: "/qisv/surveys" }, { label: `Survey #${surveyId}` }]} />
+        <QISVHeader
+          crumbs={[
+            { label: "Surveys", href: "/qisv/surveys" },
+            { label: `Survey #${surveyId}` },
+          ]}
+        />
         <main className="space-y-4 p-4">
           <div className="flex items-center justify-center py-12">
             <div className="text-center">
-              <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto mb-4"></div>
+              <div className="border-primary mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-t-transparent"></div>
               <p className="text-muted-foreground">Loading permissions...</p>
             </div>
           </div>
@@ -1736,11 +1925,18 @@ export default function SurveyDetailPage() {
   if (!canView) {
     return (
       <>
-        <QISVHeader crumbs={[{ label: "Surveys", href: "/qisv/surveys" }, { label: `Survey #${surveyId}` }]} />
+        <QISVHeader
+          crumbs={[
+            { label: "Surveys", href: "/qisv/surveys" },
+            { label: `Survey #${surveyId}` },
+          ]}
+        />
         <main className="space-y-4 p-4">
           <div className="flex items-center justify-center py-12">
             <div className="text-center">
-              <p className="text-lg font-semibold text-destructive mb-2">Access Denied</p>
+              <p className="text-destructive mb-2 text-lg font-semibold">
+                Access Denied
+              </p>
               <p className="text-muted-foreground">
                 You don't have permission to view this survey.
               </p>
@@ -1754,7 +1950,12 @@ export default function SurveyDetailPage() {
   if (!survey.data || !residents.data || !cases.data) {
     return (
       <>
-        <QISVHeader crumbs={[{ label: "Surveys", href: "/qisv/surveys" }, { label: `Survey #${surveyId}` }]} />
+        <QISVHeader
+          crumbs={[
+            { label: "Surveys", href: "/qisv/surveys" },
+            { label: `Survey #${surveyId}` },
+          ]}
+        />
         <main className="space-y-4 p-4">
           <Skeleton className="h-8 w-48" />
           <Skeleton className="h-32 w-full" />
@@ -1763,23 +1964,23 @@ export default function SurveyDetailPage() {
     );
   }
 
-  const lockDisabled = !canLockUnlock || !isSurveyComplete || lockSurvey.isPending;
+  const lockDisabled =
+    !canLockUnlock || !isSurveyComplete || lockSurvey.isPending;
   const unlockDisabled = !canLockUnlock || unlockSurvey.isPending;
-  const lockDisabledReason =
-    !canLockUnlock
-      ? "You do not have permission to lock/unlock surveys."
-      : !isSurveyComplete
-        ? "Complete all questions for all residents to enable lock."
-        : lockSurvey.isPending
-          ? "Locking..."
-          : "";
+  const lockDisabledReason = !canLockUnlock
+    ? "You do not have permission to lock/unlock surveys."
+    : !isSurveyComplete
+      ? "Complete all questions for all residents to enable lock."
+      : lockSurvey.isPending
+        ? "Locking..."
+        : "";
 
   const LockUnlockButtons = () => {
     if (!isLocked) {
       return (
         <AlertDialog>
           <AlertDialogTrigger asChild>
-            <div className="relative group">
+            <div className="group relative">
               <Button
                 variant="default"
                 disabled={lockDisabled}
@@ -1789,7 +1990,7 @@ export default function SurveyDetailPage() {
                 Lock Survey
               </Button>
               {lockDisabled && lockDisabledReason && (
-                <div className="pointer-events-none absolute -bottom-8 right-0 hidden rounded bg-popover px-2 py-1 text-[11px] text-popover-foreground shadow group-hover:block">
+                <div className="bg-popover text-popover-foreground pointer-events-none absolute right-0 -bottom-8 hidden rounded px-2 py-1 text-[11px] shadow group-hover:block">
                   {lockDisabledReason}
                 </div>
               )}
@@ -1799,7 +2000,8 @@ export default function SurveyDetailPage() {
             <AlertDialogHeader>
               <AlertDialogTitle>Lock survey?</AlertDialogTitle>
               <AlertDialogDescription>
-                Once locked, edits to this survey will be disabled until it is unlocked.
+                Once locked, edits to this survey will be disabled until it is
+                unlocked.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -1807,17 +2009,19 @@ export default function SurveyDetailPage() {
               <AlertDialogAction
                 onClick={() => {
                   if (!isSurveyComplete) {
-                    toast.error("Please complete all questions before locking the survey");
+                    toast.error(
+                      "Please complete all questions before locking the survey",
+                    );
                     return;
                   }
                   lockSurvey.mutate({ surveyId: surveyId });
                 }}
                 disabled={lockDisabled}
                 className={cn(
-                  "px-6 py-2.5 font-medium rounded-md transition-all duration-200 flex items-center gap-2",
+                  "flex items-center gap-2 rounded-md px-6 py-2.5 font-medium transition-all duration-200",
                   isSurveyComplete
-                    ? "bg-red-600 hover:bg-red-700 text-white shadow-md hover:shadow-lg active:bg-red-800 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
-                    : "bg-red-200 text-red-400 cursor-not-allowed"
+                    ? "bg-red-600 text-white shadow-md hover:bg-red-700 hover:shadow-lg focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:outline-none active:bg-red-800"
+                    : "cursor-not-allowed bg-red-200 text-red-400",
                 )}
               >
                 {lockSurvey.isPending ? (
@@ -1848,7 +2052,9 @@ export default function SurveyDetailPage() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Unlock survey?</AlertDialogTitle>
-            <AlertDialogDescription>Unlocking will allow edits again. Continue?</AlertDialogDescription>
+            <AlertDialogDescription>
+              Unlocking will allow edits again. Continue?
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -1871,7 +2077,11 @@ export default function SurveyDetailPage() {
     const templateType = survey.data?.template?.type;
 
     return (
-      <Dialog open={manageSurveyDialogOpen} onOpenChange={setManageSurveyDialogOpen} modal={false}>
+      <Dialog
+        open={manageSurveyDialogOpen}
+        onOpenChange={setManageSurveyDialogOpen}
+        modal={false}
+      >
         <DialogTrigger asChild>
           <Button variant="outline" size="sm" disabled={isLocked}>
             <Pencil className="mr-2 h-4 w-4" />
@@ -1879,32 +2089,52 @@ export default function SurveyDetailPage() {
           </Button>
         </DialogTrigger>
         <DialogContent
-          className="max-w-3xl max-h-[85vh] flex flex-col"
+          className="flex max-h-[85vh] max-w-3xl flex-col"
           onInteractOutside={(e) => e.preventDefault()}
           onEscapeKeyDown={(e) => e.preventDefault()}
         >
           <DialogHeader>
             <DialogTitle>Manage Survey</DialogTitle>
-            <DialogDescription>Edit survey details, surveyor, and participants</DialogDescription>
+            <DialogDescription>
+              Edit survey details, surveyor, and participants
+            </DialogDescription>
           </DialogHeader>
 
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
+          <Tabs
+            value={activeTab}
+            onValueChange={setActiveTab}
+            className="flex flex-1 flex-col overflow-hidden"
+          >
             <TabsList
               className="grid w-full"
               style={{
                 gridTemplateColumns:
-                  templateType === "resident" ? "1fr 1fr" : templateType === "case" ? "1fr 1fr" : "1fr",
+                  templateType === "resident"
+                    ? "1fr 1fr"
+                    : templateType === "case"
+                      ? "1fr 1fr"
+                      : "1fr",
               }}
             >
               <TabsTrigger value="surveyor">Surveyor</TabsTrigger>
-              {templateType === "resident" && <TabsTrigger value="residents">Residents</TabsTrigger>}
-              {templateType === "case" && <TabsTrigger value="cases">Cases</TabsTrigger>}
+              {templateType === "resident" && (
+                <TabsTrigger value="residents">Residents</TabsTrigger>
+              )}
+              {templateType === "case" && (
+                <TabsTrigger value="cases">Cases</TabsTrigger>
+              )}
             </TabsList>
 
-            <TabsContent value="surveyor" className="flex-1 space-y-4 overflow-y-auto p-4">
+            <TabsContent
+              value="surveyor"
+              className="flex-1 space-y-4 overflow-y-auto p-4"
+            >
               <div className="space-y-2">
                 <Label>Change Surveyor</Label>
-                <Select value={selectedSurveyorId} onValueChange={setSelectedSurveyorId}>
+                <Select
+                  value={selectedSurveyorId}
+                  onValueChange={setSelectedSurveyorId}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Select surveyor" />
                   </SelectTrigger>
@@ -1934,22 +2164,35 @@ export default function SurveyDetailPage() {
             </TabsContent>
 
             {templateType === "resident" && (
-              <TabsContent value="residents" className="flex-1 flex flex-col overflow-hidden">
-                <div className="space-y-4 border-b pb-4 px-4">
+              <TabsContent
+                value="residents"
+                className="flex flex-1 flex-col overflow-hidden"
+              >
+                <div className="space-y-4 border-b px-4 pb-4">
                   <Label>Add Resident</Label>
                   <div className="flex gap-2">
                     <Select
                       value={selectedResidentId?.toString() ?? ""}
-                      onValueChange={(val) => setSelectedResidentId(Number(val))}
+                      onValueChange={(val) =>
+                        setSelectedResidentId(Number(val))
+                      }
                     >
                       <SelectTrigger className="flex-1">
                         <SelectValue placeholder="Select resident to add" />
                       </SelectTrigger>
                       <SelectContent>
                         {availableResidents.data?.data
-                          ?.filter((r) => !residents.data?.some((sr) => sr.residentId === r.id))
+                          ?.filter(
+                            (r) =>
+                              !residents.data?.some(
+                                (sr) => sr.residentId === r.id,
+                              ),
+                          )
                           .map((resident) => (
-                            <SelectItem key={resident.id} value={resident.id.toString()}>
+                            <SelectItem
+                              key={resident.id}
+                              value={resident.id.toString()}
+                            >
                               {resident.name} - PCCI: {resident.pcciId}
                             </SelectItem>
                           ))}
@@ -1966,30 +2209,32 @@ export default function SurveyDetailPage() {
                       }}
                       disabled={!selectedResidentId || addResident.isPending}
                     >
-                      <Plus className="h-4 w-4 mr-2" />
+                      <Plus className="mr-2 h-4 w-4" />
                       Add
                     </Button>
                   </div>
                 </div>
 
                 <div className="flex-1 overflow-y-auto px-4 pt-4">
-                  <Label className="mb-2 block">Current Residents ({residents.data?.length})</Label>
+                  <Label className="mb-2 block">
+                    Current Residents ({residents.data?.length})
+                  </Label>
                   <div className="space-y-2">
                     {residents.data?.map((r) => (
                       <div
                         key={r.id}
-                        className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50"
+                        className="flex items-center justify-between rounded-lg border p-3 hover:bg-gray-50"
                       >
                         <div>
                           <div className="font-medium">{r.name}</div>
-                          <div className="text-sm text-muted-foreground">
+                          <div className="text-muted-foreground text-sm">
                             PCCI: {r.pcciId} • Room: {r.roomId}
                           </div>
                         </div>
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          className="text-red-600 hover:bg-red-50 hover:text-red-700"
                           onClick={() => {
                             removeResident.mutate({
                               surveyId,
@@ -2003,8 +2248,8 @@ export default function SurveyDetailPage() {
                       </div>
                     ))}
                     {(!residents.data || residents.data.length === 0) && (
-                      <div className="text-center py-8 text-gray-500">
-                        <Users className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                      <div className="py-8 text-center text-gray-500">
+                        <Users className="mx-auto mb-2 h-8 w-8 opacity-30" />
                         <p className="text-sm">No residents added yet</p>
                       </div>
                     )}
@@ -2014,8 +2259,11 @@ export default function SurveyDetailPage() {
             )}
 
             {templateType === "case" && (
-              <TabsContent value="cases" className="flex-1 flex flex-col overflow-hidden">
-                <div className="space-y-4 border-b pb-4 px-4">
+              <TabsContent
+                value="cases"
+                className="flex flex-1 flex-col overflow-hidden"
+              >
+                <div className="space-y-4 border-b px-4 pb-4">
                   <Label>Add Case</Label>
                   <div className="flex gap-2">
                     <Input
@@ -2045,28 +2293,32 @@ export default function SurveyDetailPage() {
                       }}
                       disabled={!localCaseCode.trim() || addCase.isPending}
                     >
-                      <Plus className="h-4 w-4 mr-2" />
+                      <Plus className="mr-2 h-4 w-4" />
                       Add
                     </Button>
                   </div>
                 </div>
 
                 <div className="flex-1 overflow-y-auto px-4 pt-4">
-                  <Label className="mb-2 block">Current Cases ({cases.data?.length})</Label>
+                  <Label className="mb-2 block">
+                    Current Cases ({cases.data?.length})
+                  </Label>
                   <div className="space-y-2">
                     {cases.data?.map((c) => (
                       <div
                         key={c.id}
-                        className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50"
+                        className="flex items-center justify-between rounded-lg border p-3 hover:bg-gray-50"
                       >
                         <div>
                           <div className="font-medium">Case {c.caseCode}</div>
-                          <div className="text-sm text-muted-foreground">ID: {c.id}</div>
+                          <div className="text-muted-foreground text-sm">
+                            ID: {c.id}
+                          </div>
                         </div>
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          className="text-red-600 hover:bg-red-50 hover:text-red-700"
                           onClick={() => {
                             removeCase.mutate({
                               surveyId,
@@ -2080,8 +2332,8 @@ export default function SurveyDetailPage() {
                       </div>
                     ))}
                     {(!cases.data || cases.data.length === 0) && (
-                      <div className="text-center py-8 text-gray-500">
-                        <FileText className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                      <div className="py-8 text-center text-gray-500">
+                        <FileText className="mx-auto mb-2 h-8 w-8 opacity-30" />
                         <p className="text-sm">No cases added yet</p>
                       </div>
                     )}
@@ -2092,7 +2344,10 @@ export default function SurveyDetailPage() {
           </Tabs>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setManageSurveyDialogOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setManageSurveyDialogOpen(false)}
+            >
               Close
             </Button>
           </DialogFooter>
@@ -2108,7 +2363,7 @@ export default function SurveyDetailPage() {
 
     if (!scoreAllowsPOC) {
       return (
-        <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded-lg border border-amber-200">
+        <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-600">
           <AlertTriangle className="h-4 w-4" />
           POC available when score is below 85%
         </div>
@@ -2118,8 +2373,8 @@ export default function SurveyDetailPage() {
     if (!pocGenerated) {
       return (
         <div className="flex items-center gap-3">
-          <div className="text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded-lg border border-amber-200">
-            <AlertTriangle className="h-4 w-4 inline mr-1" />
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-600">
+            <AlertTriangle className="mr-1 inline h-4 w-4" />
             POC not generated yet
           </div>
 
@@ -2131,10 +2386,18 @@ export default function SurveyDetailPage() {
             disabled={markPocGenerated.isPending || !canGeneratePoc}
             variant="default"
             className="bg-red-600 hover:bg-red-700"
-            title={!canGeneratePoc ? "You do not have permission to generate POC" : undefined}
+            title={
+              !canGeneratePoc
+                ? "You do not have permission to generate POC"
+                : undefined
+            }
           >
             <FileText className="mr-2 h-4 w-4" />
-            {canGeneratePoc ? (markPocGenerated.isPending ? "Generating..." : "Generate POC") : "POC not generated"}
+            {canGeneratePoc
+              ? markPocGenerated.isPending
+                ? "Generating..."
+                : "Generate POC"
+              : "POC not generated"}
           </Button>
         </div>
       );
@@ -2142,28 +2405,375 @@ export default function SurveyDetailPage() {
 
     const label = hasAnyPOC ? "View POC" : "Fill POC";
     const totalUnmetQuestions = sheetBlocks.length;
+    const templateType = survey.data?.template?.type;
 
     return (
-      <Sheet open={sheetOpen} onOpenChange={(open) => canView && setSheetOpen(open)}>
+      <Sheet
+        open={sheetOpen}
+        onOpenChange={(open) => canView && setSheetOpen(open)}
+      >
         <SheetTrigger asChild>
           <Button
             variant="default"
             className="bg-red-600 hover:bg-red-700"
             disabled={!canView}
-            title={!canView ? "You do not have permission to view POC" : undefined}
+            title={
+              !canView ? "You do not have permission to view POC" : undefined
+            }
           >
             <FileText className="mr-2 h-4 w-4" />
             {label}
             {totalUnmetQuestions > 0 ? (
-              <Badge variant="secondary" className="ml-2 bg-red-100 text-red-800">
+              <Badge
+                variant="secondary"
+                className="ml-2 bg-red-100 text-red-800"
+              >
                 {totalUnmetQuestions}
               </Badge>
             ) : null}
           </Button>
         </SheetTrigger>
 
-        <SheetContent className="w-full sm:max-w-5xl p-0 flex flex-col">
-          {/* [KEEP YOUR EXISTING SHEET CONTENT HERE - I won't repeat it for brevity] */}
+        <SheetContent className="flex w-full flex-col p-0 sm:max-w-5xl">
+          <SheetHeader className="border-b bg-gradient-to-r from-red-50 to-orange-50 px-6 pt-6 pb-4">
+            <div className="flex items-start justify-between">
+              <div>
+                <SheetTitle className="flex items-center gap-2 text-xl font-bold text-gray-900">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-100">
+                    <FileText className="h-4 w-4 text-red-600" />
+                  </div>
+                  Plan of Correction
+                </SheetTitle>
+                <div className="text-muted-foreground mt-1 mr-1 text-sm">
+                  Template:{" "}
+                  <span className="text-foreground font-medium">
+                    {survey.data?.template?.name ?? "—"}
+                  </span>
+                </div>
+                <div className="bg-border mt-2 h-px" />
+                <SheetDescription className="mt-1 text-sm text-gray-600">
+                  {hasAnyPOC
+                    ? "Review and update your Plan of Correction"
+                    : "Create a Plan of Correction for unmet questions"}
+                </SheetDescription>
+              </div>
+
+              {totalUnmetQuestions > 0 && (
+                <div className="flex gap-4 text-sm">
+                  <div className="text-center">
+                    <div className="font-semibold text-red-600">
+                      {totalUnmetQuestions}
+                    </div>
+                    <div className="text-gray-500">Questions</div>
+                  </div>
+                  {templateType !== "general" && (
+                    <div className="text-center">
+                      <div className="font-semibold text-red-600">
+                        {totalUnmetEntities}
+                      </div>
+                      <div className="text-gray-500">
+                        {templateType === "resident" ? "Residents" : "Cases"}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </SheetHeader>
+
+          <div className="flex-1 overflow-y-auto">
+            <div className="px-6 py-4">
+              {sheetBlocks.length === 0 ? (
+                <div className="rounded-lg border-2 border-dashed border-green-200 bg-green-50 py-12 text-center">
+                  <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
+                    <FileText className="h-6 w-6 text-green-600" />
+                  </div>
+                  <h3 className="mb-1 text-lg font-medium text-gray-900">
+                    All Good!
+                  </h3>
+                  <p className="text-gray-500">
+                    No questions have unmet answers that require a Plan of
+                    Correction.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Summary Card */}
+                  <Card className="border-l-4 border-l-red-500 bg-red-50/50">
+                    <CardContent className="p-4">
+                      <div className="flex items-start gap-4">
+                        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-red-100">
+                          <AlertTriangle className="h-5 w-5 text-red-600" />
+                        </div>
+                        <div className="flex-1">
+                          <h3 className="mb-1 font-semibold text-gray-900">
+                            Questions Requiring Attention
+                          </h3>
+                          <p className="text-sm leading-relaxed text-gray-600">
+                            The following {totalUnmetQuestions} question
+                            {totalUnmetQuestions !== 1 ? "s" : ""}
+                            {totalUnmetQuestions === 1 ? " has" : " have"} unmet
+                            requirements
+                            {templateType !== "general"
+                              ? ` across ${totalUnmetEntities} ${templateType === "resident" ? "resident" : "case"}${totalUnmetEntities !== 1 ? "s" : ""}`
+                              : ""}
+                            . Please review each question and provide a
+                            comprehensive Plan of Correction.
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Questions List */}
+                  <div className="space-y-4">
+                    {sheetBlocks.map((block, index) => (
+                      <Card
+                        key={block.qid}
+                        className="overflow-hidden border shadow-sm transition-shadow hover:shadow-md"
+                      >
+                        <CardHeader className="border-b bg-gray-50/50">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1">
+                              <div className="mb-2 flex items-center gap-2">
+                                <Badge
+                                  variant="outline"
+                                  className="border-red-200 bg-red-100 text-red-800"
+                                >
+                                  Question {index + 1}
+                                </Badge>
+                                {/* ftags gg */}
+                                {block.ftags?.length ? (
+                                  <Badge
+                                    variant="secondary"
+                                    className="flex items-center gap-1 border-gray-200 bg-blue-100 text-[11px] text-gray-800"
+                                    title={block.ftags.join(", ")}
+                                  >
+                                    F-Tags:
+                                    <span className="font-mono">
+                                      {block.ftags.slice(0, 3).join(", ")}
+                                      {block.ftags.length > 3 ? "…" : ""}
+                                    </span>
+                                  </Badge>
+                                ) : null}
+
+                                <Badge
+                                  variant="secondary"
+                                  className={cn(
+                                    "text-xs",
+                                    block.strengthPct < 50
+                                      ? "bg-red-100 text-red-800"
+                                      : block.strengthPct < 75
+                                        ? "bg-yellow-100 text-yellow-800"
+                                        : "bg-green-100 text-green-800",
+                                  )}
+                                >
+                                  {block.strengthPct}% Strength
+                                </Badge>
+                              </div>
+                              <CardTitle className="text-base leading-relaxed font-medium text-gray-900">
+                                {block.text}
+                              </CardTitle>
+                              {block.ftags.length > 0 && (
+                                <div className="mt-2 flex items-center gap-1">
+                                  <Tag className="h-3 w-3 text-gray-400" />
+                                  <span className="text-xs text-gray-500">
+                                    F-Tags: {block.ftags.join(", ")}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </CardHeader>
+
+                        <CardContent className="p-4">
+                          {templateType === "general" ? (
+                            // ✅ NEW: For general surveys, just show unmet status
+                            <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+                              <div className="mb-1 text-sm font-medium text-red-800">
+                                Requirements Not Met
+                              </div>
+                              {block.items.map((item, itemIndex) => (
+                                <div key={itemIndex}>
+                                  {item.findings && (
+                                    <div className="mt-2 rounded border-l-2 border-l-orange-300 bg-white p-2">
+                                      <div className="mb-1 text-xs text-gray-500">
+                                        Findings:
+                                      </div>
+                                      <p className="text-sm leading-relaxed text-gray-700">
+                                        {item.findings}
+                                      </p>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            // For resident and case surveys, show entity details
+                            <>
+                              <div className="mb-3 flex items-center gap-2">
+                                <Users className="h-4 w-4 text-gray-500" />
+                                <span className="text-sm font-medium text-gray-700">
+                                  Affected{" "}
+                                  {templateType === "resident"
+                                    ? "Residents"
+                                    : "Cases"}{" "}
+                                  ({block.items.length})
+                                </span>
+                              </div>
+
+                              <div className="grid gap-3 sm:grid-cols-2">
+                                {block.items.map((item, itemIndex) => (
+                                  <div
+                                    key={itemIndex}
+                                    className="rounded-lg border bg-gray-50 p-3"
+                                  >
+                                    <div className="mb-1 flex items-center gap-2">
+                                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-100">
+                                        <User className="h-3 w-3 text-blue-600" />
+                                      </div>
+                                      <span className="text-sm font-medium text-gray-900">
+                                        {templateType === "resident"
+                                          ? `PCCI: ${item.residentPcciId}`
+                                          : `Case: ${item.caseNumber}`}
+                                      </span>
+                                    </div>
+                                    {item.findings && (
+                                      <div className="mt-2 rounded border-l-2 border-l-orange-300 bg-white p-2">
+                                        <div className="mb-1 text-xs text-gray-500">
+                                          Findings:
+                                        </div>
+                                        <p className="text-sm leading-relaxed text-gray-700">
+                                          {item.findings}
+                                        </p>
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </>
+                          )}
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Comments Section */}
+            {hasAnyPOC && (
+              <div className="px-6">
+                <CommentsSection
+                  comments={comments}
+                  showComments={showComments}
+                  setShowComments={setShowComments}
+                  newComment={newComment}
+                  setNewComment={setNewComment}
+                  handleAddComment={handleAddComment}
+                  addComment={addComment}
+                />
+              </div>
+            )}
+
+            {/* POC Input Section */}
+            <div className="border-t bg-gray-50/50 px-6 py-6">
+              <div className="space-y-4">
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-gray-900">
+                    Plan of Correction
+                  </label>
+                  <p className="mb-3 text-xs text-gray-600">
+                    Describe the specific actions that will be taken to address
+                    the unmet requirements above. This plan will be applied to
+                    all questions with "unmet" status.
+                  </p>
+                  <Textarea
+                    placeholder="Enter your comprehensive Plan of Correction here..."
+                    value={combinedPOC}
+                    onChange={(e) => setCombinedPOC(e.target.value)}
+                    rows={5}
+                    className="resize-none text-sm leading-relaxed"
+                  />
+                </div>
+
+                {/* Date of Compliance */}
+                <div className="flex flex-wrap items-end gap-4 border-t pt-4">
+                  <div className="min-w-48 flex-1">
+                    <label className="mb-2 block text-sm font-medium text-gray-700">
+                      Date of Compliance
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-gray-500" />
+                      <input
+                        type="date"
+                        value={
+                          combinedDOC
+                            ? combinedDOC.toISOString().split("T")[0]
+                            : ""
+                        }
+                        onChange={(e) =>
+                          setCombinedDOC(
+                            e.target.value ? new Date(e.target.value) : null,
+                          )
+                        }
+                        className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={handleSaveCombinedDOC}
+                    disabled={docUpsert.isPending || !combinedDOC}
+                    className="min-w-32"
+                  >
+                    {docUpsert.isPending
+                      ? "Saving..."
+                      : hasAnyDOC
+                        ? "Update DOC"
+                        : "Set DOC"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer Actions */}
+          <SheetFooter className="flex items-center justify-between border-t bg-white px-6 py-4">
+            <div className="flex items-center gap-3">
+              {hasAnyPOC && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDownloadPDF}
+                  disabled={isGeneratingPDF}
+                  className="flex items-center gap-2"
+                >
+                  <Download className="h-4 w-4" />
+                  {isGeneratingPDF ? "Generating..." : "Download PDF"}
+                </Button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-3">
+              <SheetClose asChild>
+                <Button variant="ghost" size="sm">
+                  Cancel
+                </Button>
+              </SheetClose>
+              <Button
+                onClick={handleSaveCombinedPOC}
+                disabled={pocUpsert.isPending || !combinedPOC.trim()}
+                className="min-w-32 bg-red-600 hover:bg-red-700"
+              >
+                {pocUpsert.isPending
+                  ? "Saving..."
+                  : hasAnyPOC
+                    ? "Update POC"
+                    : "Save POC"}
+              </Button>
+            </div>
+          </SheetFooter>
         </SheetContent>
       </Sheet>
     );
@@ -2178,15 +2788,17 @@ export default function SurveyDetailPage() {
         ]}
       />
 
-      <main className="p-6 space-y-6">
-        <div className="flex items-start justify-between flex-wrap gap-3">
+      <main className="space-y-6 p-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="mb-1 flex items-center gap-2 text-2xl font-bold">
               Survey ID #{surveyId}{" "}
-              {survey.data.template && <Badge>{survey.data.template.type}</Badge>}
+              {survey.data.template && (
+                <Badge>{survey.data.template.type}</Badge>
+              )}
               {isLocked && <Badge variant="secondary">Locked</Badge>}
             </h1>
-            <div className="text-sm text-muted-foreground space-y-1">
+            <div className="text-muted-foreground space-y-1 text-sm">
               <FacilityInfo facilityId={survey.data.facilityId} />
               <div className="flex items-center justify-between gap-4">
                 <SurveyorInfo surveyorId={survey.data.surveyorId} />
@@ -2196,8 +2808,10 @@ export default function SurveyDetailPage() {
           </div>
 
           <div className="ml-auto flex items-center gap-3">
-            <div className="text-right mr-2">
-              <div className="text-xs uppercase text-muted-foreground">Score</div>
+            <div className="mr-2 text-right">
+              <div className="text-muted-foreground text-xs uppercase">
+                Score
+              </div>
               <div className="text-xl font-semibold">{`${overallScore} / ${maxTemplatePoints}`}</div>
             </div>
 
@@ -2210,109 +2824,136 @@ export default function SurveyDetailPage() {
         <Separator />
 
         {/* [KEEP ALL YOUR EXISTING UI - Question Strengths, Tables, etc.] */}
-        {survey.data?.template?.type === "general" && generalStrengths.length > 0 && (
-          <>
-            <div className="mb-4">
-              <h2 className="text-xl font-bold">
-                {survey.data.template?.name || `Template #${survey.data.templateId}`}
-              </h2>
-              <p className="text-sm text-muted-foreground">{allQuestionIds.length} questions</p>
-            </div>
-            <div className="rounded-md border p-3 mb-8">
-              <div className="text-sm font-medium mb-2">Question Strengths</div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                {generalStrengths.map((qs) => (
-                  <div
-                    key={qs.questionId}
-                    className={cn(
-                      "border px-3 py-2 rounded-md text-xs",
-                      qs.strengthPct < 85 ? "bg-amber-50 border-amber-200" : "bg-muted"
-                    )}
-                  >
-                    <div className="font-semibold line-clamp-1">{qs.text}</div>
-                    <div className="mt-1 flex flex-wrap items-center gap-1">
-                      {qs.ftags && qs.ftags.length > 0 ? (
-                        <>
-                          F-Tags:
-                          {qs.ftags.map((ftag) => (
-                            <span
-                              key={ftag.id}
-                              className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-medium text-gray-700"
-                              title={ftag.description ?? ftag.code}
-                            >
-                              {ftag.code}
-                            </span>
-                          ))}
-                        </>
-                      ) : (
-                        <span className="text-[11px] text-muted-foreground">No F-Tags</span>
-                      )}
-                    </div>
-                    <div className="mt-1 font-bold"> Score: {qs.unmetCount > 0 ? 0 : qs.points}</div>
-
-                    <div className="mt-1">Strength: {qs.strengthPct}%</div>
-                    <div className="text-muted-foreground">
-                      Met: {qs.metCount} ・ Unmet: {qs.unmetCount} ・ N/A: {qs.naCount}
-                    </div>
-                  </div>
-                ))}
+        {survey.data?.template?.type === "general" &&
+          generalStrengths.length > 0 && (
+            <>
+              <div className="mb-4">
+                <h2 className="text-xl font-bold">
+                  {survey.data.template?.name ||
+                    `Template #${survey.data.templateId}`}
+                </h2>
+                <p className="text-muted-foreground text-sm">
+                  {allQuestionIds.length} questions
+                </p>
               </div>
-            </div>
-          </>
-        )}
-
-        {(survey.data?.template?.type === "resident" || survey.data?.template?.type === "case") && (
-          <>
-            <div className="mb-4">
-              <h2 className="text-xl font-bold">
-                {survey.data.template?.name || `Template #${survey.data.templateId}`}
-              </h2>
-              <p className="text-sm text-muted-foreground">
-                {allQuestionIds.length} questions • {residents.data.length} residents
-              </p>
-            </div>
-
-            <div className="rounded-md border p-3">
-              <div className="text-sm font-medium mb-2">Question Strengths</div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                {questionStrengths.map((qs) => (
-                  <div
-                    key={qs.questionId}
-                    className={cn(
-                      "border px-3 py-2 rounded-md text-xs",
-                      qs.strengthPct < 85 ? "bg-amber-50 border-amber-200" : "bg-muted"
-                    )}
-                  >
-                    <div className="font-semibold line-clamp-1">{qs.text}</div>
-                    <div className="mt-1 flex flex-wrap items-center gap-1">
-                      {qs.ftags && qs.ftags.length > 0 ? (
-                        <>
-                          F-Tags:
-                          {qs.ftags.map((ftag) => (
-                            <span
-                              key={ftag.id}
-                              className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-medium text-gray-700"
-                              title={ftag.description ?? ftag.code}
-                            >
-                              {ftag.code}
-                            </span>
-                          ))}
-                        </>
-                      ) : (
-                        <span className="text-[11px] text-muted-foreground">No F-Tags</span>
+              <div className="mb-8 rounded-md border p-3">
+                <div className="mb-2 text-sm font-medium">
+                  Question Strengths
+                </div>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {generalStrengths.map((qs) => (
+                    <div
+                      key={qs.questionId}
+                      className={cn(
+                        "rounded-md border px-3 py-2 text-xs",
+                        qs.strengthPct < 85
+                          ? "border-amber-200 bg-amber-50"
+                          : "bg-muted",
                       )}
+                    >
+                      <div className="line-clamp-1 font-semibold">
+                        {qs.text}
+                      </div>
+                      <div className="mt-1 flex flex-wrap items-center gap-1">
+                        {qs.ftags && qs.ftags.length > 0 ? (
+                          <>
+                            F-Tags:
+                            {qs.ftags.map((ftag) => (
+                              <span
+                                key={ftag.id}
+                                className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-medium text-gray-700"
+                                title={ftag.description ?? ftag.code}
+                              >
+                                {ftag.code}
+                              </span>
+                            ))}
+                          </>
+                        ) : (
+                          <span className="text-muted-foreground text-[11px]">
+                            No F-Tags
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-1 font-bold">
+                        {" "}
+                        Score: {qs.unmetCount > 0 ? 0 : qs.points}
+                      </div>
+
+                      <div className="mt-1">Strength: {qs.strengthPct}%</div>
+                      <div className="text-muted-foreground">
+                        Met: {qs.metCount} ・ Unmet: {qs.unmetCount} ・ N/A:{" "}
+                        {qs.naCount}
+                      </div>
                     </div>
-                    <div className="mt-1 font-bold"> Score: {qs.unmetCount > 0 ? 0 : qs.points}</div>
-                    <div className="mt-1">Strength: {qs.strengthPct}%</div>
-                    <div className="text-muted-foreground">
-                      Met: {qs.metCount} • Unmet: {qs.unmetCount} • NA: {qs.naCount || 0}
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
-          </>
-        )}
+            </>
+          )}
+
+        {(survey.data?.template?.type === "resident" ||
+          survey.data?.template?.type === "case") && (
+            <>
+              <div className="mb-4">
+                <h2 className="text-xl font-bold">
+                  {survey.data.template?.name ||
+                    `Template #${survey.data.templateId}`}
+                </h2>
+                <p className="text-muted-foreground text-sm">
+                  {allQuestionIds.length} questions • {residents.data.length}{" "}
+                  residents
+                </p>
+              </div>
+
+              <div className="rounded-md border p-3">
+                <div className="mb-2 text-sm font-medium">Question Strengths</div>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {questionStrengths.map((qs) => (
+                    <div
+                      key={qs.questionId}
+                      className={cn(
+                        "rounded-md border px-3 py-2 text-xs",
+                        qs.strengthPct < 85
+                          ? "border-amber-200 bg-amber-50"
+                          : "bg-muted",
+                      )}
+                    >
+                      <div className="line-clamp-1 font-semibold">{qs.text}</div>
+                      <div className="mt-1 flex flex-wrap items-center gap-1">
+                        {qs.ftags && qs.ftags.length > 0 ? (
+                          <>
+                            F-Tags:
+                            {qs.ftags.map((ftag) => (
+                              <span
+                                key={ftag.id}
+                                className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-medium text-gray-700"
+                                title={ftag.description ?? ftag.code}
+                              >
+                                {ftag.code}
+                              </span>
+                            ))}
+                          </>
+                        ) : (
+                          <span className="text-muted-foreground text-[11px]">
+                            No F-Tags
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-1 font-bold">
+                        {" "}
+                        Score: {qs.unmetCount > 0 ? 0 : qs.points}
+                      </div>
+                      <div className="mt-1">Strength: {qs.strengthPct}%</div>
+                      <div className="text-muted-foreground">
+                        Met: {qs.metCount} • Unmet: {qs.unmetCount} • NA:{" "}
+                        {qs.naCount || 0}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
 
         {survey.data?.template?.type === "resident" && (
           <>
@@ -2325,7 +2966,7 @@ export default function SurveyDetailPage() {
                 <TableRow>
                   <TableHead className="w-[120px]">Initials</TableHead>
                   <TableHead className="w-[160px]">Progress</TableHead>
-                  <TableHead className="text-right w-[120px]">Action</TableHead>
+                  <TableHead className="w-[120px] text-right">Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -2344,16 +2985,23 @@ export default function SurveyDetailPage() {
                       </TableCell>
                       <TableCell>
                         <div className="text-sm">
-                          {progress.answered} answered • {progress.unanswered} pending
+                          {progress.answered} answered • {progress.unanswered}{" "}
+                          pending
                         </div>
-                        <div className="mt-1 h-2 w-full rounded bg-muted overflow-hidden">
-                          <div className="h-2 bg-primary" style={{ width: `${pct}%` }} />
+                        <div className="bg-muted mt-1 h-2 w-full overflow-hidden rounded">
+                          <div
+                            className="bg-primary h-2"
+                            style={{ width: `${pct}%` }}
+                          />
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
                         <Link
                           href={`/qisv/surveys/${surveyId}/resident/${r.residentId}`}
-                          className={buttonVariants({ variant: "outline", size: "sm" })}
+                          className={buttonVariants({
+                            variant: "outline",
+                            size: "sm",
+                          })}
                         >
                           Open
                         </Link>
@@ -2369,13 +3017,18 @@ export default function SurveyDetailPage() {
         {survey.data.template?.type === "general" && (
           <div className="mb-4">
             {(() => {
-              const generalResponses = allResponses.filter((r) => !r.residentId && !r.surveyCaseId);
+              const generalResponses = allResponses.filter(
+                (r) => !r.residentId && !r.surveyCaseId,
+              );
               const hasResponses = generalResponses.length > 0;
 
               return (
                 <Link
                   href={`/qisv/surveys/${surveyId}/general`}
-                  className={cn(buttonVariants({ variant: "default" }), "bg-green-600 hover:bg-green-700")}
+                  className={cn(
+                    buttonVariants({ variant: "default" }),
+                    "bg-green-600 hover:bg-green-700",
+                  )}
                 >
                   {hasResponses ? "View Survey" : "Start Survey"}
                 </Link>
@@ -2412,10 +3065,14 @@ export default function SurveyDetailPage() {
                       <TableCell>{c.caseCode}</TableCell>
                       <TableCell>
                         <div className="text-sm">
-                          {progress.answered} answered, {progress.unanswered} pending
+                          {progress.answered} answered, {progress.unanswered}{" "}
+                          pending
                         </div>
-                        <div className="mt-1 h-2 w-full rounded bg-muted overflow-hidden">
-                          <div className="h-2 bg-primary" style={{ width: `${pct}%` }} />
+                        <div className="bg-muted mt-1 h-2 w-full overflow-hidden rounded">
+                          <div
+                            className="bg-primary h-2"
+                            style={{ width: `${pct}%` }}
+                          />
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
