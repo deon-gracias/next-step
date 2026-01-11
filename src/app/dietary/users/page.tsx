@@ -33,12 +33,22 @@ export default function DietaryUsersPage() {
 
   const [activeSearch, setActiveSearch] = useState("");
   const [pendingSearch, setPendingSearch] = useState("");
-  const [memberToDelete, setMemberToDelete] = useState<{ email: string; name: string } | null>(null);
-  const [invitationToCancel, setInvitationToCancel] = useState<{ id: string; email: string } | null>(null);
+  const [memberToDelete, setMemberToDelete] = useState<{
+    email: string;
+    name: string;
+  } | null>(null);
+  const [invitationToCancel, setInvitationToCancel] = useState<{
+    id: string;
+    email: string;
+  } | null>(null);
 
   // ✅ Track which dropdown is open
-  const [openMemberDropdown, setOpenMemberDropdown] = useState<string | null>(null);
-  const [openInvitationDropdown, setOpenInvitationDropdown] = useState<string | null>(null);
+  const [openMemberDropdown, setOpenMemberDropdown] = useState<string | null>(
+    null,
+  );
+  const [openInvitationDropdown, setOpenInvitationDropdown] = useState<
+    string | null
+  >(null);
 
   const organizationMembers = useQuery({
     queryKey: ["listMembers", activeOrganization.data?.id],
@@ -60,7 +70,7 @@ export default function DietaryUsersPage() {
       organizationId: activeOrganization.data?.id ?? "",
       status: "pending",
     },
-    { enabled: !!activeOrganization.data }
+    { enabled: !!activeOrganization.data },
   );
 
   const deleteInvitation = api.invitation.delete.useMutation({
@@ -97,11 +107,11 @@ export default function DietaryUsersPage() {
   const filteredActiveMembers = organizationMembers.data?.data?.members.filter(
     (member) =>
       member.user.name?.toLowerCase().includes(activeSearch.toLowerCase()) ||
-      member.user.email?.toLowerCase().includes(activeSearch.toLowerCase())
+      member.user.email?.toLowerCase().includes(activeSearch.toLowerCase()),
   );
 
-  const filteredPendingInvitations = pendingInvitations.data?.filter(
-    (inv) => inv.email.toLowerCase().includes(pendingSearch.toLowerCase())
+  const filteredPendingInvitations = pendingInvitations.data?.filter((inv) =>
+    inv.email.toLowerCase().includes(pendingSearch.toLowerCase()),
   );
 
   const handleDeleteMember = async () => {
@@ -133,7 +143,7 @@ export default function DietaryUsersPage() {
       {/* Header */}
       <div className="border-b bg-white">
         <div className="px-4 py-4">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+          <div className="text-muted-foreground mb-2 flex items-center gap-2 text-sm">
             <Link href="/dietary" className="hover:text-foreground">
               Dietary
             </Link>
@@ -145,7 +155,7 @@ export default function DietaryUsersPage() {
 
       <main className="flex flex-1 flex-col gap-6 px-6 py-4">
         {/* Page Header */}
-        <div className="flex items-center gap-3 mb-2">
+        <div className="mb-2 flex items-center gap-3">
           <ChefHat className="h-7 w-7 text-orange-600" />
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Dietary Users</h1>
@@ -171,22 +181,24 @@ export default function DietaryUsersPage() {
             </div>
             <div className="flex items-center gap-2">
               <div className="relative">
-                <SearchIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <SearchIcon className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
                 <Input
                   placeholder="Search User"
                   value={activeSearch}
                   onChange={(e) => setActiveSearch(e.target.value)}
-                  className="pl-9 w-[250px]"
+                  className="w-[250px] pl-9"
                 />
               </div>
               {activeOrganization.data && manageMemberPermission.data && (
-                <InviteMemberDialog organizationId={activeOrganization.data.id} />
+                <InviteMemberDialog
+                  organizationId={activeOrganization.data.id}
+                />
               )}
             </div>
           </div>
 
           <div className="rounded-lg border">
-            <div className="grid grid-cols-[2fr_2fr_1fr_100px] gap-4 border-b bg-muted/50 p-4 font-semibold text-sm">
+            <div className="bg-muted/50 grid grid-cols-[2fr_2fr_1fr_100px] gap-4 border-b p-4 text-sm font-semibold">
               <div>Name</div>
               <div>Email</div>
               <div>Role</div>
@@ -196,7 +208,10 @@ export default function DietaryUsersPage() {
             <div className="divide-y">
               {!organizationMembers.data &&
                 Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="grid grid-cols-[2fr_2fr_1fr_100px] gap-4 p-4">
+                  <div
+                    key={i}
+                    className="grid grid-cols-[2fr_2fr_1fr_100px] gap-4 p-4"
+                  >
                     <div className="flex items-center gap-3">
                       <Skeleton className="size-8 rounded-full" />
                       <Skeleton className="h-4 w-[150px]" />
@@ -208,7 +223,10 @@ export default function DietaryUsersPage() {
                 ))}
 
               {filteredActiveMembers?.map((member) => (
-                <div key={member.id} className="grid grid-cols-[2fr_2fr_1fr_100px] gap-4 p-4 items-center">
+                <div
+                  key={member.id}
+                  className="grid grid-cols-[2fr_2fr_1fr_100px] items-center gap-4 p-4"
+                >
                   <div className="flex items-center gap-3">
                     <Avatar className="size-8">
                       <AvatarImage src={member.user.image || undefined} />
@@ -216,47 +234,52 @@ export default function DietaryUsersPage() {
                         {member.user.name?.charAt(0).toUpperCase() || "U"}
                       </AvatarFallback>
                     </Avatar>
-                    <span className="font-medium text-sm">{member.user.name}</span>
+                    <span className="text-sm font-medium">
+                      {member.user.name}
+                    </span>
                   </div>
 
-                  <span className="text-sm text-muted-foreground">{member.user.email}</span>
+                  <span className="text-muted-foreground text-sm">
+                    {member.user.email}
+                  </span>
 
                   {manageMemberPermission.data &&
                     session.data &&
                     session.data.user.id !== member.userId ? (
                     <>
                       <Select
-  defaultValue={member.role}
-  onValueChange={async (e) => {
-    try {
-      await authClient.organization.updateMemberRole({
-        role: e as "member" | "admin" | "owner",
-        memberId: member.id,
-      });
-      toast.success("Role updated successfully");
-      organizationMembers.refetch();
-    } catch (error) {
-      toast.error("Failed to update role");
-    }
-  }}
->
-  <SelectTrigger className="w-auto min-w-[100px] h-9">
-    <Badge 
-      variant={member.role === "admin" ? "default" : "secondary"}
-      className="capitalize"
-    >
-      {member.role}
-    </Badge>
-  </SelectTrigger>
-  <SelectContent align="end">
-    {roles.map((e) => (
-      <SelectItem key={e.label} value={e.label}>
-        {e.label}
-      </SelectItem>
-    ))}
-  </SelectContent>
-</Select>
-
+                        defaultValue={member.role}
+                        onValueChange={async (e) => {
+                          try {
+                            await authClient.organization.updateMemberRole({
+                              role: e as "member" | "admin" | "owner",
+                              memberId: member.id,
+                            });
+                            toast.success("Role updated successfully");
+                            organizationMembers.refetch();
+                          } catch (error) {
+                            toast.error("Failed to update role");
+                          }
+                        }}
+                      >
+                        <SelectTrigger className="h-9 w-auto min-w-[100px]">
+                          <Badge
+                            variant={
+                              member.role === "admin" ? "default" : "secondary"
+                            }
+                            className="capitalize"
+                          >
+                            {member.role}
+                          </Badge>
+                        </SelectTrigger>
+                        <SelectContent align="end">
+                          {roles.map((e) => (
+                            <SelectItem key={e.label} value={e.label}>
+                              {e.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
 
                       <Button
                         size="sm"
@@ -264,7 +287,7 @@ export default function DietaryUsersPage() {
                         onClick={() => {
                           setMemberToDelete({
                             email: member.user.email,
-                            name: member.user.name || member.user.email
+                            name: member.user.name || member.user.email,
                           });
                         }}
                       >
@@ -274,7 +297,9 @@ export default function DietaryUsersPage() {
                   ) : (
                     <>
                       <Badge
-                        variant={member.role === "admin" ? "default" : "secondary"}
+                        variant={
+                          member.role === "admin" ? "default" : "secondary"
+                        }
                         className="capitalize"
                       >
                         {member.role}
@@ -282,12 +307,11 @@ export default function DietaryUsersPage() {
                       <div />
                     </>
                   )}
-
                 </div>
               ))}
 
               {filteredActiveMembers?.length === 0 && (
-                <div className="p-8 text-center text-sm text-muted-foreground">
+                <div className="text-muted-foreground p-8 text-center text-sm">
                   No active members found
                 </div>
               )}
@@ -304,23 +328,24 @@ export default function DietaryUsersPage() {
                 <Skeleton className="h-4 w-52" />
               ) : (
                 <p className="text-muted-foreground text-sm">
-                  {pendingInvitations.data.length} User{pendingInvitations.data.length !== 1 ? "s" : ""} Pending
+                  {pendingInvitations.data.length} User
+                  {pendingInvitations.data.length !== 1 ? "s" : ""} Pending
                 </p>
               )}
             </div>
             <div className="relative">
-              <SearchIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <SearchIcon className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
               <Input
                 placeholder="Search User"
                 value={pendingSearch}
                 onChange={(e) => setPendingSearch(e.target.value)}
-                className="pl-9 w-[250px]"
+                className="w-[250px] pl-9"
               />
             </div>
           </div>
 
           <div className="rounded-lg border">
-            <div className="grid grid-cols-[2fr_2fr_1fr_100px] gap-4 border-b bg-muted/50 p-4 font-semibold text-sm">
+            <div className="bg-muted/50 grid grid-cols-[2fr_2fr_1fr_100px] gap-4 border-b p-4 text-sm font-semibold">
               <div>Name</div>
               <div>Email</div>
               <div>Role</div>
@@ -330,7 +355,10 @@ export default function DietaryUsersPage() {
             <div className="divide-y">
               {!pendingInvitations.data &&
                 Array.from({ length: 2 }).map((_, i) => (
-                  <div key={i} className="grid grid-cols-[2fr_2fr_1fr_100px] gap-4 p-4">
+                  <div
+                    key={i}
+                    className="grid grid-cols-[2fr_2fr_1fr_100px] gap-4 p-4"
+                  >
                     <Skeleton className="h-4 w-[150px]" />
                     <Skeleton className="h-4 w-[200px]" />
                     <Skeleton className="h-4 w-[80px]" />
@@ -339,15 +367,26 @@ export default function DietaryUsersPage() {
                 ))}
 
               {filteredPendingInvitations?.map((invitation) => (
-                <div key={invitation.id} className="grid grid-cols-[2fr_2fr_1fr_100px] gap-4 p-4 items-center">
-                  <span className="font-medium text-sm">{invitation.email.split("@")[0]}</span>
-                  <span className="text-sm text-muted-foreground">{invitation.email}</span>
-                  <Badge variant="secondary">{invitation.role || "member"}</Badge>
+                <div
+                  key={invitation.id}
+                  className="grid grid-cols-[2fr_2fr_1fr_100px] items-center gap-4 p-4"
+                >
+                  <span className="text-sm font-medium">
+                    {invitation.email.split("@")[0]}
+                  </span>
+                  <span className="text-muted-foreground text-sm">
+                    {invitation.email}
+                  </span>
+                  <Badge variant="secondary">
+                    {invitation.role || "member"}
+                  </Badge>
 
                   {manageMemberPermission.data && (
                     <DropdownMenu
                       open={openInvitationDropdown === invitation.id}
-                      onOpenChange={(open) => setOpenInvitationDropdown(open ? invitation.id : null)}
+                      onOpenChange={(open) =>
+                        setOpenInvitationDropdown(open ? invitation.id : null)
+                      }
                     >
                       <DropdownMenuTrigger asChild>
                         <Button size="icon" variant="ghost">
@@ -370,7 +409,7 @@ export default function DietaryUsersPage() {
                             e.preventDefault();
                             setInvitationToCancel({
                               id: invitation.id,
-                              email: invitation.email
+                              email: invitation.email,
                             });
                             setOpenInvitationDropdown(null);
                           }}
@@ -384,7 +423,7 @@ export default function DietaryUsersPage() {
               ))}
 
               {filteredPendingInvitations?.length === 0 && (
-                <div className="p-8 text-center text-sm text-muted-foreground">
+                <div className="text-muted-foreground p-8 text-center text-sm">
                   No pending invitations found
                 </div>
               )}
@@ -396,21 +435,27 @@ export default function DietaryUsersPage() {
       {/* Delete Member Modal */}
       {memberToDelete && (
         <div
-          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) {
               setMemberToDelete(null);
             }
           }}
         >
-          <div className="bg-background p-6 rounded-lg shadow-lg max-w-md w-full">
-            <h2 className="text-lg font-semibold mb-2">Delete Member?</h2>
-            <p className="text-sm text-muted-foreground mb-4">
-              Are you sure you want to remove <strong>{memberToDelete.name}</strong> from the organization? This action cannot be undone.
+          <div className="bg-background w-full max-w-md rounded-lg p-6 shadow-lg">
+            <h2 className="mb-2 text-lg font-semibold">Delete Member?</h2>
+            <p className="text-muted-foreground mb-4 text-sm">
+              Are you sure you want to remove{" "}
+              <strong>{memberToDelete.name}</strong> from the organization? This
+              action cannot be undone.
             </p>
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setMemberToDelete(null)}>Cancel</Button>
-              <Button variant="destructive" onClick={handleDeleteMember}>Delete</Button>
+              <Button variant="outline" onClick={() => setMemberToDelete(null)}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={handleDeleteMember}>
+                Delete
+              </Button>
             </div>
           </div>
         </div>
@@ -419,21 +464,30 @@ export default function DietaryUsersPage() {
       {/* Cancel Invitation Modal */}
       {invitationToCancel && (
         <div
-          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) {
               setInvitationToCancel(null);
             }
           }}
         >
-          <div className="bg-background p-6 rounded-lg shadow-lg max-w-md w-full">
-            <h2 className="text-lg font-semibold mb-2">Cancel Invitation?</h2>
-            <p className="text-sm text-muted-foreground mb-4">
-              Are you sure you want to cancel the invitation for <strong>{invitationToCancel.email}</strong>? They will no longer be able to accept it.
+          <div className="bg-background w-full max-w-md rounded-lg p-6 shadow-lg">
+            <h2 className="mb-2 text-lg font-semibold">Cancel Invitation?</h2>
+            <p className="text-muted-foreground mb-4 text-sm">
+              Are you sure you want to cancel the invitation for{" "}
+              <strong>{invitationToCancel.email}</strong>? They will no longer
+              be able to accept it.
             </p>
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setInvitationToCancel(null)}>Cancel</Button>
-              <Button variant="destructive" onClick={handleCancelInvitation}>Cancel Invitation</Button>
+              <Button
+                variant="outline"
+                onClick={() => setInvitationToCancel(null)}
+              >
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={handleCancelInvitation}>
+                Cancel Invitation
+              </Button>
             </div>
           </div>
         </div>

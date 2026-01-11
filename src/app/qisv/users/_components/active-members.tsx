@@ -1,0 +1,253 @@
+"use client";
+
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { authClient } from "@/components/providers/auth-client";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { SearchIcon, Edit2Icon, XIcon } from "lucide-react";
+import { toast } from "sonner";
+import { InviteMemberDialog } from "@/components/invite-member-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+} from "@/components/ui/select";
+import { roles } from "@/lib/permissions";
+import { ConfirmActionDialog } from "@/components/confirm-action-dialog";
+import { EditMemberDialog } from "./edit-member-dialog";
+
+export function ActiveMembersList() {
+  const session = authClient.useSession();
+  const activeOrganization = authClient.useActiveOrganization();
+  const [activeSearch, setActiveSearch] = useState("");
+  const [memberToDelete, setMemberToDelete] = useState<{
+    email: string;
+    name: string;
+  } | null>(null);
+
+  const organizationMembers = useQuery({
+    queryKey: ["listMembers", activeOrganization.data?.id],
+    queryFn: async () =>
+      await authClient.organization.listMembers({
+        fetchOptions: {},
+        query: {
+          organizationId: activeOrganization.data?.id ?? "",
+          limit: 100,
+          offset: 0,
+          sortBy: "createdAt",
+        },
+      }),
+    enabled: !!activeOrganization.data,
+  });
+
+  const manageMemberPermission = useQuery({
+    queryKey: ["permissions", "update-member", session.data?.user],
+    queryFn: async () =>
+      (
+        await authClient.organization.hasPermission({
+          organizationId: activeOrganization.data!.id,
+          permissions: { member: ["update"] },
+        })
+      ).data?.success,
+    enabled: !!activeOrganization.data,
+  });
+
+  const handleDeleteMember = async () => {
+    if (!memberToDelete || !activeOrganization.data) return;
+    try {
+      await authClient.organization.removeMember({
+        memberIdOrEmail: memberToDelete.email,
+        organizationId: activeOrganization.data.id,
+      });
+      toast.success("Member removed successfully");
+      organizationMembers.refetch();
+    } catch (error) {
+      toast.error("Failed to remove member");
+    } finally {
+      setMemberToDelete(null);
+    }
+  };
+
+  const filteredMembers = organizationMembers.data?.data?.members.filter(
+    (member) =>
+      member.user.name?.toLowerCase().includes(activeSearch.toLowerCase()) ||
+      member.user.email?.toLowerCase().includes(activeSearch.toLowerCase()),
+  );
+
+  const updateRole = async (memberId: string, role: string) => {
+    try {
+      await authClient.organization.updateMemberRole({
+        role: role as "member" | "admin" | "owner",
+        memberId,
+      });
+      toast.success("Role updated successfully");
+      organizationMembers.refetch();
+    } catch (error) {
+      toast.error("Failed to update role");
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Header & Search */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-semibold">Active Users</h2>
+          {!organizationMembers.data ? (
+            <Skeleton className="h-4 w-52" />
+          ) : (
+            <p className="text-muted-foreground text-sm">
+              {organizationMembers.data.data?.total ?? 0} Active User
+              {organizationMembers.data.data?.total !== 1 ? "s" : ""}
+            </p>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <SearchIcon className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+            <Input
+              placeholder="Search User"
+              value={activeSearch}
+              onChange={(e) => setActiveSearch(e.target.value)}
+              className="w-[250px] pl-9"
+            />
+          </div>
+          {activeOrganization.data && manageMemberPermission.data && (
+            <InviteMemberDialog organizationId={activeOrganization.data.id} />
+          )}
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="rounded-lg border">
+        <div className="bg-muted/50 grid grid-cols-[2fr_2fr_1fr_100px] gap-4 border-b p-4 text-sm font-semibold">
+          <div>Name</div>
+          <div>Email</div>
+          <div>Role</div>
+          <div>Action</div>
+        </div>
+
+        <div className="divide-y">
+          {!organizationMembers.data &&
+            Array.from({ length: 3 }).map((_, i) => (
+              <div
+                key={i}
+                className="grid grid-cols-[2fr_2fr_1fr_100px] gap-4 p-4"
+              >
+                <div className="flex items-center gap-3">
+                  <Skeleton className="size-8 rounded-full" />
+                  <Skeleton className="h-4 w-[150px]" />
+                </div>
+                <Skeleton className="h-4 w-[200px]" />
+                <Skeleton className="h-4 w-[80px]" />
+                <Skeleton className="h-8 w-8" />
+              </div>
+            ))}
+
+          {filteredMembers?.map((member) => (
+            <div
+              key={member.id}
+              className="grid grid-cols-[2fr_2fr_1fr_100px] items-center gap-4 p-4"
+            >
+              <div className="flex items-center gap-3">
+                <Avatar className="size-8">
+                  <AvatarImage src={member.user.image || undefined} />
+                  <AvatarFallback>
+                    {member.user.name?.charAt(0).toUpperCase() || "U"}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="text-sm font-medium">{member.user.name}</span>
+              </div>
+              <span className="text-muted-foreground text-sm">
+                {member.user.email}
+              </span>
+
+              {/* Role & Actions Logic */}
+              {manageMemberPermission.data &&
+                session.data?.user.id !== member.userId ? (
+                <>
+                  <Badge
+                    variant={member.role === "admin" ? "default" : "secondary"}
+                    className="w-fit capitalize"
+                  >
+                    {member.role.replace("_", " ")}
+                  </Badge>
+                  <div className="flex gap-2">
+                    {activeOrganization.data && member && (
+                      <EditMemberDialog
+                        member={member}
+                        organizationId={activeOrganization.data.id}
+                      >
+                        <Button
+                          size="icon"
+                          className="size-8"
+                          variant={"outline"}
+                        >
+                          <Edit2Icon className="h-4 w-4" />
+                        </Button>
+                      </EditMemberDialog>
+                    )}
+                    <Button
+                      size="icon"
+                      variant={"outline"}
+                      className="size-8"
+                      onClick={() =>
+                        setMemberToDelete({
+                          email: member.user.email,
+                          name: member.user.name || member.user.email,
+                        })
+                      }
+                    >
+                      <XIcon className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Badge
+                    variant={member.role === "admin" ? "default" : "secondary"}
+                    className="w-fit capitalize"
+                  >
+                    {member.role}
+                  </Badge>
+                  <div />
+                </>
+              )}
+            </div>
+          ))}
+          {filteredMembers?.length === 0 && (
+            <div className="text-muted-foreground p-8 text-center text-sm">
+              No active members found
+            </div>
+          )}
+        </div>
+      </div>
+
+      <ConfirmActionDialog
+        open={!!memberToDelete}
+        onOpenChange={(open) => !open && setMemberToDelete(null)}
+        title="Delete Member?"
+        description={
+          <>
+            Are you sure you want to remove{" "}
+            <strong>{memberToDelete?.name}</strong>? This cannot be undone.
+          </>
+        }
+        confirmText="Delete"
+        variant="destructive"
+        onConfirm={handleDeleteMember}
+      />
+    </div>
+  );
+}

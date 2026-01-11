@@ -152,6 +152,7 @@ type MultiSelectProps = {
   searchPlaceholder?: string;
   className?: string;
   disabled?: boolean;
+  align?: (typeof ALIGN_OPTIONS)[number];
 };
 
 export function UserMultiComboBox({
@@ -161,6 +162,7 @@ export function UserMultiComboBox({
   searchPlaceholder = "Search...",
   className,
   disabled = false,
+  align,
 }: MultiSelectProps) {
   const [open, setOpenState] = React.useState(false);
   const [input, setInput] = React.useState("");
@@ -176,6 +178,8 @@ export function UserMultiComboBox({
       organizationId: activeOrganization.data?.id ?? "",
       search: debouncedInput,
       role: role,
+      page: 1,
+      pageSize: 5,
     },
     { enabled: !!activeOrganization.data },
   );
@@ -251,8 +255,9 @@ export function UserMultiComboBox({
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="p-0"
-        style={{ width: "var(--radix-popover-trigger-width)" }}
+        className="w-full p-0"
+        align={align}
+      // style={{ width: "var(--radix-popover-trigger-width)" }}
       >
         <Command shouldFilter={false}>
           <CommandInput

@@ -86,14 +86,14 @@ export function TemplateComboBox({
                   ? e.id === selectedItem.id
                   : e.id === selectedItem,
               )
-            )?.name || "Select an item"}
+            )?.name || "Select a template"}
           </span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        style={{ width: "var(--radix-popover-trigger-width)" }}
-        className={cn("p-0")}
+        // style={{ width: "var(--radix-popover-trigger-width)" }}
+        className={cn("w-fit p-0")}
         align={align}
       >
         <Command shouldFilter={false}>

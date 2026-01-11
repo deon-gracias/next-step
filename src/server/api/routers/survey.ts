@@ -27,6 +27,7 @@ import {
   desc,
   isNull,
   or,
+  count,
 } from "drizzle-orm";
 import {
   paginationInputSchema,
@@ -44,7 +45,6 @@ const saveGeneralResponsesInput = z.object({
   ),
 });
 
-// ✅ Simplified: Just require either residentId OR surveyCaseId, not both
 const saveResponsesInput = z.object({
   surveyId: z.number().int().positive(),
   residentId: z.number().int().positive().optional(),
@@ -171,10 +171,114 @@ export const surveyRouter = createTRPCRouter({
       )[0];
     }),
 
+  scoreById: protectedProcedure
+    .input(z.object({ id: surveySelectSchema.shape.id }))
+    .query(async ({ ctx, input }) => {
+      // 1. Fetch Survey metadata
+      const surveyData = await ctx.db.query.survey.findFirst({
+        where: eq(survey.id, input.id),
+        columns: { templateId: true }, // We only need the templateId
+      });
+
+      if (!surveyData) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Survey not found" });
+      }
+
+      // 2. Run all heavy data fetching in parallel
+      const [questions, residentCountArr, caseCountArr, rawResponses] =
+        await Promise.all([
+          // Fetch Questions (Points only)
+          ctx.db
+            .select({ id: question.id, points: question.points })
+            .from(question)
+            .where(eq(question.templateId, surveyData.templateId)),
+
+          // Fetch Count of Residents
+          ctx.db
+            .select({ count: count() })
+            .from(surveyResident)
+            .where(eq(surveyResident.surveyId, input.id)),
+
+          // Fetch Count of Cases
+          ctx.db
+            .select({ count: count() })
+            .from(surveyCases)
+            .where(eq(surveyCases.surveyId, input.id)),
+
+          // Fetch Responses (Just status and questionId)
+          ctx.db
+            .select({
+              questionId: surveyResponse.questionId,
+              status: surveyResponse.requirementsMetOrUnmet,
+            })
+            .from(surveyResponse)
+            .where(eq(surveyResponse.surveyId, input.id)),
+        ]);
+
+      // 3. Determine the "Expected Response Count" per question
+      // If no residents/cases, it's a "General" survey (1 response expected per question).
+      // Otherwise, it's (Residents + Cases) responses expected per question.
+      const totalResidents = residentCountArr[0]?.count ?? 0;
+      const totalCases = caseCountArr[0]?.count ?? 0;
+      const entityCount = totalResidents + totalCases;
+
+      const requiredResponsesPerQuestion = entityCount === 0 ? 1 : entityCount;
+
+      // 4. Group responses by Question ID for O(1) lookup
+      // Map<QuestionID, Array<Status>>
+      const responsesByQuestion = new Map<number, string[]>();
+
+      for (const r of rawResponses) {
+        const existing = responsesByQuestion.get(r.questionId) ?? [];
+        // Only push non-null statuses (valid answers)
+        if (r.status) existing.push(r.status);
+        responsesByQuestion.set(r.questionId, existing);
+      }
+
+      // 5. Calculate Score
+      let awarded = 0;
+      let totalPossible = 0;
+
+      for (const q of questions) {
+        const points = q.points ?? 0;
+        totalPossible += points;
+
+        const answers = responsesByQuestion.get(q.id) ?? [];
+
+        // CHECK 1: Completeness
+        // Did everyone answer? (If fewer answers than entities, someone skipped it)
+        if (answers.length < requiredResponsesPerQuestion) {
+          continue; // Fail: Unanswered question
+        }
+
+        // CHECK 2: Quality
+        // Did anyone mark it as "unmet"?
+        const hasFailure = answers.includes("unmet");
+        if (hasFailure) {
+          continue; // Fail: Requirement unmet
+        }
+
+        // CHECK 3: Success Logic
+        // If we are here: Everyone answered, and nobody failed.
+        // (This covers the "Met || All NA" logic automatically)
+        awarded += points;
+      }
+
+      return {
+        score: awarded,
+        totalPossible,
+        percentage:
+          totalPossible > 0 ? Math.round((awarded / totalPossible) * 100) : 0,
+      };
+    }),
+
   list: protectedProcedure
     .input(
       z.object({
         ...surveySelectSchema.partial().shape,
+        facilityId: z.array(z.number()).optional(),
+        templateId: z.array(z.number()).optional(),
+        surveyorId: z.array(z.string()).optional(),
         ...paginationInputSchema.shape,
       }),
     )
@@ -187,23 +291,44 @@ export const surveyRouter = createTRPCRouter({
       if (input.id !== undefined) conditions.push(eq(survey.id, input.id));
       if (input.surveyorId !== undefined)
         conditions.push(eq(survey.surveyorId, input.surveyorId));
+
       if (input.facilityId !== undefined)
-        conditions.push(eq(survey.facilityId, input.facilityId));
+        for (const facilityId of input.facilityId)
+          conditions.push(eq(survey.facilityId, facilityId));
+
       if (input.templateId !== undefined)
         conditions.push(eq(survey.templateId, input.templateId));
 
-      const facilityConditions = [];
-      for (const f of facilities) {
-        console.log("Facility Conditions", f.id);
-        facilityConditions.push(eq(survey.facilityId, f.id));
-      }
+      const statusConditions = [];
+      if (input.pocGenerated !== undefined)
+        statusConditions.push(eq(survey.pocGenerated, input.pocGenerated));
+      if (input.isLocked !== undefined)
+        statusConditions.push(eq(survey.isLocked, input.isLocked));
 
-      const whereClause =
-        facilityConditions.length > 1
-          ? or(and(...conditions), ...facilityConditions)
-          : and(...conditions);
+      conditions.push(or(...statusConditions));
 
-      return await ctx.db
+      const surveyorConditions = [];
+      if (input.surveyorId !== undefined)
+        for (const surveyorId of input.surveyorId)
+          surveyorConditions.push(eq(survey.surveyorId, surveyorId));
+
+      conditions.push(or(...surveyorConditions));
+
+      const facilityConditions = facilities.map((f) =>
+        eq(survey.facilityId, f.id),
+      );
+      conditions.push(or(...facilityConditions));
+
+      const whereClause = and(...conditions);
+
+      const [totalResult] = await ctx.db
+        .select({ count: count() })
+        .from(survey)
+        .where(whereClause);
+
+      const total = totalResult?.count ?? 0;
+
+      const data = await ctx.db
         .select({
           ...getTableColumns(survey),
           surveyor: getTableColumns(user),
@@ -214,12 +339,17 @@ export const surveyRouter = createTRPCRouter({
         .where(whereClause)
         .leftJoin(user, eq(survey.surveyorId, user.id))
         .leftJoin(facility, eq(survey.facilityId, facility.id))
+        // .orderBy(survey.facilityId)
         .leftJoin(template, eq(survey.templateId, template.id))
         .limit(input.pageSize)
         .offset(offset);
+
+      return {
+        data,
+        meta: { total, pageCount: Math.ceil(total / input.pageSize) },
+      };
     }),
 
-  // ✅ FIXED: Include full resident details with pcciId
   listResidents: protectedProcedure
     .input(z.object({ surveyId: z.number() }))
     .query(async ({ ctx, input }) => {
@@ -230,14 +360,13 @@ export const surveyRouter = createTRPCRouter({
           surveyId: surveyResident.surveyId,
           residentId: surveyResident.residentId,
           createdAt: surveyResident.createdAt,
-          // ✅ ADD: Full resident details including pcciId
           name: resident.name,
           roomId: resident.roomId,
-          pcciId: resident.pcciId, // ✅ This is what you need!
+          pcciId: resident.pcciId,
           facilityId: resident.facilityId,
         })
         .from(surveyResident)
-        .innerJoin(resident, eq(surveyResident.residentId, resident.id)) // ✅ JOIN with resident table
+        .innerJoin(resident, eq(surveyResident.residentId, resident.id))
         .where(eq(surveyResident.surveyId, input.surveyId));
     }),
 

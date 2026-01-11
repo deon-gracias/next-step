@@ -27,6 +27,7 @@ import { NavUser } from "@/components/nav-user";
 import { useQuery } from "@tanstack/react-query";
 import { authClient } from "@/components/providers/auth-client";
 import Link from "next/link";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type AppRole =
   | "admin"
@@ -116,12 +117,15 @@ export function QISVSidebar(props: React.ComponentProps<typeof Sidebar>) {
   const { data: appRole, isLoading } = useQuery({
     queryKey: ["active-member-role", activeOrg.data?.id],
     queryFn: async () => {
-      // Use getActiveMemberRole (simpler + intended for this) [web:314]
       const res = await authClient.organization.getActiveMemberRole();
       const rawRole = (res as any)?.data?.role;
       return normalizeRole(rawRole);
     },
     enabled: !!activeOrg.data,
+    staleTime: Infinity,
+    gcTime: 1000 * 60 * 60,
+    refetchOnWindowFocus: false,
+    retry: false,
   });
 
   const allowed = React.useMemo(() => {
@@ -139,6 +143,15 @@ export function QISVSidebar(props: React.ComponentProps<typeof Sidebar>) {
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
+              {isLoading &&
+                Array.from({ length: navItems.length }).map((e, i) => (
+                  <SidebarMenuItem key={i}>
+                    <SidebarMenuButton>
+                      <Skeleton className="size-5" />
+                      <Skeleton className="h-5 w-full" />
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
               {!isLoading &&
                 navItems
                   .filter((item) => allowed.has(item.name))
@@ -146,7 +159,7 @@ export function QISVSidebar(props: React.ComponentProps<typeof Sidebar>) {
                     <SidebarMenuItem key={item.href}>
                       <SidebarMenuButton tooltip={item.name} asChild>
                         <Link href={item.href}>
-                          <item.icon className="!size-5" />
+                          <item.icon />
                           <span>{item.name}</span>
                         </Link>
                       </SidebarMenuButton>

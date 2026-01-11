@@ -24,7 +24,10 @@ import { toast } from "sonner";
 export default function QALTeamPage() {
   const session = authClient.useSession();
   const activeOrganization = authClient.useActiveOrganization();
-  const [memberToDelete, setMemberToDelete] = useState<{ email: string; name: string } | null>(null);
+  const [memberToDelete, setMemberToDelete] = useState<{
+    email: string;
+    name: string;
+  } | null>(null);
 
   const organizationMembers = useQuery({
     queryKey: ["listMembers", activeOrganization.data?.id],
@@ -72,12 +75,12 @@ export default function QALTeamPage() {
 
   return (
     <>
-      <main className="p-6 space-y-6">
+      <main className="space-y-6 p-6">
         {/* Header */}
         <div className="flex items-center gap-4">
           <Link href="/qal/surveys">
             <Button variant="ghost" size="sm">
-              <ArrowLeft className="h-4 w-4 mr-2" />
+              <ArrowLeft className="mr-2 h-4 w-4" />
               Back to Surveys
             </Button>
           </Link>
@@ -92,9 +95,10 @@ export default function QALTeamPage() {
             {!organizationMembers.data ? (
               <Skeleton className="h-4 w-52" />
             ) : (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-muted-foreground text-sm">
                 {organizationMembers.data.data?.total ?? 0} team member
-                {organizationMembers.data.data?.total !== 1 ? "s" : ""} in your QAL organization
+                {organizationMembers.data.data?.total !== 1 ? "s" : ""} in your
+                QAL organization
               </p>
             )}
           </div>
@@ -107,7 +111,7 @@ export default function QALTeamPage() {
         <Separator />
 
         {/* Members List */}
-        <div className="divide-y rounded-lg border bg-card">
+        <div className="bg-card divide-y rounded-lg border">
           {!organizationMembers.data &&
             Array.from({ length: 5 }).map((_, i) => (
               <div key={i} className="flex items-center gap-4 p-4">
@@ -123,13 +127,17 @@ export default function QALTeamPage() {
           {organizationMembers.data?.data &&
             organizationMembers.data.data.members.length === 0 && (
               <div className="flex flex-col items-center justify-center py-12 text-center">
-                <Users className="h-12 w-12 text-muted-foreground mb-4" />
-                <h3 className="text-lg font-semibold mb-2">No team members yet</h3>
-                <p className="text-sm text-muted-foreground mb-4">
+                <Users className="text-muted-foreground mb-4 h-12 w-12" />
+                <h3 className="mb-2 text-lg font-semibold">
+                  No team members yet
+                </h3>
+                <p className="text-muted-foreground mb-4 text-sm">
                   Invite team members to collaborate on QAL surveys
                 </p>
                 {activeOrganization.data && manageMemberPermission.data && (
-                  <InviteMemberDialog organizationId={activeOrganization.data.id} />
+                  <InviteMemberDialog
+                    organizationId={activeOrganization.data.id}
+                  />
                 )}
               </div>
             )}
@@ -138,7 +146,7 @@ export default function QALTeamPage() {
             organizationMembers.data.data.members.map((member) => (
               <div
                 key={member.id}
-                className="flex items-center gap-4 p-4 hover:bg-muted/50 transition-colors"
+                className="hover:bg-muted/50 flex items-center gap-4 p-4 transition-colors"
               >
                 <Avatar className="h-10 w-10">
                   <AvatarImage src={member.user.image || undefined} />
@@ -149,7 +157,7 @@ export default function QALTeamPage() {
 
                 <div className="flex-1 space-y-1">
                   <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium leading-none">
+                    <p className="text-sm leading-none font-medium">
                       {member.user.name}
                     </p>
                     {session.data?.user.id === member.userId && (
@@ -158,7 +166,7 @@ export default function QALTeamPage() {
                       </Badge>
                     )}
                   </div>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-muted-foreground text-xs">
                     {member.user.email}
                   </p>
                 </div>
@@ -184,7 +192,9 @@ export default function QALTeamPage() {
                     >
                       <SelectTrigger className="w-auto min-w-[100px]">
                         <Badge
-                          variant={member.role === "admin" ? "default" : "secondary"}
+                          variant={
+                            member.role === "admin" ? "default" : "secondary"
+                          }
                           className="capitalize"
                         >
                           {member.role}
@@ -198,7 +208,6 @@ export default function QALTeamPage() {
                         ))}
                       </SelectContent>
                     </Select>
-
 
                     <Button
                       size="sm"
@@ -229,21 +238,27 @@ export default function QALTeamPage() {
       {/* Delete Member Modal */}
       {memberToDelete && (
         <div
-          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) {
               setMemberToDelete(null);
             }
           }}
         >
-          <div className="bg-background p-6 rounded-lg shadow-lg max-w-md w-full">
-            <h2 className="text-lg font-semibold mb-2">Delete Member?</h2>
-            <p className="text-sm text-muted-foreground mb-4">
-              Are you sure you want to remove <strong>{memberToDelete.name}</strong> from the QAL organization? This action cannot be undone.
+          <div className="bg-background w-full max-w-md rounded-lg p-6 shadow-lg">
+            <h2 className="mb-2 text-lg font-semibold">Delete Member?</h2>
+            <p className="text-muted-foreground mb-4 text-sm">
+              Are you sure you want to remove{" "}
+              <strong>{memberToDelete.name}</strong> from the QAL organization?
+              This action cannot be undone.
             </p>
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setMemberToDelete(null)}>Cancel</Button>
-              <Button variant="destructive" onClick={handleDeleteMember}>Delete</Button>
+              <Button variant="outline" onClick={() => setMemberToDelete(null)}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={handleDeleteMember}>
+                Delete
+              </Button>
             </div>
           </div>
         </div>

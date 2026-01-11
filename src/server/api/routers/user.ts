@@ -1,20 +1,57 @@
-import { createTRPCRouter, protectedProcedure, publicProcedure } from "@/server/api/trpc";
+import {
+  createTRPCRouter,
+  protectedProcedure,
+  publicProcedure,
+} from "@/server/api/trpc";
 import { z } from "zod";
-import { eq, ilike, and, ne } from "drizzle-orm";
+import { eq, ilike, and, ne, getTableColumns } from "drizzle-orm";
 import { paginationInputSchema } from "@/server/utils/schema";
-import { user, member, resident, invitation } from "@/server/db/schema"; // ✅ Add invitation
+import {
+  user,
+  member,
+  resident,
+  invitation,
+  facility,
+  memberFacility,
+} from "@/server/db/schema";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { ac } from "@/lib/permissions";
 
 import { inArray } from "drizzle-orm";
-import { facility, memberFacility } from "@/server/db/schema";
 import { authClient } from "@/components/providers/auth-client";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type { Sql } from "postgres";
 
 // TODO: Add appropriate types
-export async function getAllowedFacilities(ctx: { session: { user: { id: string; email: string; emailVerified: boolean; name: string; createdAt: Date; updatedAt: Date; image?: string | null | undefined | undefined; }; session: { id: string; userId: string; expiresAt: Date; createdAt: Date; updatedAt: Date; token: string; ipAddress?: string | null | undefined | undefined; userAgent?: string | null | undefined | undefined; activeOrganizationId?: string | null | undefined; }; }; headers: Headers; db: PostgresJsDatabase<typeof import("@/server/db/schema")> & { $client: Sql<{}>; }; }) {
+export async function getAllowedFacilities(ctx: {
+  session: {
+    user: {
+      id: string;
+      email: string;
+      emailVerified: boolean;
+      name: string;
+      createdAt: Date;
+      updatedAt: Date;
+      image?: string | null | undefined | undefined;
+    };
+    session: {
+      id: string;
+      userId: string;
+      expiresAt: Date;
+      createdAt: Date;
+      updatedAt: Date;
+      token: string;
+      ipAddress?: string | null | undefined | undefined;
+      userAgent?: string | null | undefined | undefined;
+      activeOrganizationId?: string | null | undefined;
+    };
+  };
+  headers: Headers;
+  db: PostgresJsDatabase<typeof import("@/server/db/schema")> & {
+    $client: Sql<{}>;
+  };
+}) {
   const userId = ctx.session.user.id;
 
   const [memberRecord] = await ctx.db
@@ -25,6 +62,10 @@ export async function getAllowedFacilities(ctx: { session: { user: { id: string;
 
   if (!memberRecord) throw new Error("Not a member");
 
+  const rolesToValidate = ["facility_coordinator", "facility_viewer"];
+  if (!rolesToValidate.includes(memberRecord.role)) {
+    return [];
+  }
   const assignedFacilities = await ctx.db
     .select()
     .from(memberFacility)
@@ -95,7 +136,7 @@ export const userRouter = createTRPCRouter({
 
       if (!session) {
         // Protected route did we sacrifice
-        throw Error("Failedd to get session");
+        throw Error("Failed to get session");
       }
 
       const { organizationId, search, page, pageSize, role } = input;
@@ -119,112 +160,46 @@ export const userRouter = createTRPCRouter({
           createdAt: member.createdAt,
         })
         .from(member)
-        .innerJoin(user, eq(member.userId, user.id))
         .where(and(...conditions))
+        .innerJoin(user, eq(member.userId, user.id))
         .limit(pageSize)
         .offset(offset);
 
       return results;
     }),
 
-  // ✅ UPDATED: Now stores the custom role in invitation table
   assignToFacility: protectedProcedure
     .input(
       z.object({
-        email: z.string().email(),
+        userId: z.string(),
         organizationId: z.string(),
         facilityId: z.number(),
-        role: z.string(), // ✅ Add custom role
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      // Check if requesting member exists in the database
-      const [requestingMember] = await ctx.db
-        .select()
-        .from(member)
-        .where(
-          and(
-            eq(member.userId, ctx.session.user.id),
-            eq(member.organizationId, input.organizationId),
-          ),
-        )
-        .limit(1);
-
-      if (!requestingMember) {
-        throw new Error("Requesting user is not a member of this organization");
-      }
-
-      // Check if user can assign
+      // Check permissions (Admin/Owner only)
       const canAssign = await auth.api.hasPermission({
         headers: await headers(),
-        body: {
-          permission: { member: ["create", "update"] },
-        },
+        body: { permission: { member: ["update"] } },
       });
 
-      if (!canAssign) {
-        throw new Error(
-          "You do not have permission to assign users to facilities",
-        );
-      }
+      if (!canAssign) throw new Error("Unauthorized");
 
-      // Check if facility exists
-      const [facilityExists] = await ctx.db
-        .select()
-        .from(facility)
-        .where(eq(facility.id, input.facilityId))
-        .limit(1);
+      // Prevent duplicates
+      const existingLink = await ctx.db.query.memberFacility.findFirst({
+        where: and(
+          eq(memberFacility.userId, input.userId),
+          eq(memberFacility.facilityId, input.facilityId),
+        ),
+      });
 
-      if (!facilityExists) {
-        throw new Error("Facility not found");
-      }
+      if (existingLink) return { success: true, message: "Already assigned" };
 
-      // ✅ Update the pending invitation with the custom role
-      await ctx.db
-        .update(invitation)
-        .set({ role: input.role })
-        .where(
-          and(
-            eq(invitation.email, input.email),
-            eq(invitation.organizationId, input.organizationId),
-            eq(invitation.status, "pending")
-          )
-        );
-
-      // Check if user already exists
-      const [userFromEmail] = await ctx.db
-        .select()
-        .from(user)
-        .where(eq(user.email, input.email))
-        .limit(1);
-
-      // If user exists, assign to facility and update role
-      if (userFromEmail) {
-        // ✅ Update member role if they're already a member
-        const [existingMember] = await ctx.db
-          .select()
-          .from(member)
-          .where(
-            and(
-              eq(member.userId, userFromEmail.id),
-              eq(member.organizationId, input.organizationId)
-            )
-          )
-          .limit(1);
-
-        if (existingMember) {
-          await ctx.db
-            .update(member)
-            .set({ role: input.role })
-            .where(eq(member.id, existingMember.id));
-        }
-
-        // Insert facility assignment
-        await ctx.db.insert(memberFacility).values({
-          userId: userFromEmail.id,
-          facilityId: input.facilityId,
-        });
-      }
+      // Insert Link
+      await ctx.db.insert(memberFacility).values({
+        userId: input.userId,
+        facilityId: input.facilityId,
+      });
 
       return { success: true };
     }),
@@ -236,7 +211,7 @@ export const userRouter = createTRPCRouter({
       z.object({
         userId: z.string(),
         organizationId: z.string(),
-      })
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       // ✅ Manual auth check - allow if updating your own role
@@ -271,8 +246,8 @@ export const userRouter = createTRPCRouter({
         .where(
           and(
             eq(invitation.email, userRecord.email),
-            eq(invitation.organizationId, input.organizationId)
-          )
+            eq(invitation.organizationId, input.organizationId),
+          ),
         )
         .limit(1);
 
@@ -287,8 +262,8 @@ export const userRouter = createTRPCRouter({
         .where(
           and(
             eq(member.userId, input.userId),
-            eq(member.organizationId, input.organizationId)
-          )
+            eq(member.organizationId, input.organizationId),
+          ),
         )
         .limit(1);
 
@@ -312,7 +287,7 @@ export const userRouter = createTRPCRouter({
         email: z.string().email(),
         organizationId: z.string(),
         role: z.string(),
-      })
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       // Update the invitation with the custom role
@@ -323,22 +298,78 @@ export const userRouter = createTRPCRouter({
           and(
             eq(invitation.email, input.email),
             eq(invitation.organizationId, input.organizationId),
-            eq(invitation.status, "pending")
-          )
+            eq(invitation.status, "pending"),
+          ),
         );
 
       return { success: true };
     }),
 
+  removeFromFacility: protectedProcedure
+    .input(
+      z.object({
+        userId: z.string(),
+        facilityId: z.number(),
+        organizationId: z.string(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const canManage = await auth.api.hasPermission({
+        headers: await headers(),
+        body: {
+          permission: { member: ["update"] },
+          organizationId: input.organizationId,
+        },
+      });
 
+      if (!canManage) {
+        throw new Error("You do not have permission to manage facility access");
+      }
 
-  getForOrg: protectedProcedure
-    .input(z.object({}))
+      // We delete the link between the User and the Facility
+      await ctx.db
+        .delete(memberFacility)
+        .where(
+          and(
+            eq(memberFacility.userId, input.userId),
+            eq(memberFacility.facilityId, input.facilityId),
+          ),
+        );
+
+      return { success: true };
+    }),
+
+  getAssignedFacilities: protectedProcedure
+    .input(
+      z.object({
+        userId: z.string(),
+        organizationId: z.string(),
+      }),
+    )
     .query(async ({ ctx, input }) => {
-      const facilities = await getAllowedFacilities(ctx);
+      const canManage = await auth.api.hasPermission({
+        headers: await headers(),
+        body: {
+          permission: { member: ["update"] },
+          organizationId: input.organizationId,
+        },
+      });
 
-      if (!facilities.length) return [];
+      if (!canManage) {
+        throw new Error("You do not have permission to manage facility access");
+      }
 
-      return facilities[0];
+      const conditions = [];
+
+      conditions.push(eq(memberFacility.userId, input.userId));
+
+      return await ctx.db
+        .select({
+          ...getTableColumns(memberFacility),
+          facility: facility,
+        })
+        .from(memberFacility)
+        .where(and(...conditions))
+        .innerJoin(facility, eq(memberFacility.facilityId, facility.id));
     }),
 });
