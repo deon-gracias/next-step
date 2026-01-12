@@ -21,8 +21,6 @@ interface ConfirmActionDialogProps {
 }
 
 export function ConfirmActionDialog({
-  open,
-  onOpenChange,
   title,
   description,
   onConfirm,
@@ -30,7 +28,7 @@ export function ConfirmActionDialog({
   variant = "default",
 }: ConfirmActionDialogProps) {
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
+    <AlertDialog>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>

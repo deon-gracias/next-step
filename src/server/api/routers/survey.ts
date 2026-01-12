@@ -33,6 +33,7 @@ import {
   paginationInputSchema,
   surveyCreateInputSchema,
 } from "@/server/utils/schema";
+import { TRPCError } from "@trpc/server";
 
 const saveGeneralResponsesInput = z.object({
   surveyId: z.number().int().positive(),
@@ -283,21 +284,20 @@ export const surveyRouter = createTRPCRouter({
       }),
     )
     .query(async ({ ctx, input }) => {
-      const facilities = await getAllowedFacilities(ctx);
+      const allowedFacilities = await getAllowedFacilities(ctx);
 
       const offset = (input.page - 1) * input.pageSize;
 
       const conditions = [];
       if (input.id !== undefined) conditions.push(eq(survey.id, input.id));
       if (input.surveyorId !== undefined)
-        conditions.push(eq(survey.surveyorId, input.surveyorId));
+        conditions.push(inArray(survey.surveyorId, input.surveyorId));
 
       if (input.facilityId !== undefined)
-        for (const facilityId of input.facilityId)
-          conditions.push(eq(survey.facilityId, facilityId));
+        conditions.push(inArray(survey.facilityId, input.facilityId));
 
       if (input.templateId !== undefined)
-        conditions.push(eq(survey.templateId, input.templateId));
+        conditions.push(inArray(survey.templateId, input.templateId));
 
       const statusConditions = [];
       if (input.pocGenerated !== undefined)
@@ -307,17 +307,12 @@ export const surveyRouter = createTRPCRouter({
 
       conditions.push(or(...statusConditions));
 
-      const surveyorConditions = [];
-      if (input.surveyorId !== undefined)
-        for (const surveyorId of input.surveyorId)
-          surveyorConditions.push(eq(survey.surveyorId, surveyorId));
+      if (input.surveyorId && input.surveyorId.length > 0)
+        conditions.push(inArray(survey.surveyorId, input.surveyorId));
 
-      conditions.push(or(...surveyorConditions));
-
-      const facilityConditions = facilities.map((f) =>
-        eq(survey.facilityId, f.id),
-      );
-      conditions.push(or(...facilityConditions));
+      const allowedFacilityIds = allowedFacilities.map((f) => f.id);
+      if (allowedFacilityIds.length > 0)
+        conditions.push(inArray(survey.facilityId, allowedFacilityIds));
 
       const whereClause = and(...conditions);
 

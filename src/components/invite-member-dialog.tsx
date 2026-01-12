@@ -110,10 +110,11 @@ export function InviteMemberDialog({
   async function onSubmit(values: SendInviteType) {
     try {
       // 1. Send Base Invitation
-      const betterAuthRole = values.role === "admin" ? "admin" : "member";
+      const betterAuthRole = values.role === "admin" ? "admin" : "user";
       const member = await authClient.organization.inviteMember({
         email: values.email,
-        role: betterAuthRole,
+        // @ts-ignore
+        role: values.role,
         organizationId,
       });
 
@@ -126,19 +127,54 @@ export function InviteMemberDialog({
         role: values.role,
       });
 
-      // 3. Batch Assign Facilities
-      // Only runs if role allows it and facilities were selected
+      const userResult = await authClient.admin.listUsers({
+        query: {
+          filterField: "email",
+          filterValue: values.email,
+          filterOperator: "eq",
+        },
+      });
+
+      let userId: string | undefined = undefined;
+
+      if (!userResult.data || userResult.data.users.length < 1) {
+        const createdUser = await authClient.admin.createUser({
+          name: values.email.split("@")[0] ?? "User",
+          email: values.email,
+          password: values.email.split("@")[0] + "12345678",
+          role: betterAuthRole,
+        });
+
+        if (!createdUser.data) {
+          throw createdUser.error;
+        }
+
+        userId = createdUser.data.user.id;
+
+        await authClient.requestPasswordReset({
+          email: values.email,
+          redirectTo: `${window.location.origin}/reset-password`,
+        });
+      } else {
+        const existingUser = userResult.data.users[0];
+        if (!existingUser) throw new Error("Couldn't find user");
+        userId = existingUser.id;
+      }
+
       if (
         ["facility_coordinator", "facility_viewer"].includes(values.role) &&
         values.facilityIds.length > 0
       ) {
+        // 3. Batch Assign Facilities
+        // Only runs if role allows it and facilities were selected
         // Run all assignments in parallel
         await Promise.all(
           values.facilityIds.map((fid) =>
             addMemberToFacility.mutateAsync({
               facilityId: fid,
-              email: values.email, // Using email because User ID might not exist yet
+              userId: userId,
               organizationId,
+              // @ts-ignore
               role: values.role,
             }),
           ),

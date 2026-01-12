@@ -62,7 +62,11 @@
 
 // lib/permissions.ts
 import { createAccessControl } from "better-auth/plugins/access";
-import { defaultStatements } from "better-auth/plugins/organization/access";
+import { defaultStatements as organizationDefaultStatements } from "better-auth/plugins/organization/access";
+import {
+  defaultStatements as adminDefaultStatements,
+  adminAc,
+} from "better-auth/plugins/admin/access";
 
 export const roles = [
   { label: "admin" },
@@ -74,8 +78,7 @@ export const roles = [
 ] as const;
 
 export const ac = createAccessControl({
-  ...defaultStatements,
-  user: ["read"] as const,
+  ...organizationDefaultStatements,
   template: ["create", "update", "delete", "read"] as const,
   facility: ["create", "update", "delete", "read"] as const,
   resident: ["create", "update", "delete", "read"] as const,
@@ -83,6 +86,7 @@ export const ac = createAccessControl({
   poc: ["create", "update", "delete", "read"] as const,
   compliance: ["create", "update", "delete", "read"] as const,
   analytics: ["read"] as const,
+  ...adminDefaultStatements,
 } as const);
 
 // Keep if you use owner anywhere
@@ -90,9 +94,7 @@ export const owner = ac.newRole({});
 
 export const admin = ac.newRole({
   organization: ["update", "delete"],
-  member: ["create", "update", "delete"],
   invitation: ["create", "cancel"],
-  user: ["read"],
   template: ["create", "update", "delete", "read"],
   facility: ["create", "update", "delete", "read"],
   resident: ["create", "update", "delete", "read"],
@@ -103,7 +105,6 @@ export const admin = ac.newRole({
 });
 
 export const viewer = ac.newRole({
-  user: ["read"],
   template: ["read"],
   facility: ["read"],
   resident: ["read"],
@@ -114,7 +115,6 @@ export const viewer = ac.newRole({
 });
 
 export const lead_surveyor = ac.newRole({
-  user: ["read"],
   facility: ["read"],
   resident: ["create", "update", "read"],
   survey: ["create", "update", "read"],

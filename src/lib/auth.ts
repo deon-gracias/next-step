@@ -2,7 +2,10 @@ import { db } from "@/server/db";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
-import { organization } from "better-auth/plugins";
+import {
+  organization as organizationPlugin,
+  admin as adminPlugin,
+} from "better-auth/plugins";
 import * as schema from "@/server/db/schema";
 import {
   surveyor,
@@ -28,12 +31,12 @@ async function sendResetPasswordEmail({
 }) {
   console.log("Sending password reset email via Better Auth");
   console.log("Reset URL:", url);
-  
+
   try {
     await resend.emails.send({
-      from: 'onboarding@resend.dev',
+      from: "onboarding@resend.dev",
       to: [user.email],
-      subject: 'Reset your password',
+      subject: "Reset your password",
       html: `
         <div style="max-width: 600px; margin: 0 auto; padding: 30px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
           <div style="text-align: center; margin-bottom: 30px;">
@@ -98,7 +101,7 @@ export const auth = betterAuth({
   trustedOrigins: [
     "https://nshc-survey-system.vercel.app",
     "http://localhost:3000",
-    "https://next-step-git-main-soham-03s-projects.vercel.app"
+    "https://next-step-git-main-soham-03s-projects.vercel.app",
   ],
   emailAndPassword: {
     enabled: true,
@@ -107,10 +110,11 @@ export const auth = betterAuth({
     resetPasswordTokenExpiresIn: 60 * 60, // 1 hour in seconds
   },
   plugins: [
-    organization({
+    organizationPlugin({
       accessControl: ac,
       roles: { admin, viewer, lead_surveyor, surveyor, facility_coordinator },
     }),
+    adminPlugin(),
     nextCookies(),
   ],
   session: {

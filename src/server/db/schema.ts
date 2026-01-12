@@ -11,6 +11,8 @@ import {
   date,
   varchar,
   numeric,
+  index,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -19,100 +21,181 @@ export const user = pgTable("user", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
-  emailVerified: boolean("email_verified")
-    .$defaultFn(() => false)
-    .notNull(),
+  emailVerified: boolean("email_verified").default(false).notNull(),
   image: text("image"),
-  createdAt: timestamp("created_at")
-    .$defaultFn(() => /* @__PURE__ */ new Date())
-    .notNull(),
-  updatedAt: timestamp("updated_at")
-    .$defaultFn(() => /* @__PURE__ */ new Date())
-    .notNull(),
-  resetToken: varchar("resetToken", { length: 255 }),
-  resetTokenExpiry: timestamp("resetTokenExpiry", { mode: "date" }),
-});
-
-export const session = pgTable("session", {
-  id: text("id").primaryKey(),
-  expiresAt: timestamp("expires_at").notNull(),
-  token: text("token").notNull().unique(),
-  createdAt: timestamp("created_at").notNull(),
-  updatedAt: timestamp("updated_at").notNull(),
-  ipAddress: text("ip_address"),
-  userAgent: text("user_agent"),
-  userId: text("user_id")
-    .notNull()
-    .references(() => user.id, { onDelete: "cascade" }),
-  activeOrganizationId: text("active_organization_id"),
-});
-
-export const account = pgTable("account", {
-  id: text("id").primaryKey(),
-  accountId: text("account_id").notNull(),
-  providerId: text("provider_id").notNull(),
-  userId: text("user_id")
-    .notNull()
-    .references(() => user.id, { onDelete: "cascade" }),
-  accessToken: text("access_token"),
-  refreshToken: text("refresh_token"),
-  idToken: text("id_token"),
-  accessTokenExpiresAt: timestamp("access_token_expires_at"),
-  refreshTokenExpiresAt: timestamp("refresh_token_expires_at"),
-  scope: text("scope"),
-  password: text("password"),
-  createdAt: timestamp("created_at").notNull(),
-  updatedAt: timestamp("updated_at").notNull(),
-});
-
-export const verification = pgTable("verification", {
-  id: text("id").primaryKey(),
-  identifier: text("identifier").notNull(),
-  value: text("value").notNull(),
-  expiresAt: timestamp("expires_at").notNull(),
-  createdAt: timestamp("created_at").$defaultFn(
-    () => /* @__PURE__ */ new Date(),
-  ),
-  updatedAt: timestamp("updated_at").$defaultFn(
-    () => /* @__PURE__ */ new Date(),
-  ),
-});
-
-export const organization = pgTable("organization", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  slug: text("slug").unique(),
-  logo: text("logo"),
-  createdAt: timestamp("created_at").notNull(),
-  metadata: text("metadata"),
-});
-
-export const member = pgTable("member", {
-  id: text("id").primaryKey(),
-  organizationId: text("organization_id")
-    .notNull()
-    .references(() => organization.id, { onDelete: "cascade" }),
-  userId: text("user_id")
-    .notNull()
-    .references(() => user.id, { onDelete: "cascade" }),
-  role: text("role").default("member").notNull(),
-  createdAt: timestamp("created_at").notNull(),
-});
-
-export const invitation = pgTable("invitation", {
-  id: text("id").primaryKey(),
-  organizationId: text("organization_id")
-    .notNull()
-    .references(() => organization.id, { onDelete: "cascade" }),
-  email: text("email").notNull(),
-  role: text("role"),
-  status: text("status").default("pending").notNull(),
-  expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-  inviterId: text("inviter_id")
-    .notNull()
-    .references(() => user.id, { onDelete: "cascade" }),
+  updatedAt: timestamp("updated_at")
+    .defaultNow()
+    .$onUpdate(() => /* @__PURE__ */ new Date())
+    .notNull(),
+  role: text("role"),
+  banned: boolean("banned").default(false),
+  banReason: text("ban_reason"),
+  banExpires: timestamp("ban_expires"),
 });
+
+export const session = pgTable(
+  "session",
+  {
+    id: text("id").primaryKey(),
+    expiresAt: timestamp("expires_at").notNull(),
+    token: text("token").notNull().unique(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+    ipAddress: text("ip_address"),
+    userAgent: text("user_agent"),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    activeOrganizationId: text("active_organization_id"),
+    impersonatedBy: text("impersonated_by"),
+  },
+  (table) => [index("session_userId_idx").on(table.userId)],
+);
+
+export const account = pgTable(
+  "account",
+  {
+    id: text("id").primaryKey(),
+    accountId: text("account_id").notNull(),
+    providerId: text("provider_id").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    accessToken: text("access_token"),
+    refreshToken: text("refresh_token"),
+    idToken: text("id_token"),
+    accessTokenExpiresAt: timestamp("access_token_expires_at"),
+    refreshTokenExpiresAt: timestamp("refresh_token_expires_at"),
+    scope: text("scope"),
+    password: text("password"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+  },
+  (table) => [index("account_userId_idx").on(table.userId)],
+);
+
+export const verification = pgTable(
+  "verification",
+  {
+    id: text("id").primaryKey(),
+    identifier: text("identifier").notNull(),
+    value: text("value").notNull(),
+    expiresAt: timestamp("expires_at").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+  },
+  (table) => [index("verification_identifier_idx").on(table.identifier)],
+);
+
+export const organization = pgTable(
+  "organization",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    slug: text("slug").notNull().unique(),
+    logo: text("logo"),
+    createdAt: timestamp("created_at").notNull(),
+    metadata: text("metadata"),
+  },
+  (table) => [uniqueIndex("organization_slug_uidx").on(table.slug)],
+);
+
+export const member = pgTable(
+  "member",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    role: text("role").default("member").notNull(),
+    createdAt: timestamp("created_at").notNull(),
+  },
+  (table) => [
+    index("member_organizationId_idx").on(table.organizationId),
+    index("member_userId_idx").on(table.userId),
+  ],
+);
+
+export const invitation = pgTable(
+  "invitation",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    role: text("role"),
+    status: text("status").default("pending").notNull(),
+    expiresAt: timestamp("expires_at").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    inviterId: text("inviter_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    index("invitation_organizationId_idx").on(table.organizationId),
+    index("invitation_email_idx").on(table.email),
+  ],
+);
+
+export const userRelations = relations(user, ({ many }) => ({
+  sessions: many(session),
+  accounts: many(account),
+  members: many(member),
+  invitations: many(invitation),
+}));
+
+export const sessionRelations = relations(session, ({ one }) => ({
+  user: one(user, {
+    fields: [session.userId],
+    references: [user.id],
+  }),
+}));
+
+export const accountRelations = relations(account, ({ one }) => ({
+  user: one(user, {
+    fields: [account.userId],
+    references: [user.id],
+  }),
+}));
+
+export const organizationRelations = relations(organization, ({ many }) => ({
+  members: many(member),
+  invitations: many(invitation),
+}));
+
+export const memberRelations = relations(member, ({ one }) => ({
+  organization: one(organization, {
+    fields: [member.organizationId],
+    references: [organization.id],
+  }),
+  user: one(user, {
+    fields: [member.userId],
+    references: [user.id],
+  }),
+}));
+
+export const invitationRelations = relations(invitation, ({ one }) => ({
+  organization: one(organization, {
+    fields: [invitation.organizationId],
+    references: [organization.id],
+  }),
+  user: one(user, {
+    fields: [invitation.inviterId],
+    references: [user.id],
+  }),
+}));
 
 export const memberFacility = pgTable("member_facility", {
   id: integer().primaryKey().generatedAlwaysAsIdentity(),
@@ -133,9 +216,7 @@ export const resident = pgTable("resident", {
   facilityId: integer("facility_id")
     .references(() => facility.id)
     .notNull(),
-  createdAt: timestamp("created_at", { mode: "date" })
-    .defaultNow()
-    .notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
 });
 
 export const facility = pgTable("facility", {
@@ -144,7 +225,6 @@ export const facility = pgTable("facility", {
   address: text("address").notNull(),
   facilityCode: varchar("facility_code", { length: 10 }).notNull(), // Add .notNull()
 });
-
 
 export const templateTypeEnum = pgEnum("template_type", [
   "resident",
@@ -221,7 +301,7 @@ export const surveyResident = pgTable(
       .notNull(),
     createdAt: timestamp("created_at").defaultNow(),
   },
-  (table) => [unique().on(table.residentId, table.surveyId)],
+  // (table) => [unique().on(table.residentId, table.surveyId)],
 );
 
 export const surveyCases = pgTable("survey_case", {
@@ -252,7 +332,7 @@ export const surveyResponse = pgTable(
     // Optional for general surveys
     residentId: integer("resident_id").references(() => resident.id),
 
-    // Optional for general surveys  
+    // Optional for general surveys
     surveyCaseId: integer("survey_case_id").references(() => surveyCases.id),
 
     questionId: integer("question_id")
@@ -270,13 +350,13 @@ export const surveyResponse = pgTable(
     unique("unique_resident_response").on(
       table.surveyId,
       table.residentId,
-      table.questionId
+      table.questionId,
     ),
 
     unique("unique_case_response").on(
       table.surveyId,
       table.surveyCaseId,
-      table.questionId
+      table.questionId,
     ),
 
     // ✅ REMOVED: The problematic unique_general_response constraint
@@ -322,9 +402,8 @@ export const surveyPOC = pgTable(
       onDelete: "set null",
     }),
     updatedByUserId: text("updated_by_user_id").references(() => user.id, {
-      onDelete: "set null"
-    },
-    ),
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
@@ -348,13 +427,9 @@ export const surveyPOC = pgTable(
     ),
 
     // ✅ NEW: General POCs: One POC per survey+question (no resident/case)
-    unique("unique_general_poc").on(
-      table.surveyId,
-      table.questionId,
-    ),
+    unique("unique_general_poc").on(table.surveyId, table.questionId),
   ],
 );
-
 
 export const pocComment = pgTable("poc_comment", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
@@ -404,7 +479,7 @@ export const surveyDOC = pgTable(
     // Optional: link to survey_response row for easier joins/validation
     surveyResponseId: integer("survey_response_id").references(
       () => surveyResponse.id,
-      { onDelete: "set null" }
+      { onDelete: "set null" },
     ),
 
     // Content - compliance date instead of POC text
@@ -428,7 +503,7 @@ export const surveyDOC = pgTable(
       table.surveyId,
       table.residentId,
       table.templateId,
-      table.questionId
+      table.questionId,
     ),
 
     // ✅ NEW: Case DOCs
@@ -436,17 +511,13 @@ export const surveyDOC = pgTable(
       table.surveyId,
       table.surveyCaseId,
       table.templateId,
-      table.questionId
+      table.questionId,
     ),
 
     // ✅ NEW: General DOCs
-    unique("unique_general_doc").on(
-      table.surveyId,
-      table.questionId
-    ),
-  ]
+    unique("unique_general_doc").on(table.surveyId, table.questionId),
+  ],
 );
-
 
 export const dietarySurveys = pgTable("dietary_surveys", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
@@ -486,7 +557,6 @@ export const dietaryAnswers = pgTable("dietary_answers", {
   validation_or_completion: text("validation"),
 });
 
-
 // ============== QAL (Facility-level audit) ==============
 
 // QAL Facility (reuse existing "facility" if you prefer; keeping separate provides isolation)
@@ -510,7 +580,9 @@ export const qalTemplate = pgTable("qal_template", {
 
 export const qalSection = pgTable("qal_section", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
-  templateId: integer("template_id").notNull().references(() => qalTemplate.id, { onDelete: "cascade" }),
+  templateId: integer("template_id")
+    .notNull()
+    .references(() => qalTemplate.id, { onDelete: "cascade" }),
   title: text("title").notNull(), // "Admissions", etc.
   description: text("description"),
   sortOrder: integer("sort_order").notNull(),
@@ -521,7 +593,9 @@ export const qalSection = pgTable("qal_section", {
 
 export const qalQuestion = pgTable("qal_question", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
-  sectionId: integer("section_id").notNull().references(() => qalSection.id, { onDelete: "cascade" }),
+  sectionId: integer("section_id")
+    .notNull()
+    .references(() => qalSection.id, { onDelete: "cascade" }),
   prompt: text("prompt").notNull(), // audit item text
   guidance: text("guidance"), // additional instructions
   sortOrder: integer("sort_order").notNull(),
@@ -536,9 +610,15 @@ export const surveyTypeEnum = pgEnum("survey_type", ["onsite", "offsite"]);
 // Facility-level survey (no residents)
 export const qalSurvey = pgTable("qal_survey", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
-  facilityId: integer("facility_id").notNull().references(() => facility.id, { onDelete: "restrict" }),
-  templateId: integer("template_id").notNull().references(() => qalTemplate.id, { onDelete: "restrict" }),
-  auditorUserId: text("auditor_user_id").references(() => user.id, { onDelete: "set null" }),
+  facilityId: integer("facility_id")
+    .notNull()
+    .references(() => facility.id, { onDelete: "restrict" }),
+  templateId: integer("template_id")
+    .notNull()
+    .references(() => qalTemplate.id, { onDelete: "restrict" }),
+  auditorUserId: text("auditor_user_id").references(() => user.id, {
+    onDelete: "set null",
+  }),
   surveyDate: timestamp("survey_date").defaultNow().notNull(),
   surveyType: surveyTypeEnum("survey_type").notNull().default("onsite"),
   administrator: text("administrator"),
@@ -549,26 +629,38 @@ export const qalSurvey = pgTable("qal_survey", {
   // ✅ ADD THIS
   pocGenerated: boolean("poc_generated").default(false).notNull(),
 
-  totalPossible: numeric("total_possible", { precision: 12, scale: 4 }).default("0"),
-  totalEarned: numeric("total_earned", { precision: 12, scale: 4 }).default("0"),
-  overallPercent: numeric("overall_percent", { precision: 7, scale: 4 }).default("0"),
+  totalPossible: numeric("total_possible", { precision: 12, scale: 4 }).default(
+    "0",
+  ),
+  totalEarned: numeric("total_earned", { precision: 12, scale: 4 }).default(
+    "0",
+  ),
+  overallPercent: numeric("overall_percent", {
+    precision: 7,
+    scale: 4,
+  }).default("0"),
   gradeBand: text("grade_band"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-
 // Section score row for a survey
 export const qalSurveySection = pgTable("qal_survey_section", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
-  surveyId: integer("survey_id").notNull().references(() => qalSurvey.id, { onDelete: "cascade" }),
-  sectionId: integer("section_id").notNull().references(() => qalSection.id, { onDelete: "restrict" }),
+  surveyId: integer("survey_id")
+    .notNull()
+    .references(() => qalSurvey.id, { onDelete: "cascade" }),
+  sectionId: integer("section_id")
+    .notNull()
+    .references(() => qalSection.id, { onDelete: "restrict" }),
 
   // Scoring fields
   fixedSample: integer("fixed_sample").notNull(), // copied from section total
   passedCount: integer("passed_count"), // user input or "NA"
   isNotApplicable: boolean("is_not_applicable").default(false),
-  earnedPoints: numeric("earned_points", { precision: 12, scale: 4 }).default("0"),
+  earnedPoints: numeric("earned_points", { precision: 12, scale: 4 }).default(
+    "0",
+  ),
 
   // Testing Sample & Comments
   testingSample: text("testing_sample"), // PCC IDs, dates JSON or text
@@ -583,24 +675,30 @@ export const qalSurveyQuestion = pgTable(
   "qal_survey_question",
   {
     id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
-    surveyId: integer("survey_id").notNull().references(() => qalSurvey.id, { onDelete: "cascade" }),
-    questionId: integer("question_id").notNull().references(() => qalQuestion.id, { onDelete: "cascade" }),
+    surveyId: integer("survey_id")
+      .notNull()
+      .references(() => qalSurvey.id, { onDelete: "cascade" }),
+    questionId: integer("question_id")
+      .notNull()
+      .references(() => qalQuestion.id, { onDelete: "cascade" }),
     result: text("result").notNull(), // "pass" | "fail" | "na"
     notes: text("notes"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
-  (t) => [
-    unique("uq_qal_survey_question").on(t.surveyId, t.questionId),
-  ],
+  (t) => [unique("uq_qal_survey_question").on(t.surveyId, t.questionId)],
 );
 
 export const qalQuestionResponse = pgTable(
   "qal_question_response",
   {
     id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
-    surveyId: integer("survey_id").notNull().references(() => qalSurvey.id, { onDelete: "cascade" }),
-    questionId: integer("question_id").notNull().references(() => qalQuestion.id, { onDelete: "cascade" }),
+    surveyId: integer("survey_id")
+      .notNull()
+      .references(() => qalSurvey.id, { onDelete: "cascade" }),
+    questionId: integer("question_id")
+      .notNull()
+      .references(() => qalQuestion.id, { onDelete: "cascade" }),
     sampleSize: integer("sample_size").default(0), // ✅ ADD THIS LINE
     passedCount: integer("passed_count"),
     isNotApplicable: boolean("is_not_applicable").default(false),
@@ -608,11 +706,8 @@ export const qalQuestionResponse = pgTable(
     comments: text("comments"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
-  (t) => [
-    unique("uq_qal_question_response").on(t.surveyId, t.questionId),
-  ],
+  (t) => [unique("uq_qal_question_response").on(t.surveyId, t.questionId)],
 );
-
 
 // QAL POC per section
 export const qalPOC = pgTable(
@@ -633,7 +728,10 @@ export const qalPOC = pgTable(
       .references(() => qalQuestion.id, { onDelete: "cascade" }),
 
     // Snapshot of failure context
-    possiblePoints: numeric("possible_points", { precision: 12, scale: 4 }).notNull(),
+    possiblePoints: numeric("possible_points", {
+      precision: 12,
+      scale: 4,
+    }).notNull(),
     sampleSize: integer("sample_size").notNull(),
     passedCount: integer("passed_count").notNull(),
     testingSample: text("testing_sample"),
@@ -643,8 +741,12 @@ export const qalPOC = pgTable(
     pocText: text("poc_text").notNull(),
     complianceDate: date("compliance_date"),
 
-    createdByUserId: text("created_by_user_id").references(() => user.id, { onDelete: "set null" }),
-    updatedByUserId: text("updated_by_user_id").references(() => user.id, { onDelete: "set null" }),
+    createdByUserId: text("created_by_user_id").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    updatedByUserId: text("updated_by_user_id").references(() => user.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
@@ -653,7 +755,6 @@ export const qalPOC = pgTable(
     unique("uq_qal_poc_per_question").on(t.surveyId, t.questionId),
   ],
 );
-
 
 export const qalPocComment = pgTable("qal_poc_comment", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
@@ -751,77 +852,105 @@ export const dietarySurveyResponse = pgTable("dietary_survey_response", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-
 // Relations
-export const dietaryTemplateRelations = relations(dietaryTemplate, ({ many }) => ({
-  sections: many(dietarySection),
-  surveys: many(dietarySurvey),
-}));
+export const dietaryTemplateRelations = relations(
+  dietaryTemplate,
+  ({ many }) => ({
+    sections: many(dietarySection),
+    surveys: many(dietarySurvey),
+  }),
+);
 
-export const dietarySectionRelations = relations(dietarySection, ({ one, many }) => ({
-  template: one(dietaryTemplate, {
-    fields: [dietarySection.templateId],
-    references: [dietaryTemplate.id],
+export const dietarySectionRelations = relations(
+  dietarySection,
+  ({ one, many }) => ({
+    template: one(dietaryTemplate, {
+      fields: [dietarySection.templateId],
+      references: [dietaryTemplate.id],
+    }),
+    questions: many(dietaryQuestion),
   }),
-  questions: many(dietaryQuestion),
-}));
+);
 
-export const dietaryQuestionRelations = relations(dietaryQuestion, ({ one }) => ({
-  section: one(dietarySection, {
-    fields: [dietaryQuestion.sectionId],
-    references: [dietarySection.id],
+export const dietaryQuestionRelations = relations(
+  dietaryQuestion,
+  ({ one }) => ({
+    section: one(dietarySection, {
+      fields: [dietaryQuestion.sectionId],
+      references: [dietarySection.id],
+    }),
   }),
-}));
+);
 
-export const dietarySurveyRelations = relations(dietarySurvey, ({ one, many }) => ({
-  facility: one(facility, {
-    fields: [dietarySurvey.facilityId],
-    references: [facility.id],
+export const dietarySurveyRelations = relations(
+  dietarySurvey,
+  ({ one, many }) => ({
+    facility: one(facility, {
+      fields: [dietarySurvey.facilityId],
+      references: [facility.id],
+    }),
+    template: one(dietaryTemplate, {
+      fields: [dietarySurvey.templateId],
+      references: [dietaryTemplate.id],
+    }),
+    surveyor: one(user, {
+      fields: [dietarySurvey.surveyorId],
+      references: [user.id],
+    }),
+    responses: many(dietarySurveyResponse),
   }),
-  template: one(dietaryTemplate, {
-    fields: [dietarySurvey.templateId],
-    references: [dietaryTemplate.id],
-  }),
-  surveyor: one(user, {
-    fields: [dietarySurvey.surveyorId],
-    references: [user.id],
-  }),
-  responses: many(dietarySurveyResponse),
-}));
+);
 
-export const dietarySurveyResponseRelations = relations(dietarySurveyResponse, ({ one }) => ({
-  survey: one(dietarySurvey, {
-    fields: [dietarySurveyResponse.surveyId],
-    references: [dietarySurvey.id],
+export const dietarySurveyResponseRelations = relations(
+  dietarySurveyResponse,
+  ({ one }) => ({
+    survey: one(dietarySurvey, {
+      fields: [dietarySurveyResponse.surveyId],
+      references: [dietarySurvey.id],
+    }),
+    question: one(dietaryQuestion, {
+      fields: [dietarySurveyResponse.questionId],
+      references: [dietaryQuestion.id],
+    }),
   }),
-  question: one(dietaryQuestion, {
-    fields: [dietarySurveyResponse.questionId],
-    references: [dietaryQuestion.id],
-  }),
-}));
+);
 
 // Zod schemas
 export const dietaryTemplateInsertSchema = createInsertSchema(dietaryTemplate);
-export type DietaryTemplateInsertType = z.infer<typeof dietaryTemplateInsertSchema>;
+export type DietaryTemplateInsertType = z.infer<
+  typeof dietaryTemplateInsertSchema
+>;
 export const dietaryTemplateSelectSchema = createSelectSchema(dietaryTemplate);
-export type DietaryTemplateSelectType = z.infer<typeof dietaryTemplateSelectSchema>;
+export type DietaryTemplateSelectType = z.infer<
+  typeof dietaryTemplateSelectSchema
+>;
 
 export const dietarySectionInsertSchema = createInsertSchema(dietarySection);
-export type DietarySectionInsertType = z.infer<typeof dietarySectionInsertSchema>;
+export type DietarySectionInsertType = z.infer<
+  typeof dietarySectionInsertSchema
+>;
 export const dietarySectionSelectSchema = createSelectSchema(dietarySection);
-export type DietarySectionSelectType = z.infer<typeof dietarySectionSelectSchema>;
+export type DietarySectionSelectType = z.infer<
+  typeof dietarySectionSelectSchema
+>;
 
 export const dietarySurveyInsertSchema = createInsertSchema(dietarySurvey);
 export type DietarySurveyInsertType = z.infer<typeof dietarySurveyInsertSchema>;
 export const dietarySurveySelectSchema = createSelectSchema(dietarySurvey);
 export type DietarySurveySelectType = z.infer<typeof dietarySurveySelectSchema>;
 
-export const dietaryResponseInsertSchema = createInsertSchema(dietarySurveyResponse);
-export type DietaryResponseInsertType = z.infer<typeof dietaryResponseInsertSchema>;
-export const dietaryResponseSelectSchema = createSelectSchema(dietarySurveyResponse);
-export type DietaryResponseSelectType = z.infer<typeof dietaryResponseSelectSchema>;
-
-
+export const dietaryResponseInsertSchema = createInsertSchema(
+  dietarySurveyResponse,
+);
+export type DietaryResponseInsertType = z.infer<
+  typeof dietaryResponseInsertSchema
+>;
+export const dietaryResponseSelectSchema = createSelectSchema(
+  dietarySurveyResponse,
+);
+export type DietaryResponseSelectType = z.infer<
+  typeof dietaryResponseSelectSchema
+>;
 
 export const qalPocCommentInsertSchema = createInsertSchema(qalPocComment, {
   commentText: (schema) => schema.min(1, "Comment cannot be empty"),
@@ -830,8 +959,6 @@ export type QALPocCommentInsertType = z.infer<typeof qalPocCommentInsertSchema>;
 
 export const qalPocCommentSelectSchema = createSelectSchema(qalPocComment);
 export type QALPocCommentSelectType = z.infer<typeof qalPocCommentSelectSchema>;
-
-
 
 // Resident
 export const residentInsertSchema = createInsertSchema(resident);
@@ -965,16 +1092,13 @@ export const pocCommentSelectSchema = createSelectSchema(pocComment);
 export type PocCommentSelectType = z.infer<typeof pocCommentSelectSchema>;
 
 export const surveyDOCInsertSchema = createInsertSchema(surveyDOC, {
-  complianceDate: (schema) => schema.refine(
-    (date) => date !== null,
-    "Compliance date is required"
-  ),
+  complianceDate: (schema) =>
+    schema.refine((date) => date !== null, "Compliance date is required"),
 });
 export type SurveyDOCInsertType = z.infer<typeof surveyDOCInsertSchema>;
 
 export const surveyDOCSelectSchema = createSelectSchema(surveyDOC);
 export type SurveyDOCSelectType = z.infer<typeof surveyDOCSelectSchema>;
-
 
 // QAL Zod
 export const qalFacilityInsertSchema = createInsertSchema(qalFacility);
@@ -1002,15 +1126,27 @@ export type QALSurveyInsertType = z.infer<typeof qalSurveyInsertSchema>;
 export const qalSurveySelectSchema = createSelectSchema(qalSurvey);
 export type QALSurveySelectType = z.infer<typeof qalSurveySelectSchema>;
 
-export const qalSurveySectionInsertSchema = createInsertSchema(qalSurveySection);
-export type QALSurveySectionInsertType = z.infer<typeof qalSurveySectionInsertSchema>;
-export const qalSurveySectionSelectSchema = createSelectSchema(qalSurveySection);
-export type QALSurveySectionSelectType = z.infer<typeof qalSurveySectionSelectSchema>;
+export const qalSurveySectionInsertSchema =
+  createInsertSchema(qalSurveySection);
+export type QALSurveySectionInsertType = z.infer<
+  typeof qalSurveySectionInsertSchema
+>;
+export const qalSurveySectionSelectSchema =
+  createSelectSchema(qalSurveySection);
+export type QALSurveySectionSelectType = z.infer<
+  typeof qalSurveySectionSelectSchema
+>;
 
-export const qalSurveyQuestionInsertSchema = createInsertSchema(qalSurveyQuestion);
-export type QALSurveyQuestionInsertType = z.infer<typeof qalSurveyQuestionInsertSchema>;
-export const qalSurveyQuestionSelectSchema = createSelectSchema(qalSurveyQuestion);
-export type QALSurveyQuestionSelectType = z.infer<typeof qalSurveyQuestionSelectSchema>;
+export const qalSurveyQuestionInsertSchema =
+  createInsertSchema(qalSurveyQuestion);
+export type QALSurveyQuestionInsertType = z.infer<
+  typeof qalSurveyQuestionInsertSchema
+>;
+export const qalSurveyQuestionSelectSchema =
+  createSelectSchema(qalSurveyQuestion);
+export type QALSurveyQuestionSelectType = z.infer<
+  typeof qalSurveyQuestionSelectSchema
+>;
 
 export const qalPOCInsertSchema = createInsertSchema(qalPOC, {
   pocText: (schema) => schema.min(1, "POC cannot be empty"),
@@ -1019,9 +1155,10 @@ export type QALPOCInsertType = z.infer<typeof qalPOCInsertSchema>;
 export const qalPOCSelectSchema = createSelectSchema(qalPOC);
 export type QALPOCSelectType = z.infer<typeof qalPOCSelectSchema>;
 
-export function toDbNumeric(n: number | string | null | undefined): string | null {
+export function toDbNumeric(
+  n: number | string | null | undefined,
+): string | null {
   if (n === null || n === undefined) return null;
   if (typeof n === "number") return n.toString();
   return n;
 }
-

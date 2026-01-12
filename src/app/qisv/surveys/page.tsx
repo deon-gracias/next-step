@@ -126,8 +126,9 @@ export default function SurveysPage() {
     : undefined;
   const surveyorIdFilter =
     memberRole === "surveyor"
-      ? currentUser.data &&
-      currentUser.data.user.id && [currentUser.data.user.id]
+      ? currentUser.data?.user?.id
+        ? [currentUser.data.user.id]
+        : undefined
       : surveySurveyors;
 
   // Get all surveys
