@@ -290,6 +290,10 @@ export const surveyRouter = createTRPCRouter({
 
       const conditions = [];
       if (input.id !== undefined) conditions.push(eq(survey.id, input.id));
+
+      if (input.surveyDate !== undefined)
+        conditions.push(eq(survey.surveyDate, input.surveyDate));
+
       if (input.surveyorId !== undefined)
         conditions.push(inArray(survey.surveyorId, input.surveyorId));
 
@@ -334,8 +338,8 @@ export const surveyRouter = createTRPCRouter({
         .where(whereClause)
         .leftJoin(user, eq(survey.surveyorId, user.id))
         .leftJoin(facility, eq(survey.facilityId, facility.id))
-        // .orderBy(survey.facilityId)
         .leftJoin(template, eq(survey.templateId, template.id))
+        .orderBy(desc(survey.surveyDate))
         .limit(input.pageSize)
         .offset(offset);
 

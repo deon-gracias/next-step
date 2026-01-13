@@ -14,6 +14,7 @@ import {
   ChevronsRightIcon,
   XIcon,
   CirclePlusIcon,
+  ChevronDownIcon,
 } from "lucide-react";
 import { authClient } from "@/components/providers/auth-client";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -48,6 +49,13 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { TemplateComboBox } from "../_components/template-dropdown";
 import { UserMultiComboBox } from "../_components/user-dropdown";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { format } from "date-fns";
 
 const PAGE_SIZES = [10, 25, 50];
 
@@ -71,6 +79,44 @@ function normalizeRole(role: unknown): AppRole | null {
     return r as AppRole;
   }
   return null;
+}
+
+function SurveyDatePicker({
+  date,
+  handleDate,
+}: {
+  date: Date | undefined;
+  handleDate: (date: Date | undefined) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            id="date"
+            className="justify-between font-normal"
+          >
+            {date ? format(date, "PPP") : "Select date"}
+            <ChevronDownIcon />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto overflow-hidden p-0" align="start">
+          <Calendar
+            mode="single"
+            selected={date}
+            captionLayout="dropdown"
+            onSelect={(date) => {
+              handleDate(date);
+              setOpen(false);
+            }}
+          />
+        </PopoverContent>
+      </Popover>
+    </>
+  );
 }
 
 export default function SurveysPage() {
@@ -131,12 +177,16 @@ export default function SurveysPage() {
         : undefined
       : surveySurveyors;
 
+  const dateParam = searchParams.get("date");
+  const surveyDate = dateParam ? new Date(dateParam) : undefined;
+
   // Get all surveys
   const surveysQuery = api.survey.list.useQuery(
     {
       page: surveysPage,
       pageSize: surveysPageSize,
       pocGenerated: surveyPoc,
+      surveyDate: surveyDate ? format(surveyDate, "yyyy-MM-dd") : undefined,
       isLocked: surveyLocked,
       surveyorId: surveyorIdFilter,
       facilityId: surveysFacilityId ? [surveysFacilityId] : undefined,
@@ -174,83 +224,92 @@ export default function SurveysPage() {
       <QISVHeader crumbs={[{ label: "Surveys" }]} />
 
       <main className={"grid gap-2 px-4 pb-10"}>
-        <ButtonGroup>
-          <ButtonGroup>
-            <Button
-              className={cn("flex gap-1")}
-              variant={canViewSurveys ? "default" : "destructive"}
-            >
-              Can View Surveys
-            </Button>
-            <Button
-              className={cn("flex gap-1")}
-              variant={canViewSurveys ? "default" : "destructive"}
-            >
-              {memberRole ?? <Loader2Icon className="animate-spin" />}
-            </Button>
-          </ButtonGroup>
-          <ButtonGroup>
+        <div className="flex justify-end">
+          <Button>
             <Link href="/qisv/surveys/new" className={buttonVariants()}>
               <PlusIcon />
               New Survey{" "}
             </Link>{" "}
-          </ButtonGroup>
-        </ButtonGroup>
+          </Button>
+        </div>
 
         <div className="grid max-w-full gap-4">
           <div className="flex items-center gap-2">
             <ButtonGroup>
-              <UserMultiComboBox
-                align={"start"}
-                selectedItems={surveySurveyors ?? []}
-                onChange={(users) =>
-                  updateQuery({
-                    surveyors: users.length > 0 ? users.join(",") : undefined,
-                  })
-                }
-              />
-              {surveysTemplateId !== undefined && (
-                <Button
-                  variant={"outline"}
-                  size={"icon"}
-                  onClick={() => updateQuery({ template: undefined })}
-                >
-                  <XIcon />
-                </Button>
-              )}
-            </ButtonGroup>
+              <ButtonGroup>
+                {surveyDate !== undefined && (
+                  <Button
+                    variant={"outline"}
+                    size={"icon"}
+                    onClick={() => updateQuery({ date: undefined })}
+                  >
+                    <XIcon />
+                  </Button>
+                )}
+                <SurveyDatePicker
+                  date={surveyDate}
+                  handleDate={(date) =>
+                    updateQuery({
+                      date: date ? format(date, "yyyy-MM-dd") : undefined,
+                    })
+                  }
+                />
+              </ButtonGroup>
 
-            <ButtonGroup>
-              <TemplateComboBox
-                align="start"
-                selectedItem={surveysTemplateId}
-                onSelect={(template) => updateQuery({ template: template })}
-              />
-              {surveysTemplateId !== undefined && (
-                <Button
-                  variant={"outline"}
-                  size={"icon"}
-                  onClick={() => updateQuery({ template: undefined })}
-                >
-                  <XIcon />
-                </Button>
-              )}
-            </ButtonGroup>
+              <ButtonGroup>
+                {surveySurveyors !== undefined && (
+                  <Button
+                    variant={"outline"}
+                    size={"icon"}
+                    onClick={() => updateQuery({ surveyors: undefined })}
+                  >
+                    <XIcon />
+                  </Button>
+                )}
+                <UserMultiComboBox
+                  align={"start"}
+                  selectedItems={surveySurveyors ?? []}
+                  onChange={(users) =>
+                    updateQuery({
+                      surveyors: users.length > 0 ? users.join(",") : undefined,
+                    })
+                  }
+                />
+              </ButtonGroup>
 
-            <ButtonGroup>
-              <FacilityComboBox
-                selectedItem={surveysFacilityId}
-                onSelect={(facility) => updateQuery({ facility: facility })}
-              />
-              {surveysFacilityId !== undefined && (
-                <Button
-                  variant={"outline"}
-                  size={"icon"}
-                  onClick={() => updateQuery({ facility: undefined })}
-                >
-                  <XIcon />
-                </Button>
-              )}
+              <ButtonGroup>
+                {surveysTemplateId !== undefined && (
+                  <Button
+                    variant={"outline"}
+                    size={"icon"}
+                    onClick={() => updateQuery({ template: undefined })}
+                  >
+                    <XIcon />
+                  </Button>
+                )}
+                <TemplateComboBox
+                  align="start"
+                  selectedItem={surveysTemplateId}
+                  onSelect={(template) => updateQuery({ template: template })}
+                />
+              </ButtonGroup>
+
+              <ButtonGroup>
+                {surveysFacilityId !== undefined && (
+                  <Button
+                    variant={"outline"}
+                    size={"icon"}
+                    onClick={() => updateQuery({ facility: undefined })}
+                  >
+                    <XIcon />
+                  </Button>
+                )}
+
+                <FacilityComboBox
+                  selectedItem={surveysFacilityId}
+                  onSelect={(facility) => updateQuery({ facility: facility })}
+                />
+              </ButtonGroup>
             </ButtonGroup>
 
             <DropdownMenu>
