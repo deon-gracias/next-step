@@ -2399,7 +2399,7 @@ export default function SurveyDetailPage() {
           <Button
             onClick={() => {
               if (!canGeneratePoc) return;
-              markPocGenerated.mutate({ surveyId });
+              markPocGenerated.mutate({ surveyIds: [surveyId] });
             }}
             disabled={markPocGenerated.isPending || !canGeneratePoc}
             variant="default"
