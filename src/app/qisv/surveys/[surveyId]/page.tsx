@@ -1922,7 +1922,7 @@ export default function SurveyDetailPage() {
     );
   }
 
-  if (!canView) {
+  if (!roleLoading && !canView) {
     return (
       <>
         <QISVHeader
