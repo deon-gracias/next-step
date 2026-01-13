@@ -403,7 +403,7 @@ export default function SurveysPage() {
                             variant="secondary"
                             className="rounded-sm px-1 font-normal"
                           >
-                            poc generated
+                            POC Generated
                           </Badge>
                         )}
                         {filters.locked !== undefined && (
@@ -411,7 +411,7 @@ export default function SurveysPage() {
                             variant="secondary"
                             className="rounded-sm px-1 font-normal"
                           >
-                            locked
+                            Locked
                           </Badge>
                         )}
                       </>
@@ -425,7 +425,7 @@ export default function SurveysPage() {
                     updateFilters({ poc: checked ? true : undefined })
                   }
                 >
-                  Completed
+                  POC Generated
                 </DropdownMenuCheckboxItem>
                 <DropdownMenuCheckboxItem
                   checked={filters.locked === true}
