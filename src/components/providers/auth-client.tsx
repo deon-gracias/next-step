@@ -1,5 +1,6 @@
 import { createAuthClient } from "better-auth/react";
 import { organizationClient } from "better-auth/client/plugins";
+import { adminClient } from "better-auth/client/plugins";
 const baseURL =
   typeof window !== "undefined"
     ? window.location.origin
@@ -8,6 +9,6 @@ const baseURL =
       : "http://localhost:3000";
 
 export const authClient = createAuthClient({
-  plugins: [organizationClient()],
+  plugins: [organizationClient(), adminClient()],
   baseURL: baseURL,
 });
