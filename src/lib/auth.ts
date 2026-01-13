@@ -99,9 +99,12 @@ export const auth = betterAuth({
     },
   }),
   trustedOrigins: [
-    "https://nshc-survey-system.vercel.app",
     "http://localhost:3000",
     "https://next-step-git-main-soham-03s-projects.vercel.app",
+    "https://nshc-survey-system.vercel.app",
+    "https://next-step-pearl.vercel.app",
+    "https://next-step-phi-liard.vercel.app",
+    ...(process.env.VERCEL_URL ? [`https://${process.env.VERCEL_URL}`] : []),
   ],
   emailAndPassword: {
     enabled: true,
