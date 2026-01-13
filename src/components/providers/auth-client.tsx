@@ -9,5 +9,5 @@ const baseURL =
 
 export const authClient = createAuthClient({
   plugins: [organizationClient()],
-  baseURL: process.env.VERCEL_URL ?? "http://localhost:3000",
+  baseURL: baseURL,
 });
