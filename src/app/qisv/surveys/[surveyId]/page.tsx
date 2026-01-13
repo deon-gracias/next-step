@@ -394,16 +394,34 @@ export default function SurveyDetailPage() {
       ),
   });
 
-  const markPocGenerated = api.survey.markPocGenerated.useMutation({
+  const markPocGenerated = api.survey.markPocsGenerated.useMutation({
     onSuccess: async () => {
       await utils.survey.byId.invalidate({ id: surveyId });
       toast.success("POC generation enabled successfully");
     },
-    onError: (e) =>
-      toast.error(
-        (e as { message?: string })?.message ??
-        "Failed to enable POC generation",
-      ),
+    onError: (e) => {
+      let title = "Failed to enable POC generation";
+      let description = e.message;
+
+      // Try to parse our custom JSON error message
+      try {
+        if (e.message.startsWith("{")) {
+          const errorData = JSON.parse(e.message);
+
+          if (errorData.unlockedIds?.length > 0) {
+            title = "Cannot Proceed: Surveys Unlocked";
+            description = `The following Survey IDs must be locked first: ${errorData.unlockedIds.join(", ")}`;
+          } else if (errorData.missingIds?.length > 0) {
+            title = "Surveys Not Found";
+            description = `IDs not found: ${errorData.missingIds.join(", ")}`;
+          }
+        }
+      } catch (parseError) { }
+
+      toast.error(title, {
+        description: description,
+      });
+    },
   });
 
   const pocUpsert = api.poc.upsert.useMutation();
@@ -2381,7 +2399,7 @@ export default function SurveyDetailPage() {
           <Button
             onClick={() => {
               if (!canGeneratePoc) return;
-              markPocGenerated.mutate({ surveyId });
+              markPocGenerated.mutate({ surveyIds: [surveyId] });
             }}
             disabled={markPocGenerated.isPending || !canGeneratePoc}
             variant="default"

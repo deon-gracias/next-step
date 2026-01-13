@@ -5,50 +5,32 @@ import { QISVHeader } from "../_components/header";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
-import {
-  PlusIcon,
-  Loader2Icon,
-  ChevronsLeftIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  ChevronsRightIcon,
-  XIcon,
-  CirclePlusIcon,
-  ChevronDownIcon,
-} from "lucide-react";
+import { PlusIcon, XIcon, CirclePlusIcon } from "lucide-react";
 import { authClient } from "@/components/providers/auth-client";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import React, { useState } from "react";
-import { Button } from "@/components/ui/button";
+import React, { useState, useMemo, useCallback } from "react";
 import { canUI, type AppRole } from "@/lib/ui-permissions";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { SurveyDataTable } from "./_components/survey-data-table";
 import { surveyColumns } from "./_components/survey-columns";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Skeleton } from "@/components/ui/skeleton";
-import type { VisibilityState } from "@tanstack/react-table";
+import type { RowSelectionState } from "@tanstack/react-table";
 import { FacilityComboBox } from "../_components/facility-dropdown";
-import { Toggle } from "@/components/ui/toggle";
-import { Combobox } from "@/components/ui/combobox";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { TemplateComboBox } from "../_components/template-dropdown";
 import { UserMultiComboBox } from "../_components/user-dropdown";
+import { SurveyPagination } from "./_components/survey-pagination";
+import { SurveyBatchActions } from "./_components/survey-batch-actions";
+import { SurveyEmptyState } from "./_components/survey-empty-state";
+import { Button } from "@/components/ui/button";
 import {
   Popover,
   PopoverContent,
@@ -56,11 +38,59 @@ import {
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
+import { ChevronDownIcon } from "lucide-react";
+
+interface SurveyDatePickerProps {
+  date: Date | undefined;
+  onDateChange: (date: Date | undefined) => void;
+}
+
+function SurveyDatePicker({ date, onDateChange }: SurveyDatePickerProps) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          id="date"
+          className="justify-between font-normal"
+        >
+          {date ? format(date, "PPP") : "Select date"}
+          <ChevronDownIcon />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto overflow-hidden p-0" align="start">
+        <Calendar
+          mode="single"
+          selected={date}
+          captionLayout="dropdown"
+          onSelect={(selectedDate) => {
+            onDateChange(selectedDate);
+            setOpen(false);
+          }}
+        />
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 const PAGE_SIZES = [10, 25, 50];
+const DEFAULT_PAGE = 1;
+const DEFAULT_PAGE_SIZE = 10;
 
-type StatusVal = "met" | "unmet" | "not_applicable";
+type SurveyFilters = {
+  page: number;
+  pageSize: number;
+  poc?: boolean;
+  locked?: boolean;
+  facilityId?: number;
+  templateId?: number;
+  surveyors?: string[];
+  date?: Date;
+};
 
+// Helper Functions
 function normalizeRole(role: unknown): AppRole | null {
   const r = String(role ?? "")
     .toLowerCase()
@@ -69,63 +99,53 @@ function normalizeRole(role: unknown): AppRole | null {
   if (r === "admin") return "admin";
   if (r === "member") return "viewer";
   if (
-    r === "viewer" ||
-    r === "lead_surveyor" ||
-    r === "surveyor" ||
-    r === "facility_coordinator" ||
-    r === "facility_viewer" ||
-    r === "admin"
+    [
+      "viewer",
+      "lead_surveyor",
+      "surveyor",
+      "facility_coordinator",
+      "facility_viewer",
+    ].includes(r)
   ) {
     return r as AppRole;
   }
   return null;
 }
 
-function SurveyDatePicker({
-  date,
-  handleDate,
-}: {
-  date: Date | undefined;
-  handleDate: (date: Date | undefined) => void;
-}) {
-  const [open, setOpen] = useState(false);
+function parseFiltersFromURL(searchParams: URLSearchParams): SurveyFilters {
+  const dateParam = searchParams.get("date");
 
-  return (
-    <>
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            id="date"
-            className="justify-between font-normal"
-          >
-            {date ? format(date, "PPP") : "Select date"}
-            <ChevronDownIcon />
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-auto overflow-hidden p-0" align="start">
-          <Calendar
-            mode="single"
-            selected={date}
-            captionLayout="dropdown"
-            onSelect={(date) => {
-              handleDate(date);
-              setOpen(false);
-            }}
-          />
-        </PopoverContent>
-      </Popover>
-    </>
-  );
+  return {
+    page: Number(searchParams.get("page") ?? DEFAULT_PAGE),
+    pageSize: Number(searchParams.get("pageSize") ?? DEFAULT_PAGE_SIZE),
+    poc:
+      searchParams.get("poc") === "true"
+        ? true
+        : searchParams.get("poc") === "false"
+          ? false
+          : undefined,
+    locked:
+      searchParams.get("locked") === "true"
+        ? true
+        : searchParams.get("locked") === "false"
+          ? false
+          : undefined,
+    facilityId: searchParams.get("facility")
+      ? Number(searchParams.get("facility"))
+      : undefined,
+    templateId: searchParams.get("template")
+      ? Number(searchParams.get("template"))
+      : undefined,
+    surveyors: searchParams.get("surveyors")?.split(",").filter(Boolean),
+    date: dateParam ? new Date(dateParam) : undefined,
+  };
 }
 
-export default function SurveysPage() {
-  const router = useRouter();
-  const pathname = usePathname();
+// Custom Hooks
+function useUserRole() {
   const activeOrg = authClient.useActiveOrganization();
-  const searchParams = useSearchParams();
 
-  const { data: memberRole, isLoading: isRoleLoading } = useQuery({
+  return useQuery({
     queryKey: ["active-member-role", activeOrg.data?.id],
     queryFn: async () => {
       const res = await authClient.organization.getActiveMemberRole();
@@ -138,59 +158,87 @@ export default function SurveysPage() {
     refetchOnWindowFocus: false,
     retry: false,
   });
+}
 
+function useSurveyFilters() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const filters = useMemo(
+    () => parseFiltersFromURL(searchParams),
+    [searchParams],
+  );
+
+  const updateFilters = useCallback(
+    (updates: Partial<SurveyFilters>) => {
+      const params = new URLSearchParams(searchParams.toString());
+
+      Object.entries(updates).forEach(([key, value]) => {
+        if (value === undefined || value === null) {
+          params.delete(key);
+        } else if (key === "surveyors" && Array.isArray(value)) {
+          if (value.length === 0) {
+            params.delete(key);
+          } else {
+            params.set(key, value.join(","));
+          }
+        } else if (key === "date" && value instanceof Date) {
+          const date = value.toISOString().split("T")[0];
+          if (date) {
+            params.set(key, date);
+          }
+        } else {
+          params.set(key, String(value));
+        }
+      });
+
+      if (params.toString() !== searchParams.toString()) {
+        router.push(`${pathname}?${params.toString()}`);
+      }
+    },
+    [pathname, router, searchParams],
+  );
+  const clearFilters = useCallback(() => {
+    router.push(pathname);
+  }, [pathname, router]);
+
+  return { filters, updateFilters, clearFilters };
+}
+
+// Main Component
+export default function SurveysPage() {
+  const currentUser = authClient.useSession();
+  const { data: memberRole, isLoading: isRoleLoading } = useUserRole();
+  const { filters, updateFilters, clearFilters } = useSurveyFilters();
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+
+  // Permissions
   const canViewSurveys = canUI(memberRole, "surveys.view");
   const canManageSurveys =
-    canUI(memberRole, "surveys.manage") && memberRole != "surveyor";
+    canUI(memberRole, "surveys.manage") && memberRole !== "surveyor";
 
-  // const assignedFacility = api.user.getForOrg.useQuery({});
-  const currentUser = authClient.useSession();
+  // Apply role-based filtering
+  const surveyorIdFilter = useMemo(() => {
+    if (memberRole === "surveyor" && currentUser.data?.user?.id) {
+      return [currentUser.data.user.id];
+    }
+    return filters.surveyors;
+  }, [memberRole, currentUser.data?.user?.id, filters.surveyors]);
 
-  const surveysPage = Number(searchParams.get("page") ?? 1);
-  const surveysPageSize = Number(searchParams.get("pageSize") ?? 10);
-  const surveyPoc =
-    searchParams.get("poc") === "true"
-      ? true
-      : searchParams.get("poc") === "false"
-        ? false
-        : undefined;
-  const surveyLocked =
-    searchParams.get("locked") === "true"
-      ? true
-      : searchParams.get("locked") === "false"
-        ? false
-        : undefined;
-  const surveysFacilityId = searchParams.get("facility")
-    ? Number(searchParams.get("facility"))
-    : undefined;
-  const surveysTemplateId = searchParams.get("template")
-    ? Number(searchParams.get("template"))
-    : undefined;
-
-  const surveySurveyors = searchParams.get("surveyors")
-    ? searchParams.get("surveyors")?.split(",")
-    : undefined;
-  const surveyorIdFilter =
-    memberRole === "surveyor"
-      ? currentUser.data?.user?.id
-        ? [currentUser.data.user.id]
-        : undefined
-      : surveySurveyors;
-
-  const dateParam = searchParams.get("date");
-  const surveyDate = dateParam ? new Date(dateParam) : undefined;
-
-  // Get all surveys
+  // Fetch surveys
   const surveysQuery = api.survey.list.useQuery(
     {
-      page: surveysPage,
-      pageSize: surveysPageSize,
-      pocGenerated: surveyPoc,
-      surveyDate: surveyDate ? format(surveyDate, "yyyy-MM-dd") : undefined,
-      isLocked: surveyLocked,
+      page: filters.page,
+      pageSize: filters.pageSize,
+      pocGenerated: filters.poc,
+      surveyDate: filters.date
+        ? filters.date.toISOString().split("T")[0]
+        : undefined,
+      isLocked: filters.locked,
       surveyorId: surveyorIdFilter,
-      facilityId: surveysFacilityId ? [surveysFacilityId] : undefined,
-      templateId: surveysTemplateId ? [surveysTemplateId] : undefined,
+      facilityId: filters.facilityId ? [filters.facilityId] : undefined,
+      templateId: filters.templateId ? [filters.templateId] : undefined,
     },
     {
       enabled: canViewSurveys && !!currentUser.data,
@@ -198,161 +246,191 @@ export default function SurveysPage() {
     },
   );
 
-  const updateQuery = (
-    updates: Record<string, string | number | undefined>,
-  ) => {
-    const params = new URLSearchParams(searchParams.toString());
-    Object.entries(updates).forEach(([key, value]) => {
-      if (value === undefined || value === "" || value === 0) {
-        params.delete(key);
-      } else {
-        params.set(key, String(value));
-      }
-    });
+  // Calculate selected survey IDs
+  const selectedSurveyIds = useMemo(() => {
+    return Object.keys(rowSelection)
+      .filter((key) => rowSelection[key])
+      .map(Number);
+  }, [rowSelection]);
 
-    // Prevent pushing duplicate state if nothing changed
-    if (params.toString() !== searchParams.toString()) {
-      router.push(`${pathname}?${params.toString()}`);
-    }
-  };
+  // Check if any filters are active
+  const hasActiveFilters = useMemo(() => {
+    return !!(
+      filters.poc !== undefined ||
+      filters.locked !== undefined ||
+      filters.facilityId ||
+      filters.templateId ||
+      filters.surveyors?.length ||
+      filters.date
+    );
+  }, [filters]);
 
-  const [columnVisibility, setColumnVisibility] =
-    React.useState<VisibilityState>({});
+  // Show empty state when no data and no filters
+  if (
+    !surveysQuery.isLoading &&
+    !surveysQuery.data?.data.length &&
+    !hasActiveFilters
+  ) {
+    return (
+      <>
+        <QISVHeader crumbs={[{ label: "Surveys" }]} />
+        <main className="grid gap-2 px-4 pb-10">
+          <SurveyEmptyState />
+        </main>
+      </>
+    );
+  }
 
   return (
     <>
       <QISVHeader crumbs={[{ label: "Surveys" }]} />
 
-      <main className={"grid gap-2 px-4 pb-10"}>
-        <div className="flex justify-end">
-          <Button>
+      <main className="grid gap-4 px-4 pb-10">
+        {/* Header Actions */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            {selectedSurveyIds.length > 0 && (
+              <SurveyBatchActions
+                selectedIds={selectedSurveyIds}
+                onClearSelection={() => setRowSelection({})}
+                onSuccess={() => {
+                  setRowSelection({});
+                  surveysQuery.refetch();
+                }}
+              />
+            )}
+          </div>
+
+          {canManageSurveys && (
             <Link href="/qisv/surveys/new" className={buttonVariants()}>
               <PlusIcon />
-              New Survey{" "}
-            </Link>{" "}
-          </Button>
+              New Survey
+            </Link>
+          )}
         </div>
 
-        <div className="grid max-w-full gap-4">
-          <div className="flex items-center gap-2">
+        {/* Filters */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Date Filter */}
             <ButtonGroup>
-              <ButtonGroup>
-                {surveyDate !== undefined && (
-                  <Button
-                    variant={"outline"}
-                    size={"icon"}
-                    onClick={() => updateQuery({ date: undefined })}
-                  >
-                    <XIcon />
-                  </Button>
-                )}
-                <SurveyDatePicker
-                  date={surveyDate}
-                  handleDate={(date) =>
-                    updateQuery({
-                      date: date ? format(date, "yyyy-MM-dd") : undefined,
-                    })
-                  }
-                />
-              </ButtonGroup>
+              {filters.date && (
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => updateFilters({ date: undefined })}
+                >
+                  <XIcon />
+                </Button>
+              )}
+              <SurveyDatePicker
+                date={filters.date}
+                onDateChange={(date) => updateFilters({ date })}
+              />
+            </ButtonGroup>
 
+            {/* Surveyors Filter */}
+            {memberRole !== "surveyor" && (
               <ButtonGroup>
-                {surveySurveyors !== undefined && (
+                {filters.surveyors && filters.surveyors.length > 0 && (
                   <Button
-                    variant={"outline"}
-                    size={"icon"}
-                    onClick={() => updateQuery({ surveyors: undefined })}
+                    variant="outline"
+                    size="icon"
+                    onClick={() => updateFilters({ surveyors: undefined })}
                   >
                     <XIcon />
                   </Button>
                 )}
                 <UserMultiComboBox
-                  align={"start"}
-                  selectedItems={surveySurveyors ?? []}
+                  align="start"
+                  selectedItems={filters.surveyors ?? []}
                   onChange={(users) =>
-                    updateQuery({
-                      surveyors: users.length > 0 ? users.join(",") : undefined,
+                    updateFilters({
+                      surveyors: users.length > 0 ? users : undefined,
                     })
                   }
                 />
               </ButtonGroup>
+            )}
 
-              <ButtonGroup>
-                {surveysTemplateId !== undefined && (
-                  <Button
-                    variant={"outline"}
-                    size={"icon"}
-                    onClick={() => updateQuery({ template: undefined })}
-                  >
-                    <XIcon />
-                  </Button>
-                )}
-                <TemplateComboBox
-                  align="start"
-                  selectedItem={surveysTemplateId}
-                  onSelect={(template) => updateQuery({ template: template })}
-                />
-              </ButtonGroup>
-
-              <ButtonGroup>
-                {surveysFacilityId !== undefined && (
-                  <Button
-                    variant={"outline"}
-                    size={"icon"}
-                    onClick={() => updateQuery({ facility: undefined })}
-                  >
-                    <XIcon />
-                  </Button>
-                )}
-
-                <FacilityComboBox
-                  selectedItem={surveysFacilityId}
-                  onSelect={(facility) => updateQuery({ facility: facility })}
-                />
-              </ButtonGroup>
+            {/* Template Filter */}
+            <ButtonGroup>
+              {filters.templateId && (
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => updateFilters({ templateId: undefined })}
+                >
+                  <XIcon />
+                </Button>
+              )}
+              <TemplateComboBox
+                align="start"
+                selectedItem={filters.templateId}
+                onSelect={(template) => updateFilters({ templateId: template })}
+              />
             </ButtonGroup>
 
+            {/* Facility Filter */}
+            <ButtonGroup>
+              {filters.facilityId && (
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => updateFilters({ facilityId: undefined })}
+                >
+                  <XIcon />
+                </Button>
+              )}
+              <FacilityComboBox
+                selectedItem={filters.facilityId}
+                onSelect={(facility) => updateFilters({ facilityId: facility })}
+              />
+            </ButtonGroup>
+
+            {/* Status Filter */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className="border-dashed">
                   <CirclePlusIcon />
                   Status
-                  {(surveyPoc || surveyLocked) && (
-                    <>
-                      <Separator orientation="vertical" className="mx-2 h-4" />
-
-                      {Object.entries({
-                        completed: surveyPoc,
-                        locked: surveyLocked,
-                      }).map(
-                        ([key, value]) =>
-                          value && (
-                            <Badge
-                              key={key}
-                              variant="secondary"
-                              className="rounded-sm px-1 font-normal"
-                            >
-                              {key}
-                            </Badge>
-                          ),
-                      )}
-                    </>
-                  )}
+                  {(filters.poc !== undefined ||
+                    filters.locked !== undefined) && (
+                      <>
+                        <Separator orientation="vertical" className="mx-2 h-4" />
+                        {filters.poc !== undefined && (
+                          <Badge
+                            variant="secondary"
+                            className="rounded-sm px-1 font-normal"
+                          >
+                            poc generated
+                          </Badge>
+                        )}
+                        {filters.locked !== undefined && (
+                          <Badge
+                            variant="secondary"
+                            className="rounded-sm px-1 font-normal"
+                          >
+                            locked
+                          </Badge>
+                        )}
+                      </>
+                    )}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent>
                 <DropdownMenuCheckboxItem
-                  checked={surveyPoc}
+                  checked={filters.poc === true}
                   onCheckedChange={(checked) =>
-                    updateQuery({ poc: checked ? "true" : undefined })
+                    updateFilters({ poc: checked ? true : undefined })
                   }
                 >
                   Completed
                 </DropdownMenuCheckboxItem>
                 <DropdownMenuCheckboxItem
-                  checked={surveyLocked}
+                  checked={filters.locked === true}
                   onCheckedChange={(checked) =>
-                    updateQuery({ locked: checked ? "true" : undefined })
+                    updateFilters({ locked: checked ? true : undefined })
                   }
                 >
                   Locked
@@ -361,98 +439,36 @@ export default function SurveysPage() {
             </DropdownMenu>
           </div>
 
-          <SurveyDataTable
-            columns={surveyColumns}
-            data={surveysQuery.data?.data ?? []}
-            isLoading={surveysQuery.isLoading}
-            pageSize={surveysPageSize}
-          />
+          {/* Clear All Filters */}
+          {hasActiveFilters && (
+            <Button variant="ghost" size="sm" onClick={clearFilters}>
+              Clear filters
+            </Button>
+          )}
         </div>
 
-        <div className="flex items-center justify-between px-4">
-          <div className="flex w-full items-center gap-8 lg:w-fit">
-            <div className="hidden items-center gap-2 lg:flex">
-              <Label htmlFor="rows-per-page" className="text-sm font-medium">
-                Rows per page
-              </Label>
-              <Select
-                value={surveysPageSize.toString()}
-                onValueChange={(value) => {
-                  updateQuery({ pageSize: value });
-                }}
-              >
-                <SelectTrigger size="sm" className="w-20" id="rows-per-page">
-                  <SelectValue placeholder={surveysPageSize.toString()} />
-                </SelectTrigger>
-                <SelectContent side="top">
-                  {PAGE_SIZES.map((pageSize) => (
-                    <SelectItem key={pageSize} value={`${pageSize}`}>
-                      {pageSize}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="flex w-full items-center gap-8 lg:w-fit">
-            <div className="flex w-fit items-center justify-center text-sm font-medium">
-              {surveysQuery.data?.meta.pageCount ? (
-                <>
-                  Page {surveysPage} of {surveysQuery.data?.meta.pageCount}
-                </>
-              ) : (
-                <Skeleton className="h-5 w-28" />
-              )}
-            </div>
-            <div className="ml-auto flex items-center gap-2 lg:ml-0">
-              <Button
-                variant="outline"
-                className="hidden h-8 w-8 p-0 lg:flex"
-                onClick={() => updateQuery({ page: 1 })}
-                disabled={surveysPage <= 1}
-              >
-                <span className="sr-only">Go to first page</span>
-                <ChevronsLeftIcon />
-              </Button>
-              <Button
-                variant="outline"
-                className="size-8"
-                size="icon"
-                onClick={() => updateQuery({ page: surveysPage - 1 })}
-                disabled={surveysPage <= 1}
-              >
-                <span className="sr-only">Go to previous page</span>
-                <ChevronLeftIcon />
-              </Button>
-              <Button
-                variant="outline"
-                className="size-8"
-                size="icon"
-                onClick={() => updateQuery({ page: surveysPage + 1 })}
-                disabled={
-                  surveysPage >= (surveysQuery.data?.meta.pageCount ?? 0)
-                }
-              >
-                <span className="sr-only">Go to next page</span>
-                <ChevronRightIcon />
-              </Button>
-              <Button
-                variant="outline"
-                className="hidden size-8 lg:flex"
-                size="icon"
-                onClick={() =>
-                  updateQuery({ page: surveysQuery.data?.meta.pageCount ?? 0 })
-                }
-                disabled={
-                  surveysPage >= (surveysQuery.data?.meta.pageCount ?? 0)
-                }
-              >
-                <span className="sr-only">Go to last page</span>
-                <ChevronsRightIcon />
-              </Button>
-            </div>
-          </div>
-        </div>
+        {/* Table */}
+        <SurveyDataTable
+          rowSelection={rowSelection}
+          onRowSelection={setRowSelection}
+          columns={surveyColumns}
+          data={surveysQuery.data?.data ?? []}
+          isLoading={surveysQuery.isLoading}
+          pageSize={filters.pageSize}
+          pageCount={surveysQuery.data?.meta.pageCount ?? 0}
+        />
+
+        {/* Pagination */}
+        <SurveyPagination
+          currentPage={filters.page}
+          pageSize={filters.pageSize}
+          pageCount={surveysQuery.data?.meta.pageCount ?? 0}
+          totalResults={surveysQuery.data?.meta.totalCount ?? 0}
+          onPageChange={(page) => updateFilters({ page })}
+          onPageSizeChange={(pageSize) => updateFilters({ pageSize, page: 1 })}
+          pageSizes={PAGE_SIZES}
+          isLoading={surveysQuery.isLoading}
+        />
       </main>
     </>
   );

@@ -285,48 +285,62 @@ export const surveyRouter = createTRPCRouter({
     )
     .query(async ({ ctx, input }) => {
       const allowedFacilities = await getAllowedFacilities(ctx);
-
       const offset = (input.page - 1) * input.pageSize;
-
       const conditions = [];
-      if (input.id !== undefined) conditions.push(eq(survey.id, input.id));
 
-      if (input.surveyDate !== undefined)
+      // Basic filters
+      if (input.id !== undefined) {
+        conditions.push(eq(survey.id, input.id));
+      }
+
+      if (input.surveyDate !== undefined) {
         conditions.push(eq(survey.surveyDate, input.surveyDate));
+      }
 
-      if (input.surveyorId !== undefined)
+      if (input.surveyorId !== undefined && input.surveyorId.length > 0) {
         conditions.push(inArray(survey.surveyorId, input.surveyorId));
+      }
 
-      if (input.facilityId !== undefined)
+      if (input.facilityId !== undefined && input.facilityId.length > 0) {
         conditions.push(inArray(survey.facilityId, input.facilityId));
+      }
 
-      if (input.templateId !== undefined)
+      if (input.templateId !== undefined && input.templateId.length > 0) {
         conditions.push(inArray(survey.templateId, input.templateId));
+      }
 
+      // Status filters - only add if at least one is defined
       const statusConditions = [];
-      if (input.pocGenerated !== undefined)
+      if (input.pocGenerated !== undefined) {
         statusConditions.push(eq(survey.pocGenerated, input.pocGenerated));
-      if (input.isLocked !== undefined)
+      }
+      if (input.isLocked !== undefined) {
         statusConditions.push(eq(survey.isLocked, input.isLocked));
+      }
 
-      conditions.push(or(...statusConditions));
+      // Only add status condition if we have at least one status filter
+      if (statusConditions.length > 0) {
+        conditions.push(or(...statusConditions));
+      }
 
-      if (input.surveyorId && input.surveyorId.length > 0)
-        conditions.push(inArray(survey.surveyorId, input.surveyorId));
-
+      // Facility access control
       const allowedFacilityIds = allowedFacilities.map((f) => f.id);
-      if (allowedFacilityIds.length > 0)
+      if (allowedFacilityIds.length > 0) {
         conditions.push(inArray(survey.facilityId, allowedFacilityIds));
+      }
 
-      const whereClause = and(...conditions);
+      const whereClause =
+        conditions.length > 0 ? and(...conditions) : undefined;
 
+      // Get total count
       const [totalResult] = await ctx.db
         .select({ count: count() })
         .from(survey)
         .where(whereClause);
 
-      const total = totalResult?.count ?? 0;
+      const totalCount = totalResult?.count ?? 0;
 
+      // Get paginated data
       const data = await ctx.db
         .select({
           ...getTableColumns(survey),
@@ -339,13 +353,18 @@ export const surveyRouter = createTRPCRouter({
         .leftJoin(user, eq(survey.surveyorId, user.id))
         .leftJoin(facility, eq(survey.facilityId, facility.id))
         .leftJoin(template, eq(survey.templateId, template.id))
-        .orderBy(desc(survey.surveyDate))
+        .orderBy(desc(survey.surveyDate), desc(survey.id))
         .limit(input.pageSize)
         .offset(offset);
 
       return {
         data,
-        meta: { total, pageCount: Math.ceil(total / input.pageSize) },
+        meta: {
+          totalCount,
+          pageCount: Math.ceil(totalCount / input.pageSize),
+          page: input.page,
+          pageSize: input.pageSize,
+        },
       };
     }),
 
@@ -416,16 +435,47 @@ export const surveyRouter = createTRPCRouter({
       return rows;
     }),
 
-  markPocGenerated: protectedProcedure
-    .input(z.object({ surveyId: z.number() }))
+  markPocsGenerated: protectedProcedure
+    .input(z.object({ surveyIds: z.array(z.number()) }))
     .mutation(async ({ ctx, input }) => {
-      const [updated] = await ctx.db
+      const { surveyIds } = input;
+
+      if (surveyIds.length === 0) throw new Error("No surveys selected");
+
+      // 1. Fetch 'id' and 'isLocked' for all requested surveys found in DB
+      const foundSurveys = await ctx.db
+        .select({ id: survey.id, isLocked: survey.isLocked })
+        .from(survey)
+        .where(inArray(survey.id, surveyIds));
+
+      // 2. Identify Missing IDs (Requested but not found in DB)
+      const foundIdSet = new Set(foundSurveys.map((s) => s.id));
+      const missingIds = surveyIds.filter((id) => !foundIdSet.has(id));
+
+      // 3. Identify Unlocked IDs (Found but isLocked is false)
+      const unlockedIds = foundSurveys
+        .filter((s) => !s.isLocked)
+        .map((s) => s.id);
+
+      // 4. Validation: If we have missing OR unlocked surveys, stop and report them
+      if (missingIds.length > 0 || unlockedIds.length > 0) {
+        throw new TRPCError({
+          code: "CONFLICT", // 409 Conflict: Request conflicts with current state of the target resource(s)
+          message: JSON.stringify({
+            error: "Validation failed: Some surveys are invalid.",
+            missingIds,
+            unlockedIds,
+          }),
+        });
+      }
+
+      // 5. Success: Perform the update since we know all are valid
+      const updated = await ctx.db
         .update(survey)
         .set({ pocGenerated: true })
-        .where(eq(survey.id, input.surveyId))
+        .where(inArray(survey.id, surveyIds))
         .returning();
 
-      if (!updated) throw new Error("Survey not found");
       return updated;
     }),
 
