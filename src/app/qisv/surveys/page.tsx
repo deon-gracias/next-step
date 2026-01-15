@@ -139,13 +139,13 @@ function useUserRole() {
   });
 }
 
-export function useSurveyFilters() {
+function useSurveyFilters() {
   const [filters, setFilters] = useQueryStates(surveyParamsParser, {
     history: "replace",
     shallow: false,
   });
 
-  const clearFilters = () => setFilters(undefined);
+  const clearFilters = () => setFilters(null);
 
   return {
     filters,
