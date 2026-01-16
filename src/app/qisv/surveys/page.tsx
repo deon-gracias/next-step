@@ -266,7 +266,7 @@ export default function SurveysPage() {
                 <Button
                   variant="outline"
                   size="icon"
-                  onClick={() => updateFilters({ date: undefined })}
+                  onClick={() => updateFilters({ date: null })}
                 >
                   <XIcon />
                 </Button>
@@ -284,7 +284,7 @@ export default function SurveysPage() {
                   <Button
                     variant="outline"
                     size="icon"
-                    onClick={() => updateFilters({ surveyors: undefined })}
+                    onClick={() => updateFilters({ surveyors: null })}
                   >
                     <XIcon />
                   </Button>
