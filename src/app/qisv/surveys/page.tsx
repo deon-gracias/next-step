@@ -5,7 +5,14 @@ import { QISVHeader } from "../_components/header";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
-import { PlusIcon, XIcon, CirclePlusIcon } from "lucide-react";
+import {
+  PlusIcon,
+  XIcon,
+  CirclePlusIcon,
+  ChevronRightIcon,
+  ChevronLeftIcon,
+  CalendarIcon,
+} from "lucide-react";
 import { authClient } from "@/components/providers/auth-client";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -47,6 +54,15 @@ import {
   parseAsString,
   parseAsIsoDate,
 } from "nuqs";
+import { useUserRole } from "@/hooks/use-user-role";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import { DailySurveyTable } from "./_components/daily-survey-table";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface SurveyDatePickerProps {
   date: Date | undefined;
@@ -83,32 +99,7 @@ function SurveyDatePicker({ date, onDateChange }: SurveyDatePickerProps) {
   );
 }
 
-const PAGE_SIZES = [10, 25, 50];
-const DEFAULT_PAGE = 1;
-const DEFAULT_PAGE_SIZE = 10;
-
 // Helper Functions
-function normalizeRole(role: unknown): AppRole | null {
-  const r = String(role ?? "")
-    .toLowerCase()
-    .trim();
-  if (r === "owner") return "admin";
-  if (r === "admin") return "admin";
-  if (r === "member") return "viewer";
-  if (
-    [
-      "viewer",
-      "lead_surveyor",
-      "surveyor",
-      "facility_coordinator",
-      "facility_viewer",
-    ].includes(r)
-  ) {
-    return r as AppRole;
-  }
-  return null;
-}
-
 const surveyParamsParser = {
   page: parseAsInteger.withDefault(1),
   pageSize: parseAsInteger.withDefault(10),
@@ -121,23 +112,6 @@ const surveyParamsParser = {
 };
 
 // Custom Hooks
-function useUserRole() {
-  const activeOrg = authClient.useActiveOrganization();
-
-  return useQuery({
-    queryKey: ["active-member-role", activeOrg.data?.id],
-    queryFn: async () => {
-      const res = await authClient.organization.getActiveMemberRole();
-      const rawRole = (res as any)?.data?.role;
-      return normalizeRole(rawRole);
-    },
-    enabled: !!activeOrg.data,
-    staleTime: Infinity,
-    gcTime: 1000 * 60 * 60,
-    refetchOnWindowFocus: false,
-    retry: false,
-  });
-}
 
 function useSurveyFilters() {
   const [filters, setFilters] = useQueryStates(surveyParamsParser, {
@@ -184,6 +158,22 @@ export default function SurveysPage() {
       isLocked: filters.locked ?? undefined,
       surveyorId: surveyorIdFilter,
       facilityId: filters.facility ? [filters.facility] : undefined,
+      templateId: filters.template ? [filters.template] : undefined,
+    },
+    {
+      enabled: canViewSurveys && !!currentUser.data,
+      refetchOnWindowFocus: true,
+    },
+  );
+
+  const datesQuery = api.survey.listSurveyDates.useQuery(
+    {
+      page: filters.page, // Use the page filter for "Date Pages"
+      pageSize: 10, // How many "Days" to show per page
+      pocGenerated: filters.poc ?? undefined,
+      isLocked: filters.locked ?? undefined,
+      facilityId: filters.facility ?? undefined,
+      surveyorId: filters.surveyors ?? undefined,
       templateId: filters.template ? [filters.template] : undefined,
     },
     {
@@ -392,28 +382,104 @@ export default function SurveysPage() {
           )}
         </div>
 
-        {/* Table */}
-        <SurveyDataTable
-          rowSelection={rowSelection}
-          onRowSelection={setRowSelection}
-          columns={surveyColumns}
-          data={surveysQuery.data?.data ?? []}
-          isLoading={surveysQuery.isLoading}
-          pageSize={filters.pageSize}
-          pageCount={surveysQuery.data?.meta.pageCount ?? 0}
-        />
+        {/* <SurveyDataTable */}
+        {/*   rowSelection={rowSelection} */}
+        {/*   onRowSelection={setRowSelection} */}
+        {/*   columns={surveyColumns} */}
+        {/*   data={surveysQuery.data?.data ?? []} */}
+        {/*   isLoading={surveysQuery.isLoading} */}
+        {/*   pageSize={filters.pageSize} */}
+        {/*   pageCount={surveysQuery.data?.meta.pageCount ?? 0} */}
+        {/* /> */}
+        {/* <SurveyPagination */}
+        {/*   currentPage={filters.page} */}
+        {/*   pageSize={filters.pageSize} */}
+        {/*   pageCount={surveysQuery.data?.meta.pageCount ?? 0} */}
+        {/*   totalResults={surveysQuery.data?.meta.totalCount ?? 0} */}
+        {/*   onPageChange={(page) => updateFilters({ page })} */}
+        {/*   onPageSizeChange={(pageSize) => updateFilters({ pageSize, page: 1 })} */}
+        {/*   pageSizes={PAGE_SIZES} */}
+        {/*   isLoading={surveysQuery.isLoading} */}
+        {/* /> */}
 
-        {/* Pagination */}
-        <SurveyPagination
-          currentPage={filters.page}
-          pageSize={filters.pageSize}
-          pageCount={surveysQuery.data?.meta.pageCount ?? 0}
-          totalResults={surveysQuery.data?.meta.totalCount ?? 0}
-          onPageChange={(page) => updateFilters({ page })}
-          onPageSizeChange={(pageSize) => updateFilters({ pageSize, page: 1 })}
-          pageSizes={PAGE_SIZES}
-          isLoading={surveysQuery.isLoading}
-        />
+        <div className="rounded-md border">
+          {datesQuery.isLoading ? (
+            <div className="flex flex-col gap-2 divide-y py-2">
+              {Array.from({ length: 10 }).map((_, idx) => (
+                <div className="px-2" key={`loading-${idx}`}>
+                  <Skeleton className="mb-2 h-[2rem] w-full" />
+                </div>
+              ))}
+            </div>
+          ) : datesQuery.data?.dates.length === 0 ? (
+            <div className="text-muted-foreground p-8 text-center">
+              No dates found matching filters.
+            </div>
+          ) : (
+            <Accordion type="multiple" className="max-w-full">
+              {datesQuery.data?.dates.map((dateString: string) => {
+                const dateObj = new Date(dateString);
+
+                return (
+                  <AccordionItem
+                    key={dateString}
+                    value={dateString}
+                    className="max-w-full"
+                  >
+                    <AccordionTrigger className="max-w-full px-4">
+                      <div className="flex items-center gap-4">
+                        <CalendarIcon className="text-muted-foreground size-4" />
+                        {format(dateObj, "EEEE, MMMM do, yyyy")}
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="max-w-full">
+                      <DailySurveyTable
+                        rowSelection={rowSelection}
+                        onRowSelection={setRowSelection}
+                        date={dateString}
+                        filters={{
+                          poc: filters.poc,
+                          locked: filters.locked,
+                          facility: filters.facility,
+                        }}
+                      />
+                    </AccordionContent>
+                  </AccordionItem>
+                );
+              })}
+            </Accordion>
+          )}
+        </div>
+
+        {/* DATE PAGINATION (Outer Layer) */}
+        <div className="flex items-center justify-end gap-2 py-4">
+          <div className="text-muted-foreground mr-4 text-sm">
+            Page {filters.page} of {datesQuery.data?.meta.pageCount ?? 1}
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              updateFilters({ page: Math.max(1, filters.page - 1) })
+            }
+            disabled={filters.page <= 1 || datesQuery.isLoading}
+          >
+            <ChevronLeftIcon className="h-4 w-4" />
+            Previous Days
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => updateFilters({ page: filters.page + 1 })}
+            disabled={
+              filters.page >= (datesQuery.data?.meta.pageCount ?? 1) ||
+              datesQuery.isLoading
+            }
+          >
+            Next Days
+            <ChevronRightIcon className="h-4 w-4" />
+          </Button>
+        </div>
       </main>
     </>
   );

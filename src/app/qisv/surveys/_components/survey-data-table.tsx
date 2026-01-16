@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { SettingsIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
@@ -38,6 +39,7 @@ interface DataTableProps<TData, TValue> {
   isLoading?: boolean;
   pageSize?: number;
   pageCount: number;
+  className?: string;
   columnVisibility?: VisibilityState;
   rowSelection?: RowSelectionState;
   onRowSelection?: OnChangeFn<RowSelectionState> | undefined;
@@ -54,6 +56,7 @@ export function SurveyDataTable<TData, TValue>({
   onColumnVisibilityChange,
   rowSelection = {},
   onRowSelection,
+  className,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [internalColumnVisibility, setInternalColumnVisibility] =
@@ -94,107 +97,105 @@ export function SurveyDataTable<TData, TValue>({
   });
 
   return (
-    <div className="space-y-4">
+    <>
       {/* Column Visibility Toggle */}
-      <div className="flex items-center justify-end">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm">
-              <SettingsIcon />
-              View
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-[200px]">
-            <DropdownMenuLabel>Toggle columns</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {table
-              .getAllColumns()
-              .filter((column) => column.getCanHide())
-              .map((column) => {
-                return (
-                  <DropdownMenuCheckboxItem
-                    key={column.id}
-                    className="capitalize"
-                    checked={column.getIsVisible()}
-                    onCheckedChange={(value) =>
-                      column.toggleVisibility(!!value)
-                    }
-                  >
-                    {column.id}
-                  </DropdownMenuCheckboxItem>
-                );
-              })}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+      {/* <div className="flex items-center justify-end"> */}
+      {/*   <DropdownMenu> */}
+      {/*     <DropdownMenuTrigger asChild> */}
+      {/*       <Button variant="outline" size="sm"> */}
+      {/*         <SettingsIcon /> */}
+      {/*         View */}
+      {/*       </Button> */}
+      {/*     </DropdownMenuTrigger> */}
+      {/*     <DropdownMenuContent align="end" className="w-[200px]"> */}
+      {/*       <DropdownMenuLabel>Toggle columns</DropdownMenuLabel> */}
+      {/*       <DropdownMenuSeparator /> */}
+      {/*       {table */}
+      {/*         .getAllColumns() */}
+      {/*         .filter((column) => column.getCanHide()) */}
+      {/*         .map((column) => { */}
+      {/*           return ( */}
+      {/*             <DropdownMenuCheckboxItem */}
+      {/*               key={column.id} */}
+      {/*               className="capitalize" */}
+      {/*               checked={column.getIsVisible()} */}
+      {/*               onCheckedChange={(value) => */}
+      {/*                 column.toggleVisibility(!!value) */}
+      {/*               } */}
+      {/*             > */}
+      {/*               {column.id} */}
+      {/*             </DropdownMenuCheckboxItem> */}
+      {/*           ); */}
+      {/*         })} */}
+      {/*     </DropdownMenuContent> */}
+      {/*   </DropdownMenu> */}
+      {/* </div> */}
 
       {/* Table */}
-      <div className="overflow-hidden rounded-md border">
-        <div className="max-h-[600px] overflow-auto">
-          <Table>
-            <TableHeader className="bg-background sticky top-0 z-10">
-              {table.getHeaderGroups().map((headerGroup) => (
-                <TableRow key={headerGroup.id}>
-                  {headerGroup.headers.map((header) => {
-                    return (
-                      <TableHead key={header.id} className="bg-background">
-                        {header.isPlaceholder
-                          ? null
-                          : flexRender(
+      <div className="max-w-full overflow-x-scroll">
+        <Table className="max-w-full overflow-x-scroll">
+          <TableHeader className="bg-background sticky top-0">
+            {table.getHeaderGroups().map((headerGroup) => (
+              <TableRow key={headerGroup.id}>
+                {headerGroup.headers.map((header) => {
+                  return (
+                    <TableHead key={header.id} className="bg-background">
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(
                             header.column.columnDef.header,
                             header.getContext(),
                           )}
-                      </TableHead>
-                    );
-                  })}
+                    </TableHead>
+                  );
+                })}
+              </TableRow>
+            ))}
+          </TableHeader>
+          <TableBody className="max-w-full overflow-x-scroll">
+            {isLoading ? (
+              Array.from({ length: pageSize }).map((_, rowIndex) => (
+                <TableRow key={rowIndex}>
+                  {columns.map((_, colIndex) => (
+                    <TableCell key={colIndex} className="py-2">
+                      <Skeleton className="h-6 w-full" />
+                    </TableCell>
+                  ))}
                 </TableRow>
-              ))}
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                Array.from({ length: pageSize }).map((_, rowIndex) => (
-                  <TableRow key={rowIndex}>
-                    {columns.map((_, colIndex) => (
-                      <TableCell key={colIndex} className="p-2">
-                        <Skeleton className="h-6 w-full" />
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                ))
-              ) : table.getRowModel().rows?.length ? (
-                table.getRowModel().rows.map((row) => (
-                  <TableRow
-                    key={row.id}
-                    data-state={row.getIsSelected() && "selected"}
-                    className="group"
-                  >
-                    {row.getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id} className="w-fit p-2">
-                        {flexRender(
-                          cell.column.columnDef.cell,
-                          cell.getContext(),
-                        )}
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell
-                    colSpan={columns.length}
-                    className="h-24 text-center"
-                  >
-                    <div className="text-muted-foreground flex flex-col items-center justify-center gap-2">
-                      <p className="text-sm">No surveys found</p>
-                      <p className="text-xs">Try adjusting your filters</p>
-                    </div>
-                  </TableCell>
+              ))
+            ) : table.getRowModel().rows?.length ? (
+              table.getRowModel().rows.map((row) => (
+                <TableRow
+                  key={row.id}
+                  data-state={row.getIsSelected() && "selected"}
+                  className="group"
+                >
+                  {row.getVisibleCells().map((cell) => (
+                    <TableCell key={cell.id} className="w-fit p-2">
+                      {flexRender(
+                        cell.column.columnDef.cell,
+                        cell.getContext(),
+                      )}
+                    </TableCell>
+                  ))}
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell
+                  colSpan={columns.length}
+                  className="h-24 text-center"
+                >
+                  <div className="text-muted-foreground flex flex-col items-center justify-center gap-2">
+                    <p className="text-sm">No surveys found</p>
+                    <p className="text-xs">Try adjusting your filters</p>
+                  </div>
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
       </div>
-    </div>
+    </>
   );
 }

@@ -28,6 +28,7 @@ import {
   isNull,
   or,
   count,
+  countDistinct,
 } from "drizzle-orm";
 import {
   paginationInputSchema,
@@ -270,6 +271,93 @@ export const surveyRouter = createTRPCRouter({
         totalPossible,
         percentage:
           totalPossible > 0 ? Math.round((awarded / totalPossible) * 100) : 0,
+      };
+    }),
+
+  listSurveyDates: protectedProcedure
+    .input(
+      z.object({
+        ...surveySelectSchema.partial().shape,
+        templateId: z.array(z.number()).optional(),
+        surveyorId: z.array(z.string()).optional(),
+        ...paginationInputSchema.shape,
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const allowedFacilities = await getAllowedFacilities(ctx);
+      const offset = (input.page - 1) * input.pageSize;
+      const whereConditions = [];
+      const havingConditions = [];
+
+      if (input.surveyDate !== undefined)
+        whereConditions.push(eq(survey.surveyDate, input.surveyDate));
+      if (input.id !== undefined) whereConditions.push(eq(survey.id, input.id));
+      if (input.surveyorId?.length)
+        whereConditions.push(inArray(survey.surveyorId, input.surveyorId));
+      if (input.facilityId !== undefined)
+        whereConditions.push(eq(survey.facilityId, input.facilityId));
+      if (input.templateId?.length)
+        whereConditions.push(inArray(survey.templateId, input.templateId));
+
+      if (input.isLocked === true) {
+        havingConditions.push(sql<boolean>`bool_and(${survey.isLocked})`);
+      }
+      if (input.pocGenerated === true) {
+        havingConditions.push(sql<boolean>`bool_and(${survey.pocGenerated})`);
+      }
+
+      const orConditions = [];
+
+      if (input.isLocked === false) {
+        orConditions.push(eq(survey.isLocked, false));
+      }
+      if (input.pocGenerated === false) {
+        orConditions.push(eq(survey.pocGenerated, false));
+      }
+
+      if (orConditions.length > 0) {
+        whereConditions.push(or(...orConditions));
+      }
+
+      const allowedFacilityIds = allowedFacilities.map((f) => f.id);
+      if (allowedFacilityIds.length > 0) {
+        whereConditions.push(inArray(survey.facilityId, allowedFacilityIds));
+      }
+
+      const whereClause =
+        whereConditions.length > 0 ? and(...whereConditions) : undefined;
+      const havingClause =
+        havingConditions.length > 0 ? and(...havingConditions) : undefined;
+
+      const groupingQuery = ctx.db
+        .select({ date: survey.surveyDate })
+        .from(survey)
+        .where(whereClause)
+        .groupBy(survey.surveyDate);
+
+      if (havingClause) {
+        groupingQuery.having(havingClause);
+      }
+
+      const [totalResult] = await ctx.db
+        .select({ count: sql<number>`count(*)` })
+        .from(groupingQuery.as("subquery"));
+
+      const totalCount = Number(totalResult?.count ?? 0);
+
+      const distinctDates = await groupingQuery
+        .orderBy(desc(survey.surveyDate))
+        .limit(input.pageSize)
+        .offset(offset);
+
+      return {
+        dates: distinctDates.map((d) => d.date),
+        meta: {
+          totalCount,
+          pageCount: Math.ceil(totalCount / input.pageSize),
+          page: input.page,
+          pageSize: input.pageSize,
+        },
       };
     }),
 
