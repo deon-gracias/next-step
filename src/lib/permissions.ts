@@ -93,6 +93,7 @@ export const ac = createAccessControl({
 export const owner = ac.newRole({});
 
 export const admin = ac.newRole({
+  member: ["update", "create", "delete"],
   organization: ["update", "delete"],
   invitation: ["create", "cancel"],
   template: ["create", "update", "delete", "read"],
