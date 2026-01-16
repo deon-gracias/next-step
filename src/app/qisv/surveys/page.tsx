@@ -179,9 +179,7 @@ export default function SurveysPage() {
     {
       page: filters.page,
       pageSize: filters.pageSize,
-      surveyDate: filters.date
-        ? filters.date.toISOString().split("T")[0]
-        : undefined,
+      surveyDate: filters.date ? format(filters.date, "yyyy-MM-dd") : undefined,
       pocGenerated: filters.poc ?? undefined,
       isLocked: filters.locked ?? undefined,
       surveyorId: surveyorIdFilter,
