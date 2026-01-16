@@ -39,6 +39,14 @@ import {
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { ChevronDownIcon } from "lucide-react";
+import {
+  useQueryStates,
+  parseAsInteger,
+  parseAsBoolean,
+  parseAsArrayOf,
+  parseAsString,
+  parseAsIsoDate,
+} from "nuqs";
 
 interface SurveyDatePickerProps {
   date: Date | undefined;
@@ -79,17 +87,6 @@ const PAGE_SIZES = [10, 25, 50];
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 10;
 
-type SurveyFilters = {
-  page: number;
-  pageSize: number;
-  poc?: boolean;
-  locked?: boolean;
-  facilityId?: number;
-  templateId?: number;
-  surveyors?: string[];
-  date?: Date;
-};
-
 // Helper Functions
 function normalizeRole(role: unknown): AppRole | null {
   const r = String(role ?? "")
@@ -112,34 +109,16 @@ function normalizeRole(role: unknown): AppRole | null {
   return null;
 }
 
-function parseFiltersFromURL(searchParams: URLSearchParams): SurveyFilters {
-  const dateParam = searchParams.get("date");
-
-  return {
-    page: Number(searchParams.get("page") ?? DEFAULT_PAGE),
-    pageSize: Number(searchParams.get("pageSize") ?? DEFAULT_PAGE_SIZE),
-    poc:
-      searchParams.get("poc") === "true"
-        ? true
-        : searchParams.get("poc") === "false"
-          ? false
-          : undefined,
-    locked:
-      searchParams.get("locked") === "true"
-        ? true
-        : searchParams.get("locked") === "false"
-          ? false
-          : undefined,
-    facilityId: searchParams.get("facility")
-      ? Number(searchParams.get("facility"))
-      : undefined,
-    templateId: searchParams.get("template")
-      ? Number(searchParams.get("template"))
-      : undefined,
-    surveyors: searchParams.get("surveyors")?.split(",").filter(Boolean),
-    date: dateParam ? new Date(dateParam) : undefined,
-  };
-}
+const surveyParamsParser = {
+  page: parseAsInteger.withDefault(1),
+  pageSize: parseAsInteger.withDefault(10),
+  poc: parseAsBoolean,
+  locked: parseAsBoolean,
+  facility: parseAsInteger,
+  template: parseAsInteger,
+  surveyors: parseAsArrayOf(parseAsString).withDefault([]),
+  date: parseAsIsoDate,
+};
 
 // Custom Hooks
 function useUserRole() {
@@ -160,58 +139,27 @@ function useUserRole() {
   });
 }
 
-function useSurveyFilters() {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
+export function useSurveyFilters() {
+  const [filters, setFilters] = useQueryStates(surveyParamsParser, {
+    history: "replace",
+    shallow: false,
+  });
 
-  const filters = useMemo(
-    () => parseFiltersFromURL(searchParams),
-    [searchParams],
-  );
+  const clearFilters = () => setFilters(undefined);
 
-  const updateFilters = useCallback(
-    (updates: Partial<SurveyFilters>) => {
-      const params = new URLSearchParams(searchParams.toString());
-
-      Object.entries(updates).forEach(([key, value]) => {
-        if (value === undefined || value === null) {
-          params.delete(key);
-        } else if (key === "surveyors" && Array.isArray(value)) {
-          if (value.length === 0) {
-            params.delete(key);
-          } else {
-            params.set(key, value.join(","));
-          }
-        } else if (key === "date" && value instanceof Date) {
-          const date = value.toISOString().split("T")[0];
-          if (date) {
-            params.set(key, date);
-          }
-        } else {
-          params.set(key, String(value));
-        }
-      });
-
-      if (params.toString() !== searchParams.toString()) {
-        router.push(`${pathname}?${params.toString()}`);
-      }
-    },
-    [pathname, router, searchParams],
-  );
-  const clearFilters = useCallback(() => {
-    router.push(pathname);
-  }, [pathname, router]);
-
-  return { filters, updateFilters, clearFilters };
+  return {
+    filters,
+    updateFilters: setFilters,
+    clearFilters,
+  };
 }
 
 // Main Component
 export default function SurveysPage() {
   const currentUser = authClient.useSession();
   const { data: memberRole, isLoading: isRoleLoading } = useUserRole();
-  const { filters, updateFilters, clearFilters } = useSurveyFilters();
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const { filters, updateFilters, clearFilters } = useSurveyFilters();
 
   // Permissions
   const canViewSurveys = canUI(memberRole, "surveys.view");
@@ -231,14 +179,14 @@ export default function SurveysPage() {
     {
       page: filters.page,
       pageSize: filters.pageSize,
-      pocGenerated: filters.poc,
       surveyDate: filters.date
         ? filters.date.toISOString().split("T")[0]
         : undefined,
-      isLocked: filters.locked,
+      pocGenerated: filters.poc ?? undefined,
+      isLocked: filters.locked ?? undefined,
       surveyorId: surveyorIdFilter,
-      facilityId: filters.facilityId ? [filters.facilityId] : undefined,
-      templateId: filters.templateId ? [filters.templateId] : undefined,
+      facilityId: filters.facility ? [filters.facility] : undefined,
+      templateId: filters.template ? [filters.template] : undefined,
     },
     {
       enabled: canViewSurveys && !!currentUser.data,
@@ -258,8 +206,8 @@ export default function SurveysPage() {
     return !!(
       filters.poc !== undefined ||
       filters.locked !== undefined ||
-      filters.facilityId ||
-      filters.templateId ||
+      filters.facility ||
+      filters.template ||
       filters.surveyors?.length ||
       filters.date
     );
@@ -324,7 +272,7 @@ export default function SurveysPage() {
                 </Button>
               )}
               <SurveyDatePicker
-                date={filters.date}
+                date={filters.date ?? undefined}
                 onDateChange={(date) => updateFilters({ date })}
               />
             </ButtonGroup>
@@ -355,36 +303,36 @@ export default function SurveysPage() {
 
             {/* Template Filter */}
             <ButtonGroup>
-              {filters.templateId && (
+              {filters.template && (
                 <Button
                   variant="outline"
                   size="icon"
-                  onClick={() => updateFilters({ templateId: undefined })}
+                  onClick={() => updateFilters({ template: null })}
                 >
                   <XIcon />
                 </Button>
               )}
               <TemplateComboBox
                 align="start"
-                selectedItem={filters.templateId}
-                onSelect={(template) => updateFilters({ templateId: template })}
+                selectedItem={filters.template ?? undefined}
+                onSelect={(template) => updateFilters({ template: template })}
               />
             </ButtonGroup>
 
             {/* Facility Filter */}
             <ButtonGroup>
-              {filters.facilityId && (
+              {filters.facility && (
                 <Button
                   variant="outline"
                   size="icon"
-                  onClick={() => updateFilters({ facilityId: undefined })}
+                  onClick={() => updateFilters({ facility: null })}
                 >
                   <XIcon />
                 </Button>
               )}
               <FacilityComboBox
-                selectedItem={filters.facilityId}
-                onSelect={(facility) => updateFilters({ facilityId: facility })}
+                selectedItem={filters.facility ?? undefined}
+                onSelect={(facility) => updateFilters({ facility: facility })}
               />
             </ButtonGroup>
 
@@ -394,35 +342,34 @@ export default function SurveysPage() {
                 <Button variant="outline" size="sm" className="border-dashed">
                   <CirclePlusIcon />
                   Status
-                  {(filters.poc !== undefined ||
-                    filters.locked !== undefined) && (
-                      <>
-                        <Separator orientation="vertical" className="mx-2 h-4" />
-                        {filters.poc !== undefined && (
-                          <Badge
-                            variant="secondary"
-                            className="rounded-sm px-1 font-normal"
-                          >
-                            POC Generated
-                          </Badge>
-                        )}
-                        {filters.locked !== undefined && (
-                          <Badge
-                            variant="secondary"
-                            className="rounded-sm px-1 font-normal"
-                          >
-                            Locked
-                          </Badge>
-                        )}
-                      </>
-                    )}
+                  {(filters.poc !== null || filters.locked !== null) && (
+                    <>
+                      <Separator orientation="vertical" className="mx-2 h-4" />
+                      {filters.poc !== null && (
+                        <Badge
+                          variant="secondary"
+                          className="rounded-sm px-1 font-normal"
+                        >
+                          POC Generated
+                        </Badge>
+                      )}
+                      {filters.locked !== null && (
+                        <Badge
+                          variant="secondary"
+                          className="rounded-sm px-1 font-normal"
+                        >
+                          Locked
+                        </Badge>
+                      )}
+                    </>
+                  )}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent>
                 <DropdownMenuCheckboxItem
                   checked={filters.poc === true}
                   onCheckedChange={(checked) =>
-                    updateFilters({ poc: checked ? true : undefined })
+                    updateFilters({ poc: checked ? true : null })
                   }
                 >
                   POC Generated
@@ -430,7 +377,7 @@ export default function SurveysPage() {
                 <DropdownMenuCheckboxItem
                   checked={filters.locked === true}
                   onCheckedChange={(checked) =>
-                    updateFilters({ locked: checked ? true : undefined })
+                    updateFilters({ locked: checked ? true : null })
                   }
                 >
                   Locked
