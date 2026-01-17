@@ -62,7 +62,9 @@ export const facilityRouter = createTRPCRouter({
           ilike(facility.facilityCode, `%${input.facilityCode}%`),
         );
 
-      const allowedFacilityIds = allowedFacilities.map((f) => f.id);
+      const allowedFacilityIds = allowedFacilities.map((f) =>
+        typeof f === "number" ? f : f.id,
+      );
       if (allowedFacilityIds.length > 0) {
         conditions.push(inArray(facility.id, allowedFacilityIds));
       }

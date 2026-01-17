@@ -43,7 +43,7 @@ import {
 } from "@/components/ui/accordion";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useParams } from "next/navigation";
-import { QISVHeader } from "@/app/qisv/_components/header";
+import { QISVHeader, type Crumb } from "@/app/qisv/_components/header";
 import { SurveyEmptyState } from "../../_components/survey-empty-state";
 import { SurveyBatchActions } from "../../_components/survey-batch-actions";
 import { UserMultiComboBox } from "@/app/qisv/_components/user-dropdown";
@@ -197,7 +197,7 @@ function SurveysPageContent() {
   }, [filters]);
 
   // Header Breadcrumbs Logic
-  const crumbs = [{ label: "Surveys" }];
+  const crumbs = [{ label: "Surveys" }] as Crumb[];
   if (facilityId) {
     crumbs.push({
       label: facilityQuery.isLoading ? (
@@ -416,7 +416,7 @@ function SurveysPageContent() {
                         filters={{
                           poc: filters.poc,
                           locked: filters.locked,
-                          facility: filters.facility || facilityId, // Ensure facilityId is passed if in URL
+                          facility: facilityId, // Ensure facilityId is passed if in URL
                         }}
                       />
                     </AccordionContent>

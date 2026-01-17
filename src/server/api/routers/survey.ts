@@ -14,6 +14,7 @@ import {
   question,
   surveyDOC,
   resident,
+  pocComment,
 } from "@/server/db/schema";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import { getAllowedFacilities } from "./user";
@@ -274,6 +275,108 @@ export const surveyRouter = createTRPCRouter({
       };
     }),
 
+  getDetails: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ ctx, input }) => {
+      const surveyId = input.id;
+
+      // 1. Fetch Survey Data
+      const surveyData = await ctx.db.query.survey.findFirst({
+        where: eq(survey.id, surveyId),
+        with: {
+          template: true,
+          facility: true,
+          surveyor: true,
+        },
+      });
+
+      if (!surveyData) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Survey not found" });
+      }
+
+      // 2. Fetch all other data in parallel
+      const [
+        residentsData,
+        casesData,
+        questionsData,
+        responsesData,
+        pocsData,
+        docsData,
+        commentsData,
+      ] = await Promise.all([
+        // Residents
+        ctx.db
+          .select({
+            id: surveyResident.id,
+            residentId: surveyResident.residentId,
+            pcciId: resident.pcciId,
+            name: resident.name,
+            roomId: resident.roomId,
+          })
+          .from(surveyResident)
+          .innerJoin(resident, eq(surveyResident.residentId, resident.id))
+          .where(eq(surveyResident.surveyId, surveyId)),
+
+        // Cases
+        ctx.db
+          .select()
+          .from(surveyCases)
+          .where(eq(surveyCases.surveyId, surveyId)),
+
+        // Questions (for the template)
+        ctx.db
+          .select()
+          .from(question)
+          .where(eq(question.templateId, surveyData.templateId))
+          .orderBy(asc(question.id)), // Ensure consistent order
+
+        // Responses
+        ctx.db
+          .select()
+          .from(surveyResponse)
+          .where(eq(surveyResponse.surveyId, surveyId)),
+
+        // POCs
+        ctx.db.select().from(surveyPOC).where(eq(surveyPOC.surveyId, surveyId)),
+
+        // DOCs
+        ctx.db.select().from(surveyDOC).where(eq(surveyDOC.surveyId, surveyId)),
+
+        // Comments
+        ctx.db
+          .select({
+            id: pocComment.id,
+            commentText: pocComment.commentText,
+            createdAt: pocComment.createdAt,
+            author: {
+              id: user.id,
+              name: user.name,
+              email: user.email,
+            },
+          })
+          .from(pocComment)
+          .leftJoin(user, eq(pocComment.authorId, user.id))
+          .where(
+            and(
+              eq(pocComment.surveyId, surveyId),
+              eq(pocComment.templateId, surveyData.templateId),
+            ),
+          )
+          .orderBy(desc(pocComment.createdAt)),
+      ]);
+
+      return {
+        survey: surveyData,
+        residents: residentsData,
+        cases: casesData,
+        questions: questionsData,
+        responses: responsesData,
+        pocs: pocsData,
+        docs: docsData,
+        comments: commentsData,
+      };
+    }),
+
   listSurveyDates: protectedProcedure
     .input(
       z.object({
@@ -319,7 +422,9 @@ export const surveyRouter = createTRPCRouter({
         whereConditions.push(or(...orConditions));
       }
 
-      const allowedFacilityIds = allowedFacilities.map((f) => f.id);
+      const allowedFacilityIds = allowedFacilities.map((f) =>
+        typeof f === "number" ? f : f.id,
+      );
       if (allowedFacilityIds.length > 0) {
         whereConditions.push(inArray(survey.facilityId, allowedFacilityIds));
       }
@@ -412,7 +517,9 @@ export const surveyRouter = createTRPCRouter({
       }
 
       // Facility access control
-      const allowedFacilityIds = allowedFacilities.map((f) => f.id);
+      const allowedFacilityIds = allowedFacilities.map((f) =>
+        typeof f === "number" ? f : f.id,
+      );
       if (allowedFacilityIds.length > 0) {
         conditions.push(inArray(survey.facilityId, allowedFacilityIds));
       }

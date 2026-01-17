@@ -134,7 +134,7 @@ export const surveyor = ac.newRole({
 export const facility_coordinator = ac.newRole({
   template: ["read"],
   survey: ["read"],
-  poc: ["update", "read"],
+  poc: ["update", "read", "create"],
   compliance: ["create", "update", "read"],
   analytics: ["read"],
 });

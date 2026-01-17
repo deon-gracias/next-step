@@ -10,7 +10,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@radix-ui/react-separator";
 import { Fragment } from "react";
 
-type Crumb = {
+export type Crumb = {
   label: React.ReactNode;
   href?: string;
 };

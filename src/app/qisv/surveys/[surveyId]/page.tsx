@@ -312,21 +312,23 @@ export default function SurveyDetailPage() {
   const params = useParams();
   const surveyId = Number((params as any).surveyId);
 
-  // Data - fetch residents for all template types
-  const survey = api.survey.byId.useQuery({ id: surveyId });
-  const residents = api.survey.listResidents.useQuery({ surveyId });
-  const cases = api.survey.listCases.useQuery({ surveyId });
+  // Data - fetch all details in one go
+  const {
+    data: details,
+    isLoading: detailsLoading,
+    refetch,
+  } = api.survey.getDetails.useQuery({ id: surveyId });
 
-  // Fetch facility and surveyor data separately
-  const facility = api.facility.byId.useQuery(
-    { id: survey.data?.facilityId ?? -1 },
-    { enabled: Boolean(survey.data?.facilityId) },
-  );
+  // Mock individual query results to minimize refactoring changes
+  const survey = { data: details?.survey, isPending: detailsLoading };
+  const residents = { data: details?.residents };
+  const cases = { data: details?.cases };
+  const questions = { data: details?.questions };
+  const comments = { data: details?.comments };
 
-  const surveyor = api.user.byId.useQuery(
-    { id: survey.data?.surveyorId ?? "" },
-    { enabled: Boolean(survey.data?.surveyorId) },
-  );
+  // Use data from details for facility and surveyor (used in PDF generation)
+  const facility = { data: details?.survey?.facility };
+  const surveyor = { data: details?.survey?.surveyor };
 
   const surveyCompletion = api.survey.checkCompletion.useQuery(
     { surveyId },
@@ -336,14 +338,8 @@ export default function SurveyDetailPage() {
     },
   );
 
-  // Get ALL questions without pagination
-  const questions = api.question.list.useQuery(
-    { templateId: survey.data?.templateId ?? -1 },
-    { enabled: Boolean(survey.data?.templateId) },
-  );
-
+  // FTags still fetched separately (could be optimized later)
   const questionIds = (questions.data ?? []).map((q) => q.id);
-
   const ftagsBatch = api.question.getFtagsByQuestionIds.useQuery(
     { questionIds },
     { enabled: questionIds.length > 0 },
@@ -362,20 +358,11 @@ export default function SurveyDetailPage() {
     return m;
   }, [ftagsBatch.data]);
 
-  // Comments
-  const comments = api.pocComment.list.useQuery(
-    {
-      surveyId: surveyId,
-      templateId: survey.data?.templateId ?? -1,
-    },
-    { enabled: Boolean(survey.data?.templateId) },
-  );
-
   // Mutations
   const utils = api.useUtils();
   const lockSurvey = api.survey.lock.useMutation({
     onSuccess: async () => {
-      await utils.survey.byId.invalidate({ id: surveyId });
+      await refetch();
       toast.success("Survey locked");
     },
     onError: (e) =>
@@ -385,7 +372,7 @@ export default function SurveyDetailPage() {
   });
   const unlockSurvey = api.survey.unlock.useMutation({
     onSuccess: async () => {
-      await utils.survey.byId.invalidate({ id: surveyId });
+      await refetch();
       toast.success("Survey unlocked");
     },
     onError: (e) =>
@@ -396,7 +383,7 @@ export default function SurveyDetailPage() {
 
   const markPocGenerated = api.survey.markPocsGenerated.useMutation({
     onSuccess: async () => {
-      await utils.survey.byId.invalidate({ id: surveyId });
+      await refetch();
       toast.success("POC generation enabled successfully");
     },
     onError: (e) => {
@@ -428,10 +415,7 @@ export default function SurveyDetailPage() {
   const docUpsert = api.doc.upsert.useMutation();
   const addComment = api.pocComment.create.useMutation({
     onSuccess: async () => {
-      await utils.pocComment.list.invalidate({
-        surveyId,
-        templateId: survey.data?.templateId ?? -1,
-      });
+      await refetch();
       setNewComment("");
       toast.success("Comment added successfully");
     },
@@ -440,26 +424,83 @@ export default function SurveyDetailPage() {
 
   // Local state
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [combinedPOC, setCombinedPOC] = useState("");
-  const [hasAnyPOC, setHasAnyPOC] = useState(false);
-  const [pocMap, setPocMap] = useState<Map<string, string>>(new Map());
-
-  const [combinedDOC, setCombinedDOC] = useState<Date | null>(null);
-  const [hasAnyDOC, setHasAnyDOC] = useState(false);
-  const [docMap, setDocMap] = useState<Map<string, Date>>(new Map());
-
-  const [allResponses, setAllResponses] = useState<
-    Array<{
-      residentId: number | null;
-      surveyCaseId: number | null;
-      questionId: number;
-      status: StatusVal | null;
-      findings: string | null;
-    }>
-  >([]);
   const [showComments, setShowComments] = useState(false);
   const [newComment, setNewComment] = useState("");
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+
+  const [combinedPOC, setCombinedPOC] = useState("");
+  const [combinedDOC, setCombinedDOC] = useState<Date | null>(null);
+
+  // Derived State from getDetails
+  const {
+    allResponses,
+    pocMap,
+    docMap,
+    hasAnyPOC,
+    hasAnyDOC,
+  } = useMemo(() => {
+    if (!details) {
+      return {
+        allResponses: [],
+        pocMap: new Map(),
+        docMap: new Map(),
+        hasAnyPOC: false,
+        hasAnyDOC: false,
+      };
+    }
+
+    // 1. Process Responses
+    const responses = (details.responses || []).map((r) => ({
+      residentId: r.residentId,
+      surveyCaseId: r.surveyCaseId,
+      questionId: r.questionId,
+      status: (r.requirementsMetOrUnmet as StatusVal) ?? null,
+      findings: r.findings ?? null,
+    }));
+
+    // 2. Process POCs
+    const pMap = new Map<string, string>();
+    let foundPOC = false;
+
+    for (const p of details.pocs || []) {
+      const text = p.pocText?.trim();
+      if (text) {
+        foundPOC = true;
+        const key = p.residentId
+          ? `resident-${p.residentId}-${p.questionId}`
+          : p.surveyCaseId
+            ? `case-${p.surveyCaseId}-${p.questionId}`
+            : `general-${p.questionId}`;
+        pMap.set(key, text);
+      }
+    }
+
+    // 3. Process DOCs
+    const dMap = new Map<string, Date>();
+    let foundDOC = false;
+
+    for (const d of details.docs || []) {
+      if (d.complianceDate) {
+        foundDOC = true;
+        const dateObj = new Date(d.complianceDate);
+        const key = d.residentId
+          ? `resident-${d.residentId}-${d.questionId}`
+          : d.surveyCaseId
+            ? `case-${d.surveyCaseId}-${d.questionId}`
+            : `general-${d.questionId}`;
+        dMap.set(key, dateObj);
+      }
+    }
+
+    return {
+      allResponses: responses,
+      pocMap: pMap,
+      docMap: dMap,
+      hasAnyPOC: foundPOC,
+      hasAnyDOC: foundDOC,
+    };
+  }, [details]);
+
 
   const [editSurveyorOpen, setEditSurveyorOpen] = useState(false);
   const [editResidentsOpen, setEditResidentsOpen] = useState(false);
@@ -479,7 +520,7 @@ export default function SurveyDetailPage() {
 
   const updateSurveyor = api.survey.updateSurveyor.useMutation({
     onSuccess: async () => {
-      await utils.survey.byId.invalidate({ id: surveyId });
+      await refetch();
       setManageSurveyDialogOpen(false);
       toast.success("Surveyor updated successfully");
     },
@@ -488,7 +529,8 @@ export default function SurveyDetailPage() {
 
   const addResident = api.survey.addResident.useMutation({
     onSuccess: async () => {
-      await utils.survey.listResidents.invalidate({ surveyId });
+      await refetch();
+      utils.survey.checkCompletion.invalidate({ surveyId });
       setSelectedResidentId(null);
       setManageSurveyDialogOpen(false);
       toast.success("Resident added successfully");
@@ -497,45 +539,19 @@ export default function SurveyDetailPage() {
   });
 
   const removeResident = api.survey.removeResident.useMutation({
-    onMutate: async (deletedResident) => {
-      mutationCountRef.current += 1;
-      await utils.survey.listResidents.cancel({ surveyId });
-      const previousResidents = utils.survey.listResidents.getData({
-        surveyId,
-      });
-      utils.survey.listResidents.setData({ surveyId }, (old) =>
-        old?.filter((r) => r.residentId !== deletedResident.residentId),
-      );
-      return { previousResidents };
-    },
-    onError: (err, deletedResident, context) => {
-      mutationCountRef.current -= 1;
-      utils.survey.listResidents.setData(
-        { surveyId },
-        context?.previousResidents,
-      );
-      setTimeout(() => {
-        toast.error(err.message ?? "Failed to remove resident");
-      }, 100);
-    },
-    onSuccess: () => {
-      mutationCountRef.current -= 1;
+    onSuccess: async () => {
+      await refetch();
+      utils.survey.checkCompletion.invalidate({ surveyId });
       setManageSurveyDialogOpen(false);
-      setTimeout(() => {
-        toast.success("Resident removed successfully");
-      }, 100);
+      toast.success("Resident removed successfully");
     },
-    onSettled: () => {
-      if (mutationCountRef.current === 0) {
-        utils.survey.listResidents.invalidate({ surveyId });
-        utils.survey.checkCompletion.invalidate({ surveyId });
-      }
-    },
+    onError: (e) => toast.error(e.message ?? "Failed to remove resident"),
   });
 
   const addCase = api.survey.addCase.useMutation({
     onSuccess: async () => {
-      await utils.survey.listCases.invalidate({ surveyId });
+      await refetch();
+      utils.survey.checkCompletion.invalidate({ surveyId });
       setManageSurveyDialogOpen(false);
       toast.success("Case added successfully");
     },
@@ -543,35 +559,13 @@ export default function SurveyDetailPage() {
   });
 
   const removeCase = api.survey.removeCase.useMutation({
-    onMutate: async (deletedCase) => {
-      mutationCountRef.current += 1;
-      await utils.survey.listCases.cancel({ surveyId });
-      const previousCases = utils.survey.listCases.getData({ surveyId });
-      utils.survey.listCases.setData({ surveyId }, (old) =>
-        old?.filter((c) => c.id !== deletedCase.caseId),
-      );
-      return { previousCases };
-    },
-    onError: (err, deletedCase, context) => {
-      mutationCountRef.current -= 1;
-      utils.survey.listCases.setData({ surveyId }, context?.previousCases);
-      setTimeout(() => {
-        toast.error(err.message ?? "Failed to remove case");
-      }, 100);
-    },
-    onSuccess: () => {
-      mutationCountRef.current -= 1;
+    onSuccess: async () => {
+      await refetch();
+      utils.survey.checkCompletion.invalidate({ surveyId });
       setManageSurveyDialogOpen(false);
-      setTimeout(() => {
-        toast.success("Case removed successfully");
-      }, 100);
+      toast.success("Case removed successfully");
     },
-    onSettled: () => {
-      if (mutationCountRef.current === 0) {
-        utils.survey.listCases.invalidate({ surveyId });
-        utils.survey.checkCompletion.invalidate({ surveyId });
-      }
-    },
+    onError: (e) => toast.error(e.message ?? "Failed to remove case"),
   });
 
   const [search, setSearch] = useState("");
@@ -628,314 +622,8 @@ export default function SurveyDetailPage() {
   });
 
   // [KEEP ALL YOUR EXISTING USEEFFECTS - I won't repeat them here for brevity]
-  // Fetch all responses across residents AND cases
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      if (!survey.data) return;
-      try {
-        const arr: Array<{
-          residentId: number | null;
-          surveyCaseId: number | null;
-          questionId: number;
-          status: StatusVal | null;
-          findings: string | null;
-        }> = [];
+  // Effects removed as data is derived directly from getDetails
 
-        if (residents.data) {
-          await Promise.all(
-            residents.data.map(async (r) => {
-              const rows = await utils.survey.listResponses.fetch({
-                surveyId,
-                residentId: r.residentId,
-              });
-              for (const rr of rows ?? []) {
-                arr.push({
-                  residentId: r.residentId,
-                  surveyCaseId: null,
-                  questionId: rr.questionId,
-                  status: (rr.requirementsMetOrUnmet as StatusVal) ?? null,
-                  findings: rr.findings ?? null,
-                });
-              }
-            }),
-          );
-        }
-
-        if (cases.data) {
-          await Promise.all(
-            cases.data.map(async (c) => {
-              const rows = await utils.survey.listResponses.fetch({
-                surveyId,
-                surveyCaseId: c.id,
-              });
-              for (const rr of rows ?? []) {
-                arr.push({
-                  residentId: null,
-                  surveyCaseId: c.id,
-                  questionId: rr.questionId,
-                  status: (rr.requirementsMetOrUnmet as StatusVal) ?? null,
-                  findings: rr.findings ?? null,
-                });
-              }
-            }),
-          );
-        }
-
-        if (survey.data.template?.type === "general") {
-          const generalRows = await utils.survey.listResponses.fetch({
-            surveyId,
-          });
-          const generalResponses =
-            generalRows?.filter((r) => !r.residentId && !r.surveyCaseId) ?? [];
-
-          for (const rr of generalResponses) {
-            arr.push({
-              residentId: null,
-              surveyCaseId: null,
-              questionId: rr.questionId,
-              status: (rr.requirementsMetOrUnmet as StatusVal) ?? null,
-              findings: rr.findings ?? null,
-            });
-          }
-        }
-
-        if (!cancelled) {
-          setAllResponses(arr);
-        }
-      } catch (e) {
-        console.error("Failed loading responses", e);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    survey.data,
-    residents.data,
-    cases.data,
-    surveyId,
-    utils.survey.listResponses,
-  ]);
-
-  // Fetch existing POCs for all survey types
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      if (!survey.data) {
-        if (!cancelled) {
-          setHasAnyPOC(false);
-          setPocMap(new Map());
-          setCombinedPOC("");
-        }
-        return;
-      }
-
-      const templateType = survey.data.template?.type;
-
-      try {
-        const newPocMap = new Map<string, string>();
-        let foundAnyPOC = false;
-        let firstPocText = "";
-
-        if (
-          templateType === "resident" &&
-          residents.data &&
-          residents.data.length > 0
-        ) {
-          const residentIds = residents.data.map((r) => r.residentId);
-          const pocResults = await Promise.all(
-            residentIds.map((rid) =>
-              utils.poc.list.fetch({ surveyId, residentId: rid }),
-            ),
-          );
-
-          for (let i = 0; i < residentIds.length; i++) {
-            const residentId = residentIds[i];
-            const pocRows = pocResults[i] ?? [];
-
-            for (const pocRow of pocRows) {
-              if (pocRow.pocText && pocRow.pocText.trim()) {
-                const key = `resident-${residentId}-${pocRow.questionId}`;
-                newPocMap.set(key, pocRow.pocText.trim());
-                foundAnyPOC = true;
-                if (!firstPocText) {
-                  firstPocText = pocRow.pocText.trim();
-                }
-              }
-            }
-          }
-        } else if (
-          templateType === "case" &&
-          cases.data &&
-          cases.data.length > 0
-        ) {
-          const caseIds = cases.data.map((c) => c.id);
-          const pocResults = await Promise.all(
-            caseIds.map((cid) =>
-              utils.poc.list.fetch({ surveyId, surveyCaseId: cid }),
-            ),
-          );
-
-          for (let i = 0; i < caseIds.length; i++) {
-            const caseId = caseIds[i];
-            const pocRows = pocResults[i] ?? [];
-
-            for (const pocRow of pocRows) {
-              if (pocRow.pocText && pocRow.pocText.trim()) {
-                const key = `case-${caseId}-${pocRow.questionId}`;
-                newPocMap.set(key, pocRow.pocText.trim());
-                foundAnyPOC = true;
-                if (!firstPocText) {
-                  firstPocText = pocRow.pocText.trim();
-                }
-              }
-            }
-          }
-        } else if (templateType === "general") {
-          const pocRows = await utils.poc.list.fetch({ surveyId });
-
-          for (const pocRow of pocRows) {
-            if (pocRow.pocText && pocRow.pocText.trim()) {
-              const key = `general-${pocRow.questionId}`;
-              newPocMap.set(key, pocRow.pocText.trim());
-              foundAnyPOC = true;
-              if (!firstPocText) {
-                firstPocText = pocRow.pocText.trim();
-              }
-            }
-          }
-        }
-
-        if (!cancelled) {
-          setPocMap(newPocMap);
-          setHasAnyPOC(foundAnyPOC);
-          setCombinedPOC(firstPocText);
-        }
-      } catch (error) {
-        console.error("Failed to fetch POCs:", error);
-        if (!cancelled) {
-          setHasAnyPOC(false);
-          setPocMap(new Map());
-          setCombinedPOC("");
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [survey.data, residents.data, cases.data, surveyId, utils.poc.list]);
-
-  // Fetch existing DOCs for all survey types
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      if (!survey.data) {
-        if (!cancelled) {
-          setHasAnyDOC(false);
-          setDocMap(new Map());
-          setCombinedDOC(null);
-        }
-        return;
-      }
-
-      const templateType = survey.data.template?.type;
-
-      try {
-        const newDocMap = new Map<string, Date>();
-        let foundAnyDOC = false;
-        let firstDocDate: Date | null = null;
-
-        if (
-          templateType === "resident" &&
-          residents.data &&
-          residents.data.length > 0
-        ) {
-          const residentIds = residents.data.map((r) => r.residentId);
-          const docResults = await Promise.all(
-            residentIds.map((rid) =>
-              utils.doc.list.fetch({ surveyId, residentId: rid }),
-            ),
-          );
-
-          for (let i = 0; i < residentIds.length; i++) {
-            const residentId = residentIds[i];
-            const docRows = docResults[i] ?? [];
-
-            for (const docRow of docRows) {
-              if (docRow.complianceDate) {
-                const key = `resident-${residentId}-${docRow.questionId}`;
-                const docDate = new Date(docRow.complianceDate);
-                newDocMap.set(key, docDate);
-                foundAnyDOC = true;
-                if (!firstDocDate) {
-                  firstDocDate = docDate;
-                }
-              }
-            }
-          }
-        } else if (
-          templateType === "case" &&
-          cases.data &&
-          cases.data.length > 0
-        ) {
-          const caseIds = cases.data.map((c) => c.id);
-          const docResults = await Promise.all(
-            caseIds.map((cid) =>
-              utils.doc.list.fetch({ surveyId, surveyCaseId: cid }),
-            ),
-          );
-
-          for (let i = 0; i < caseIds.length; i++) {
-            const caseId = caseIds[i];
-            const docRows = docResults[i] ?? [];
-
-            for (const docRow of docRows) {
-              if (docRow.complianceDate) {
-                const key = `case-${caseId}-${docRow.questionId}`;
-                const docDate = new Date(docRow.complianceDate);
-                newDocMap.set(key, docDate);
-                foundAnyDOC = true;
-                if (!firstDocDate) {
-                  firstDocDate = docDate;
-                }
-              }
-            }
-          }
-        } else if (templateType === "general") {
-          const docRows = await utils.doc.list.fetch({ surveyId });
-
-          for (const docRow of docRows) {
-            if (docRow.complianceDate) {
-              const key = `general-${docRow.questionId}`;
-              const docDate = new Date(docRow.complianceDate);
-              newDocMap.set(key, docDate);
-              foundAnyDOC = true;
-              if (!firstDocDate) {
-                firstDocDate = docDate;
-              }
-            }
-          }
-        }
-
-        if (!cancelled) {
-          setDocMap(newDocMap);
-          setHasAnyDOC(foundAnyDOC);
-          setCombinedDOC(firstDocDate);
-        }
-      } catch (error) {
-        console.error("Failed to fetch DOCs:", error);
-        if (!cancelled) {
-          setHasAnyDOC(false);
-          setDocMap(new Map());
-          setCombinedDOC(null);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [survey.data, residents.data, cases.data, surveyId, utils.doc.list]);
 
   useEffect(() => {
     if (sheetOpen && pocMap.size > 0) {
@@ -1727,30 +1415,10 @@ export default function SurveyDetailPage() {
             : `general-${update.questionId}`;
         newPocMap.set(key, text);
       });
-      setPocMap(newPocMap);
-      setHasAnyPOC(true);
 
-      if (templateType === "resident") {
-        const affectedResidents = Array.from(
-          new Set(updates.map((u) => u.residentId).filter(Boolean)),
-        );
-        await Promise.all(
-          affectedResidents.map((rid) =>
-            utils.poc.list.invalidate({ surveyId, residentId: rid }),
-          ),
-        );
-      } else if (templateType === "case") {
-        const affectedCases = Array.from(
-          new Set(updates.map((u) => u.surveyCaseId).filter(Boolean)),
-        );
-        await Promise.all(
-          affectedCases.map((cid) =>
-            utils.poc.list.invalidate({ surveyId, surveyCaseId: cid }),
-          ),
-        );
-      } else if (templateType === "general") {
-        await utils.poc.list.invalidate({ surveyId });
-      }
+
+      // Invalidate everything via refetch since we updated POCs
+      await refetch();
 
       setSheetOpen(false);
       toast.success("POC updated for unmet questions successfully");
@@ -1763,7 +1431,7 @@ export default function SurveyDetailPage() {
     canOpenPOCSheet,
     combinedPOC,
     pocUpsert,
-    utils.poc.list,
+    refetch,
     surveyId,
     questions.data,
     residents.data,
@@ -1857,30 +1525,10 @@ export default function SurveyDetailPage() {
             : `general-${update.questionId}`;
         newDocMap.set(key, combinedDOC);
       });
-      setDocMap(newDocMap);
-      setHasAnyDOC(true);
 
-      if (templateType === "resident") {
-        const affectedResidents = Array.from(
-          new Set(updates.map((u) => u.residentId).filter(Boolean)),
-        );
-        await Promise.all(
-          affectedResidents.map((rid) =>
-            utils.doc.list.invalidate({ surveyId, residentId: rid }),
-          ),
-        );
-      } else if (templateType === "case") {
-        const affectedCases = Array.from(
-          new Set(updates.map((u) => u.surveyCaseId).filter(Boolean)),
-        );
-        await Promise.all(
-          affectedCases.map((cid) =>
-            utils.doc.list.invalidate({ surveyId, surveyCaseId: cid }),
-          ),
-        );
-      } else if (templateType === "general") {
-        await utils.doc.list.invalidate({ surveyId });
-      }
+
+      // Invalidate everything via refetch since we updated DOCs
+      await refetch();
 
       toast.success(
         "Date of Compliance updated for unmet questions successfully",
@@ -1894,7 +1542,7 @@ export default function SurveyDetailPage() {
     canOpenPOCSheet,
     combinedDOC,
     docUpsert,
-    utils.doc.list,
+    refetch,
     surveyId,
     questions.data,
     residents.data,

@@ -1162,3 +1162,115 @@ export function toDbNumeric(
   if (typeof n === "number") return n.toString();
   return n;
 }
+
+// Survey Relations
+export const surveyRelations = relations(survey, ({ one, many }) => ({
+  template: one(template, {
+    fields: [survey.templateId],
+    references: [template.id],
+  }),
+  facility: one(facility, {
+    fields: [survey.facilityId],
+    references: [facility.id],
+  }),
+  surveyor: one(user, {
+    fields: [survey.surveyorId],
+    references: [user.id],
+  }),
+  residents: many(surveyResident),
+  cases: many(surveyCases),
+  responses: many(surveyResponse),
+  pocs: many(surveyPOC),
+  docs: many(surveyDOC),
+  comments: many(pocComment),
+}));
+
+export const surveyResidentRelations = relations(surveyResident, ({ one }) => ({
+  survey: one(survey, {
+    fields: [surveyResident.surveyId],
+    references: [survey.id],
+  }),
+  resident: one(resident, {
+    fields: [surveyResident.residentId],
+    references: [resident.id],
+  }),
+}));
+
+export const surveyResponseRelations = relations(surveyResponse, ({ one }) => ({
+  survey: one(survey, {
+    fields: [surveyResponse.surveyId],
+    references: [survey.id],
+  }),
+  question: one(question, {
+    fields: [surveyResponse.questionId],
+    references: [question.id],
+  }),
+}));
+
+export const surveyPOCRelations = relations(surveyPOC, ({ one }) => ({
+  survey: one(survey, {
+    fields: [surveyPOC.surveyId],
+    references: [survey.id],
+  }),
+  question: one(question, {
+    fields: [surveyPOC.questionId],
+    references: [question.id],
+  }),
+  template: one(template, {
+    fields: [surveyPOC.templateId],
+    references: [template.id],
+  }),
+}));
+
+export const surveyDOCRelations = relations(surveyDOC, ({ one }) => ({
+  survey: one(survey, {
+    fields: [surveyDOC.surveyId],
+    references: [survey.id],
+  }),
+  question: one(question, {
+    fields: [surveyDOC.questionId],
+    references: [question.id],
+  }),
+  template: one(template, {
+    fields: [surveyDOC.templateId],
+    references: [template.id],
+  }),
+}));
+
+export const pocCommentRelations = relations(pocComment, ({ one }) => ({
+  survey: one(survey, {
+    fields: [pocComment.surveyId],
+    references: [survey.id],
+  }),
+  template: one(template, {
+    fields: [pocComment.templateId],
+    references: [template.id],
+  }),
+  author: one(user, {
+    fields: [pocComment.authorId],
+    references: [user.id],
+  }),
+}));
+
+export const residentRelations = relations(resident, ({ one, many }) => ({
+  facility: one(facility, {
+    fields: [resident.facilityId],
+    references: [facility.id],
+  }),
+  surveyResidents: many(surveyResident),
+}));
+
+export const questionRelations = relations(question, ({ one, many }) => ({
+  template: one(template, {
+    fields: [question.templateId],
+    references: [template.id],
+  }),
+  responses: many(surveyResponse),
+  pocs: many(surveyPOC),
+  docs: many(surveyDOC),
+}));
+
+export const templateRelations = relations(template, ({ many }) => ({
+  questions: many(question),
+  surveys: many(survey),
+}));
