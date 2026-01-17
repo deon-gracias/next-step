@@ -69,7 +69,6 @@ const rolePerms: Record<AppRole, Set<UIPermission>> = {
     "surveys.lockUnlock",
     "surveys.generatePoc",
     "poc.view",
-    "poc.edit",
     "analytics.view",
   ]),
   surveyor: new Set([

@@ -15,6 +15,7 @@ import {
   surveyDOC,
   resident,
   pocComment,
+  member,
 } from "@/server/db/schema";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import { getAllowedFacilities } from "./user";
@@ -422,9 +423,17 @@ export const surveyRouter = createTRPCRouter({
         whereConditions.push(or(...orConditions));
       }
 
-      const allowedFacilityIds = allowedFacilities.map((f) =>
-        typeof f === "number" ? f : f.id,
-      );
+      let allowedFacilityIds: number[] = [];
+      if (
+        allowedFacilities.length > 0 &&
+        typeof allowedFacilities[0] === "number"
+      ) {
+        allowedFacilityIds = [-1];
+      } else {
+        allowedFacilityIds = (
+          allowedFacilities as { id: number; name: string }[]
+        ).map((f) => f.id);
+      }
       if (allowedFacilityIds.length > 0) {
         whereConditions.push(inArray(survey.facilityId, allowedFacilityIds));
       }
@@ -517,9 +526,17 @@ export const surveyRouter = createTRPCRouter({
       }
 
       // Facility access control
-      const allowedFacilityIds = allowedFacilities.map((f) =>
-        typeof f === "number" ? f : f.id,
-      );
+      let allowedFacilityIds: number[] = [];
+      if (
+        allowedFacilities.length > 0 &&
+        typeof allowedFacilities[0] === "number"
+      ) {
+        allowedFacilityIds = [-1];
+      } else {
+        allowedFacilityIds = (
+          allowedFacilities as { id: number; name: string }[]
+        ).map((f) => f.id);
+      }
       if (allowedFacilityIds.length > 0) {
         conditions.push(inArray(survey.facilityId, allowedFacilityIds));
       }
@@ -634,6 +651,35 @@ export const surveyRouter = createTRPCRouter({
     .input(z.object({ surveyIds: z.array(z.number()) }))
     .mutation(async ({ ctx, input }) => {
       const { surveyIds } = input;
+
+      const activeOrgId = ctx.session.session.activeOrganizationId;
+      if (!activeOrgId)
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "No active organization",
+        });
+
+      const [memberRecord] = await ctx.db
+        .select({ role: member.role })
+        .from(member)
+        .where(
+          and(
+            eq(member.userId, ctx.session.user.id),
+            eq(member.organizationId, activeOrgId),
+          ),
+        )
+        .limit(1);
+
+      if (
+        !memberRecord ||
+        !["admin", "lead_surveyor"].includes(memberRecord.role)
+      ) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message:
+            "Insufficient permissions. Only Admins and Lead Surveyors can generate POCs.",
+        });
+      }
 
       if (surveyIds.length === 0) throw new Error("No surveys selected");
 

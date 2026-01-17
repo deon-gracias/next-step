@@ -2069,7 +2069,7 @@ export default function SurveyDetailPage() {
       );
     }
 
-    const label = hasAnyPOC ? "View POC" : "Fill POC";
+    const label = hasAnyPOC || !canEditPoc ? "View POC" : "Fill POC";
     const totalUnmetQuestions = sheetBlocks.length;
     const templateType = survey.data?.template?.type;
     const totalUnmetEntities = Array.from(
@@ -2362,18 +2362,26 @@ export default function SurveyDetailPage() {
                   <label className="mb-2 block text-sm font-semibold text-gray-900">
                     Plan of Correction
                   </label>
-                  <p className="mb-3 text-xs text-gray-600">
-                    Describe the specific actions that will be taken to address
-                    the unmet requirements above. This plan will be applied to
-                    all questions with "unmet" status.
-                  </p>
-                  <Textarea
-                    placeholder="Enter your comprehensive Plan of Correction here..."
-                    value={combinedPOC}
-                    onChange={(e) => setCombinedPOC(e.target.value)}
-                    rows={5}
-                    className="resize-none text-sm leading-relaxed"
-                  />
+                  {canEditPoc ? (
+                    <>
+                      <p className="mb-3 text-xs text-gray-600">
+                        Describe the specific actions that will be taken to
+                        address the unmet requirements above. This plan will be
+                        applied to all questions with "unmet" status.
+                      </p>
+                      <Textarea
+                        placeholder="Enter your comprehensive Plan of Correction here..."
+                        value={combinedPOC}
+                        onChange={(e) => setCombinedPOC(e.target.value)}
+                        rows={5}
+                        className="resize-none text-sm leading-relaxed"
+                      />
+                    </>
+                  ) : (
+                    <div className="rounded-md border bg-gray-50 p-3 text-sm text-gray-700">
+                      {combinedPOC || "No Plan of Correction entered yet."}
+                    </div>
+                  )}
                 </div>
 
                 {/* Date of Compliance */}
@@ -2396,14 +2404,17 @@ export default function SurveyDetailPage() {
                             e.target.value ? new Date(e.target.value) : null,
                           )
                         }
-                        className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                        disabled={!canEditPoc}
+                        className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
                       />
                     </div>
                   </div>
                   <Button
                     variant="outline"
                     onClick={handleSaveCombinedDOC}
-                    disabled={docUpsert.isPending || !combinedDOC}
+                    disabled={
+                      docUpsert.isPending || !combinedDOC || !canEditPoc
+                    }
                     className="min-w-32"
                   >
                     {docUpsert.isPending
@@ -2440,17 +2451,19 @@ export default function SurveyDetailPage() {
                   Cancel
                 </Button>
               </SheetClose>
-              <Button
-                onClick={handleSaveCombinedPOC}
-                disabled={pocUpsert.isPending || !combinedPOC.trim()}
-                className="min-w-32 bg-red-600 hover:bg-red-700"
-              >
-                {pocUpsert.isPending
-                  ? "Saving..."
-                  : hasAnyPOC
-                    ? "Update POC"
-                    : "Save POC"}
-              </Button>
+              {canEditPoc && (
+                <Button
+                  onClick={handleSaveCombinedPOC}
+                  disabled={pocUpsert.isPending || !combinedPOC.trim()}
+                  className="min-w-32 bg-red-600 hover:bg-red-700"
+                >
+                  {pocUpsert.isPending
+                    ? "Saving..."
+                    : hasAnyPOC
+                      ? "Update POC"
+                      : "Save POC"}
+                </Button>
+              )}
             </div>
           </SheetFooter>
         </SheetContent>

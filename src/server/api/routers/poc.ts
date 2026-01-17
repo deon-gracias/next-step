@@ -2,7 +2,8 @@
 import { z } from "zod";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
-import { surveyPOC } from "@/server/db/schema";
+import { surveyPOC, member, survey, memberFacility } from "@/server/db/schema";
+import { TRPCError } from "@trpc/server";
 
 const listInput = z.object({
   surveyId: z.number().int().positive(),
@@ -30,7 +31,7 @@ const deleteInput = z.object({
 export const pocRouter = createTRPCRouter({
   list: protectedProcedure.input(listInput).query(async ({ input, ctx }) => {
     const whereConditions: any[] = [eq(surveyPOC.surveyId, input.surveyId)];
-    
+
     if (input.residentId !== undefined) {
       whereConditions.push(eq(surveyPOC.residentId, input.residentId));
     } else if (input.surveyCaseId !== undefined) {
@@ -49,7 +50,79 @@ export const pocRouter = createTRPCRouter({
   // ✅ CORRECTED: Use column arrays for onConflictDoUpdate target
   upsert: protectedProcedure.input(upsertInput).mutation(async ({ input, ctx }) => {
     const { surveyId, templateId, questionId, pocText, residentId, surveyCaseId } = input;
-    
+
+    // --- SECURITY CHECK START ---
+    const activeOrgId = ctx.session.session.activeOrganizationId;
+    if (!activeOrgId) {
+      throw new TRPCError({
+        code: "UNAUTHORIZED",
+        message: "No active organization",
+      });
+    }
+
+    const [memberRecord] = await ctx.db
+      .select({ role: member.role })
+      .from(member)
+      .where(
+        and(
+          eq(member.userId, ctx.session.user.id),
+          eq(member.organizationId, activeOrgId),
+        ),
+      )
+      .limit(1);
+
+    if (!memberRecord) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "User is not a member of the organization",
+      });
+    }
+
+    // 1. Admin: Allow
+    if (memberRecord.role === "admin") {
+      // Allow proceed
+    }
+    // 2. Facility Coordinator: Check assignment
+    else if (memberRecord.role === "facility_coordinator") {
+      // Get Survey's Facility
+      const [surveyRecord] = await ctx.db
+        .select({ facilityId: survey.facilityId })
+        .from(survey)
+        .where(eq(survey.id, surveyId))
+        .limit(1);
+
+      if (!surveyRecord) throw new TRPCError({ code: "NOT_FOUND", message: "Survey not found" });
+
+      // Check assignment
+      const [assignment] = await ctx.db
+        .select()
+        .from(memberFacility)
+        .where(
+          and(
+            eq(memberFacility.userId, ctx.session.user.id),
+            eq(memberFacility.facilityId, surveyRecord.facilityId),
+          ),
+        )
+        .limit(1);
+
+      if (!assignment) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message:
+            "Restricted: You are not assigned to this facility.",
+        });
+      }
+    }
+    // 3. Others: Deny
+    else {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message:
+          "Insufficient permissions. Only Admins and assigned Facility Coordinators can fill POCs.",
+      });
+    }
+    // --- SECURITY CHECK END ---
+
     const pocData = {
       surveyId,
       templateId,

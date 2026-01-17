@@ -12,12 +12,14 @@ interface SurveyBatchActionsProps {
   selectedIds: number[];
   onSuccess?: () => void;
   onClearSelection: () => void;
+  canGeneratePoc: boolean;
 }
 
 export function SurveyBatchActions({
   selectedIds,
   onSuccess,
   onClearSelection,
+  canGeneratePoc,
 }: SurveyBatchActionsProps) {
   const [error, setError] = useState<{
     title: string;
@@ -94,19 +96,21 @@ export function SurveyBatchActions({
         <Badge variant="secondary">{selectedIds.length} selected</Badge>
 
         <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleGeneratePoc}
-            disabled={markPocGenerated.isPending} // 3. Disable while loading
-          >
-            {markPocGenerated.isPending ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <FileIcon className="mr-2 h-4 w-4" />
-            )}
-            Generate POC
-          </Button>
+          {canGeneratePoc && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleGeneratePoc}
+              disabled={markPocGenerated.isPending} // 3. Disable while loading
+            >
+              {markPocGenerated.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <FileIcon className="mr-2 h-4 w-4" />
+              )}
+              Generate POC
+            </Button>
+          )}
 
           <Button
             variant="ghost"

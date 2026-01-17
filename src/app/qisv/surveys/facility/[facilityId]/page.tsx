@@ -236,6 +236,7 @@ function SurveysPageContent() {
               <SurveyBatchActions
                 selectedIds={selectedSurveyIds}
                 onClearSelection={() => setRowSelection({})}
+                canGeneratePoc={canUI(memberRole, "surveys.generatePoc")}
                 onSuccess={() => {
                   setRowSelection({});
                   datesQuery.refetch();

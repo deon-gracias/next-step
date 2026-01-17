@@ -62,9 +62,28 @@ export const facilityRouter = createTRPCRouter({
           ilike(facility.facilityCode, `%${input.facilityCode}%`),
         );
 
-      const allowedFacilityIds = allowedFacilities.map((f) =>
-        typeof f === "number" ? f : f.id,
-      );
+      let allowedFacilityIds: number[] = [];
+
+      // Check if allowedFacilities represents "no access" (array of numbers like [-1])
+      // or "list of facilities" (array of objects)
+      if (
+        allowedFacilities.length > 0 &&
+        typeof allowedFacilities[0] === "number"
+      ) {
+        // If it's a number array (e.g. [-1]), it means restricted access with no facilities found
+        // So effectively allowedFacilityIds is empty (or we force a mismatch)
+        // If we want to return NOTHING, we can set IDs to ensure mismatch
+        allowedFacilityIds = [-1];
+      } else {
+        // It's an array of objects
+        allowedFacilityIds = (
+          allowedFacilities as { id: number; name: string }[]
+        ).map((f) => f.id);
+      }
+
+      // If we have specific allowed IDs (and it's not the "all allowed" case which returns empty allowedFacilities in some logic??
+      // Wait, user.ts says: returns [] if Admin, encoded [-1] if restricted but empty.
+      // So if length > 0, we must filter.
       if (allowedFacilityIds.length > 0) {
         conditions.push(inArray(facility.id, allowedFacilityIds));
       }

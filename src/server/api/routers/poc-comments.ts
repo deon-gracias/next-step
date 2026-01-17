@@ -4,8 +4,12 @@ import {
   pocCommentInsertSchema,
   pocCommentSelectSchema,
   user,
+  member,
+  survey,
+  memberFacility,
 } from "@/server/db/schema";
 import { eq, desc, and } from "drizzle-orm";
+import { TRPCError } from "@trpc/server";
 
 export const pocCommentRouter = createTRPCRouter({
   create: protectedProcedure
@@ -17,6 +21,82 @@ export const pocCommentRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
+
+      // --- SECURITY CHECK START ---
+      const activeOrgId = ctx.session.session.activeOrganizationId;
+      if (!activeOrgId) {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "No active organization",
+        });
+      }
+
+      const [memberRecord] = await ctx.db
+        .select({ role: member.role })
+        .from(member)
+        .where(
+          and(
+            eq(member.userId, ctx.session.user.id),
+            eq(member.organizationId, activeOrgId),
+          ),
+        )
+        .limit(1);
+
+      if (!memberRecord) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "User is not a member of the organization",
+        });
+      }
+
+      // 1. Admin & Lead Surveyor: Allow
+      if (
+        memberRecord.role === "admin" ||
+        memberRecord.role === "lead_surveyor"
+      ) {
+        // Allow proceed
+      }
+      // 2. Facility Coordinator: Check assignment
+      else if (memberRecord.role === "facility_coordinator") {
+        // Get Survey's Facility
+        const [surveyRecord] = await ctx.db
+          .select({ facilityId: survey.facilityId })
+          .from(survey)
+          .where(eq(survey.id, input.surveyId))
+          .limit(1);
+
+        if (!surveyRecord)
+          throw new TRPCError({ code: "NOT_FOUND", message: "Survey not found" });
+
+        // Check assignment
+        const [assignment] = await ctx.db
+          .select()
+          .from(memberFacility)
+          .where(
+            and(
+              eq(memberFacility.userId, ctx.session.user.id),
+              eq(memberFacility.facilityId, surveyRecord.facilityId),
+            ),
+          )
+          .limit(1);
+
+        if (!assignment) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Restricted: You are not assigned to this facility.",
+          });
+        }
+      }
+      // 3. Others: Deny
+      else {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message:
+            "Insufficient permissions. Only Admins, Lead Surveyors, and assigned Facility Coordinators can add comments.",
+        });
+      }
+      // --- SECURITY CHECK END ---
+
       const [newComment] = await ctx.db
         .insert(pocComment)
         .values({
