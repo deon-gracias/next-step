@@ -390,7 +390,7 @@ function SurveysPageContent() {
               No dates found matching filters.
             </div>
           ) : (
-            <Accordion type="single" collapsible className="w-full">
+            <Accordion type="multiple" className="w-full">
               {datesQuery.data?.data.map((dateString: string) => {
                 const dateObj = new Date(dateString);
 

@@ -54,41 +54,56 @@ export async function getAllowedFacilities(ctx: {
 }) {
   const userId = ctx.session.user.id;
 
-  const [memberRecord] = await ctx.db
-    .select()
+  // Define roles that are restricted to specific facilities
+  // If a user is NOT in this list (e.g., Admin), you might want to return ALL facilities early.
+  // Assuming current logic: only these roles get filtered facilities, others get empty []?
+  // Your original logic returns [] if not in these roles.
+  const restrictedRoles = ["facility_coordinator", "facility_viewer"];
+
+  // SINGLE QUERY: Join Member -> MemberFacility -> Facility
+  const allowedFacilities = await ctx.db
+    .select({
+      id: facility.id,
+      name: facility.name, // Select only what you actually need
+      facilityCode: facility.facilityCode,
+      // Add other facility fields you need here
+    })
     .from(member)
-    .where(eq(member.userId, userId))
-    .limit(1);
-
-  if (!memberRecord) throw new Error("Not a member");
-
-  const rolesToValidate = ["facility_coordinator", "facility_viewer"];
-  if (!rolesToValidate.includes(memberRecord.role)) {
-    return [];
-  }
-  const assignedFacilities = await ctx.db
-    .select()
-    .from(memberFacility)
-    .where(eq(memberFacility.userId, memberRecord.userId));
-
-  console.log(
-    "Assigned Facilities",
-    assignedFacilities,
-    memberRecord,
-    `userId = ${userId}`,
-  );
-
-  if (!assignedFacilities.length) return [];
-
-  return ctx.db
-    .select()
-    .from(facility)
+    // 1. Join to get facility assignments
+    .innerJoin(memberFacility, eq(member.userId, memberFacility.userId))
+    // 2. Join to get actual facility details
+    .innerJoin(facility, eq(memberFacility.facilityId, facility.id))
     .where(
-      inArray(
-        facility.id,
-        assignedFacilities.map((f) => f.facilityId),
-      ),
+      and(eq(member.userId, userId), inArray(member.role, restrictedRoles)),
     );
+
+  // If the query returns empty, it means either:
+  // 1. User is not in the restrictedRoles list
+  // 2. User has no assigned facilities
+  // 3. User does not exist in member table
+
+  // To match your exact previous return type behavior:
+  if (allowedFacilities.length === 0) {
+    // We need to know IF the user had the role but no facilities (return [-1] logic)
+    // vs user didn't have the role (return [] logic).
+
+    // Fast check for role only if facilities came back empty
+    const [userRole] = await ctx.db
+      .select({ role: member.role })
+      .from(member)
+      .where(eq(member.userId, userId))
+      .limit(1);
+
+    if (!userRole) throw new Error("Not a member");
+
+    if (!restrictedRoles.includes(userRole.role)) {
+      return []; // Case: Admin or Surveyor (logic from your original code)
+    }
+
+    return [-1]; // Case: Has role, but no facilities assigned
+  }
+
+  return allowedFacilities;
 }
 
 export const userRouter = createTRPCRouter({

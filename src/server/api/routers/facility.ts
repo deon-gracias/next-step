@@ -6,8 +6,9 @@ import {
   facilityInsertSchema,
   facilitySelectSchema,
 } from "@/server/db/schema";
-import { and, count, eq, ilike, like, sql } from "drizzle-orm";
+import { and, count, eq, ilike, inArray, like, sql } from "drizzle-orm";
 import { paginationInputSchema } from "@/server/utils/schema";
+import { getAllowedFacilities } from "./user";
 
 export const facilityRouter = createTRPCRouter({
   create: protectedProcedure
@@ -51,13 +52,20 @@ export const facilityRouter = createTRPCRouter({
       }),
     )
     .query(async ({ ctx, input }) => {
+      const allowedFacilities = await getAllowedFacilities(ctx);
       const conditions = [];
+
       if (input.id !== undefined) conditions.push(eq(facility.id, input.id));
       if (input.name) conditions.push(ilike(facility.name, `%${input.name}%`));
       if (input.facilityCode)
         conditions.push(
           ilike(facility.facilityCode, `%${input.facilityCode}%`),
         );
+
+      const allowedFacilityIds = allowedFacilities.map((f) => f.id);
+      if (allowedFacilityIds.length > 0) {
+        conditions.push(inArray(facility.id, allowedFacilityIds));
+      }
       const whereClause =
         conditions.length > 0 ? and(...conditions) : undefined;
 
