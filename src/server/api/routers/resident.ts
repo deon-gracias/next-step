@@ -122,12 +122,8 @@ export const residentRouter = createTRPCRouter({
         : and;
 
       const facilityConditions = [];
-      if (facilities.length > 0 && typeof facilities[0] === "number") {
-        facilityConditions.push(eq(resident.facilityId, -1));
-      } else {
-        for (const f of facilities as { id: number }[]) {
-          facilityConditions.push(eq(resident.facilityId, f.id));
-        }
+      for (const id of facilities) {
+        facilityConditions.push(eq(resident.facilityId, id));
       }
 
       const whereClause =

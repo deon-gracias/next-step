@@ -97,13 +97,15 @@ export async function getAllowedFacilities(ctx: {
     if (!userRole) throw new Error("Not a member");
 
     if (!restrictedRoles.includes(userRole.role)) {
-      return []; // Case: Admin or Surveyor (logic from your original code)
+      return []; // Admin/Surveyor: "All allowed" -> implemented as empty checks downstream? 
+      // Wait, let's verify downstream usage: "if length > 0, filter by these IDs".
+      // So returning [] means "Don't filter" = "See All". Correct.
     }
 
-    return [-1]; // Case: Has role, but no facilities assigned
+    return [-1]; // Restricted Role but no facilities: Return "Impossible ID" to match nothing.
   }
 
-  return allowedFacilities;
+  return allowedFacilities.map(f => f.id);
 }
 
 export const userRouter = createTRPCRouter({

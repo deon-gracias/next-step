@@ -52,7 +52,6 @@ export const facilityRouter = createTRPCRouter({
       }),
     )
     .query(async ({ ctx, input }) => {
-      const allowedFacilities = await getAllowedFacilities(ctx);
       const conditions = [];
 
       if (input.id !== undefined) conditions.push(eq(facility.id, input.id));
@@ -62,28 +61,9 @@ export const facilityRouter = createTRPCRouter({
           ilike(facility.facilityCode, `%${input.facilityCode}%`),
         );
 
-      let allowedFacilityIds: number[] = [];
+      // 3. User does not exist in member table
 
-      // Check if allowedFacilities represents "no access" (array of numbers like [-1])
-      // or "list of facilities" (array of objects)
-      if (
-        allowedFacilities.length > 0 &&
-        typeof allowedFacilities[0] === "number"
-      ) {
-        // If it's a number array (e.g. [-1]), it means restricted access with no facilities found
-        // So effectively allowedFacilityIds is empty (or we force a mismatch)
-        // If we want to return NOTHING, we can set IDs to ensure mismatch
-        allowedFacilityIds = [-1];
-      } else {
-        // It's an array of objects
-        allowedFacilityIds = (
-          allowedFacilities as { id: number; name: string }[]
-        ).map((f) => f.id);
-      }
-
-      // If we have specific allowed IDs (and it's not the "all allowed" case which returns empty allowedFacilities in some logic??
-      // Wait, user.ts says: returns [] if Admin, encoded [-1] if restricted but empty.
-      // So if length > 0, we must filter.
+      const allowedFacilityIds = await getAllowedFacilities(ctx);
       if (allowedFacilityIds.length > 0) {
         conditions.push(inArray(facility.id, allowedFacilityIds));
       }

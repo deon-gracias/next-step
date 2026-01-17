@@ -33,23 +33,15 @@ import { Checkbox } from "@/components/ui/checkbox";
 type Survey = RouterOutputs["survey"]["list"]["data"][number];
 
 // Extracted Score Component with better loading state
-export function SurveyScore({ id }: { id: number }) {
-  const { data, isLoading } = api.survey.scoreById.useQuery(
-    { id },
-    {
-      staleTime: 1000 * 60 * 5,
-      refetchOnWindowFocus: false,
-    },
-  );
-
-  if (isLoading) {
-    return <Skeleton className="h-6 w-16 rounded-md" />;
-  }
-
-  if (!data) {
-    return <span className="text-muted-foreground text-sm">-</span>;
-  }
-
+export function SurveyScore({
+  score,
+  totalPossible,
+  percentage,
+}: {
+  score: number;
+  totalPossible: number;
+  percentage: number;
+}) {
   // Score color logic
   const getScoreColor = (percentage: number) => {
     if (percentage >= 85) return "bg-green-500 text-white";
@@ -63,13 +55,13 @@ export function SurveyScore({ id }: { id: number }) {
         variant="outline"
         className={cn(
           "px-2 py-0.5 whitespace-nowrap",
-          getScoreColor(data.percentage),
+          getScoreColor(percentage),
         )}
       >
-        {data.percentage}%
+        {percentage}%
       </Badge>
       <span className="text-muted-foreground text-xs tabular-nums">
-        ({data.score}/{data.totalPossible})
+        ({score}/{totalPossible})
       </span>
     </div>
   );
@@ -311,7 +303,13 @@ export const surveyColumns: ColumnDef<Survey>[] = [
         <ArrowUpDown className="ml-2 h-4 w-4" />
       </Button>
     ),
-    cell: ({ row }) => <SurveyScore id={row.original.id} />,
+    cell: ({ row }) => (
+      <SurveyScore
+        score={row.original.score}
+        totalPossible={row.original.totalPossible}
+        percentage={row.original.percentage}
+      />
+    ),
   },
   {
     id: "actions",

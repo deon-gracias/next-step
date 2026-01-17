@@ -156,6 +156,8 @@ export const surveyRouter = createTRPCRouter({
           });
       }
 
+      await calculateAndSaveScore(ctx, surveyId);
+
       return { success: true, responseType: "general" };
     }),
 
@@ -178,102 +180,22 @@ export const surveyRouter = createTRPCRouter({
   scoreById: protectedProcedure
     .input(z.object({ id: surveySelectSchema.shape.id }))
     .query(async ({ ctx, input }) => {
-      // 1. Fetch Survey metadata
-      const surveyData = await ctx.db.query.survey.findFirst({
-        where: eq(survey.id, input.id),
-        columns: { templateId: true }, // We only need the templateId
-      });
+      // 1. Fetch Survey score data
+      const surveyData = await ctx.db
+        .select({
+          score: survey.score,
+          totalPossible: survey.totalPossible,
+          percentage: survey.percentage,
+        })
+        .from(survey)
+        .where(eq(survey.id, input.id))
+        .limit(1);
 
-      if (!surveyData) {
+      if (!surveyData[0]) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Survey not found" });
       }
 
-      // 2. Run all heavy data fetching in parallel
-      const [questions, residentCountArr, caseCountArr, rawResponses] =
-        await Promise.all([
-          // Fetch Questions (Points only)
-          ctx.db
-            .select({ id: question.id, points: question.points })
-            .from(question)
-            .where(eq(question.templateId, surveyData.templateId)),
-
-          // Fetch Count of Residents
-          ctx.db
-            .select({ count: count() })
-            .from(surveyResident)
-            .where(eq(surveyResident.surveyId, input.id)),
-
-          // Fetch Count of Cases
-          ctx.db
-            .select({ count: count() })
-            .from(surveyCases)
-            .where(eq(surveyCases.surveyId, input.id)),
-
-          // Fetch Responses (Just status and questionId)
-          ctx.db
-            .select({
-              questionId: surveyResponse.questionId,
-              status: surveyResponse.requirementsMetOrUnmet,
-            })
-            .from(surveyResponse)
-            .where(eq(surveyResponse.surveyId, input.id)),
-        ]);
-
-      // 3. Determine the "Expected Response Count" per question
-      // If no residents/cases, it's a "General" survey (1 response expected per question).
-      // Otherwise, it's (Residents + Cases) responses expected per question.
-      const totalResidents = residentCountArr[0]?.count ?? 0;
-      const totalCases = caseCountArr[0]?.count ?? 0;
-      const entityCount = totalResidents + totalCases;
-
-      const requiredResponsesPerQuestion = entityCount === 0 ? 1 : entityCount;
-
-      // 4. Group responses by Question ID for O(1) lookup
-      // Map<QuestionID, Array<Status>>
-      const responsesByQuestion = new Map<number, string[]>();
-
-      for (const r of rawResponses) {
-        const existing = responsesByQuestion.get(r.questionId) ?? [];
-        // Only push non-null statuses (valid answers)
-        if (r.status) existing.push(r.status);
-        responsesByQuestion.set(r.questionId, existing);
-      }
-
-      // 5. Calculate Score
-      let awarded = 0;
-      let totalPossible = 0;
-
-      for (const q of questions) {
-        const points = q.points ?? 0;
-        totalPossible += points;
-
-        const answers = responsesByQuestion.get(q.id) ?? [];
-
-        // CHECK 1: Completeness
-        // Did everyone answer? (If fewer answers than entities, someone skipped it)
-        if (answers.length < requiredResponsesPerQuestion) {
-          continue; // Fail: Unanswered question
-        }
-
-        // CHECK 2: Quality
-        // Did anyone mark it as "unmet"?
-        const hasFailure = answers.includes("unmet");
-        if (hasFailure) {
-          continue; // Fail: Requirement unmet
-        }
-
-        // CHECK 3: Success Logic
-        // If we are here: Everyone answered, and nobody failed.
-        // (This covers the "Met || All NA" logic automatically)
-        awarded += points;
-      }
-
-      return {
-        score: awarded,
-        totalPossible,
-        percentage:
-          totalPossible > 0 ? Math.round((awarded / totalPossible) * 100) : 0,
-      };
+      return surveyData[0];
     }),
 
   getDetails: protectedProcedure
@@ -423,17 +345,8 @@ export const surveyRouter = createTRPCRouter({
         whereConditions.push(or(...orConditions));
       }
 
-      let allowedFacilityIds: number[] = [];
-      if (
-        allowedFacilities.length > 0 &&
-        typeof allowedFacilities[0] === "number"
-      ) {
-        allowedFacilityIds = [-1];
-      } else {
-        allowedFacilityIds = (
-          allowedFacilities as { id: number; name: string }[]
-        ).map((f) => f.id);
-      }
+      // Facility access control
+      const allowedFacilityIds = allowedFacilities;
       if (allowedFacilityIds.length > 0) {
         whereConditions.push(inArray(survey.facilityId, allowedFacilityIds));
       }
@@ -526,17 +439,7 @@ export const surveyRouter = createTRPCRouter({
       }
 
       // Facility access control
-      let allowedFacilityIds: number[] = [];
-      if (
-        allowedFacilities.length > 0 &&
-        typeof allowedFacilities[0] === "number"
-      ) {
-        allowedFacilityIds = [-1];
-      } else {
-        allowedFacilityIds = (
-          allowedFacilities as { id: number; name: string }[]
-        ).map((f) => f.id);
-      }
+      const allowedFacilityIds = allowedFacilities;
       if (allowedFacilityIds.length > 0) {
         conditions.push(inArray(survey.facilityId, allowedFacilityIds));
       }
@@ -965,6 +868,9 @@ export const surveyRouter = createTRPCRouter({
         }
       }
 
+      // 4) Update Score
+      await calculateAndSaveScore(ctx, surveyId);
+
       return {
         success: true,
         deletedPOCsForQuestions: transitionedToMet,
@@ -1252,3 +1158,107 @@ export const surveyRouter = createTRPCRouter({
       return { success: true };
     }),
 });
+
+/**
+ * Helper to calculate and store the survey score.
+ * Updates the survey record with score, totalPossible, and percentage.
+ */
+async function calculateAndSaveScore(
+  ctx: { db: any }, // Use 'any' or proper type if imported
+  surveyId: number,
+) {
+  // 1. Fetch Survey metadata
+  const surveyData = await ctx.db.query.survey.findFirst({
+    where: eq(survey.id, surveyId),
+    columns: { templateId: true },
+  });
+
+  if (!surveyData) return;
+
+  // 2. Run all heavy data fetching in parallel
+  const [questions, residentCountArr, caseCountArr, rawResponses] =
+    await Promise.all([
+      // Fetch Questions (Points only)
+      ctx.db
+        .select({ id: question.id, points: question.points })
+        .from(question)
+        .where(eq(question.templateId, surveyData.templateId)),
+
+      // Fetch Count of Residents
+      ctx.db
+        .select({ count: count() })
+        .from(surveyResident)
+        .where(eq(surveyResident.surveyId, surveyId)),
+
+      // Fetch Count of Cases
+      ctx.db
+        .select({ count: count() })
+        .from(surveyCases)
+        .where(eq(surveyCases.surveyId, surveyId)),
+
+      // Fetch Responses (Just status and questionId)
+      ctx.db
+        .select({
+          questionId: surveyResponse.questionId,
+          status: surveyResponse.requirementsMetOrUnmet,
+        })
+        .from(surveyResponse)
+        .where(eq(surveyResponse.surveyId, surveyId)),
+    ]);
+
+  // 3. Determine the "Expected Response Count" per question
+  const totalResidents = residentCountArr[0]?.count ?? 0;
+  const totalCases = caseCountArr[0]?.count ?? 0;
+  const entityCount = totalResidents + totalCases;
+
+  const requiredResponsesPerQuestion = entityCount === 0 ? 1 : entityCount;
+
+  // 4. Group responses by Question ID for O(1) lookup
+  const responsesByQuestion = new Map<number, string[]>();
+
+  for (const r of rawResponses) {
+    const existing = responsesByQuestion.get(r.questionId) ?? [];
+    if (r.status) existing.push(r.status);
+    responsesByQuestion.set(r.questionId, existing);
+  }
+
+  // 5. Calculate Score
+  let awarded = 0;
+  let totalPossible = 0;
+
+  for (const q of questions) {
+    const points = q.points ?? 0;
+    totalPossible += points;
+
+    const answers = responsesByQuestion.get(q.id) ?? [];
+
+    // CHECK 1: Completeness
+    if (answers.length < requiredResponsesPerQuestion) {
+      continue; // Fail: Unanswered question
+    }
+
+    // CHECK 2: Quality
+    const hasFailure = answers.includes("unmet");
+    if (hasFailure) {
+      continue; // Fail: Requirement unmet
+    }
+
+    // CHECK 3: Success Logic
+    awarded += points;
+  }
+
+  const percentage =
+    totalPossible > 0 ? Math.round((awarded / totalPossible) * 100) : 0;
+
+  // 6. Update Survey Record
+  await ctx.db
+    .update(survey)
+    .set({
+      score: awarded,
+      totalPossible,
+      percentage,
+    })
+    .where(eq(survey.id, surveyId));
+
+  return { score: awarded, totalPossible, percentage };
+}

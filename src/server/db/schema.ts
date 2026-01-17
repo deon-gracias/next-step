@@ -285,6 +285,12 @@ export const survey = pgTable("survey", {
     .notNull(),
   isLocked: boolean("is_locked").default(false).notNull(),
   pocGenerated: boolean("poc_generated").default(false).notNull(),
+
+  // Denormalized Score Columns
+  score: integer("score").default(0).notNull(),
+  totalPossible: integer("total_possible").default(0).notNull(),
+  percentage: integer("percentage").default(0).notNull(),
+
   surveyDate: date("survey_date").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
