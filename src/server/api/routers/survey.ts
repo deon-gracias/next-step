@@ -351,7 +351,7 @@ export const surveyRouter = createTRPCRouter({
         .offset(offset);
 
       return {
-        dates: distinctDates.map((d) => d.date),
+        data: distinctDates.map((d) => d.date),
         meta: {
           totalCount,
           pageCount: Math.ceil(totalCount / input.pageSize),

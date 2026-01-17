@@ -45,7 +45,7 @@ export function SurveyPagination({
     <div className="flex items-center justify-between px-4">
       {/* Rows per page selector */}
       <div className="flex w-full items-center gap-8 lg:w-fit">
-        <div className="hidden items-center gap-2 lg:flex">
+        <div className="flex items-center gap-2">
           <Label htmlFor="rows-per-page" className="text-sm font-medium">
             Rows per page
           </Label>

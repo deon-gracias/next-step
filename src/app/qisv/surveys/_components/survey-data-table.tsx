@@ -132,8 +132,8 @@ export function SurveyDataTable<TData, TValue>({
       {/* </div> */}
 
       {/* Table */}
-      <div className="max-w-full overflow-x-scroll">
-        <Table className="max-w-full overflow-x-scroll">
+      <div className="relative w-full overflow-auto">
+        <Table>
           <TableHeader className="bg-background sticky top-0">
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
@@ -143,16 +143,16 @@ export function SurveyDataTable<TData, TValue>({
                       {header.isPlaceholder
                         ? null
                         : flexRender(
-                            header.column.columnDef.header,
-                            header.getContext(),
-                          )}
+                          header.column.columnDef.header,
+                          header.getContext(),
+                        )}
                     </TableHead>
                   );
                 })}
               </TableRow>
             ))}
           </TableHeader>
-          <TableBody className="max-w-full overflow-x-scroll">
+          <TableBody>
             {isLoading ? (
               Array.from({ length: pageSize }).map((_, rowIndex) => (
                 <TableRow key={rowIndex}>
@@ -171,7 +171,11 @@ export function SurveyDataTable<TData, TValue>({
                   className="group"
                 >
                   {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id} className="w-fit p-2">
+                    <TableCell
+                      key={cell.id}
+                      className="p-2 whitespace-nowrap"
+                    // className="w-fit p-2"
+                    >
                       {flexRender(
                         cell.column.columnDef.cell,
                         cell.getContext(),
